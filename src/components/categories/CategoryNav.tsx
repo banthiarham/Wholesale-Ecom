@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { ChevronRight } from "lucide-react"
 
 interface Category {
@@ -18,7 +17,7 @@ export default function CategoryNav() {
   const [categories, setCategories] = useState<Category[]>([])
 
   useEffect(() => {
-    fetch("/api/store/categories")
+    fetch("/api/categories")
       .then((res) => res.json())
       .then((data) => setCategories(data.categories || []))
   }, [])
@@ -33,11 +32,10 @@ export default function CategoryNav() {
         >
           <div className="h-40 bg-gray-100 relative">
             {category.image ? (
-              <Image
+              <img
                 src={category.image}
                 alt={category.name}
-                fill
-                className="object-cover group-hover:scale-105 transition-transform"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-400 text-4xl font-bold">
@@ -58,9 +56,7 @@ export default function CategoryNav() {
             {category.children.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {category.children.slice(0, 3).map((child) => (
-                  <span key={child.id} className="text-xs px-2 py-1 bg-gray-100 rounded">
-                    {child.name}
-                  </span>
+                  <span key={child.id} className="text-xs px-2 py-1 bg-gray-100 rounded">{child.name}</span>
                 ))}
                 {category.children.length > 3 && (
                   <span className="text-xs px-2 py-1 bg-gray-100 rounded">+{category.children.length - 3} more</span>

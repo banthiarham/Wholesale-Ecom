@@ -8,7 +8,10 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
   app.enableCors({
-    origin: [process.env.FRONTEND_URL || 'http://localhost:5173', process.env.ADMIN_URL || 'http://localhost:5174'],
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3001',
+      process.env.ADMIN_URL || 'http://localhost:3002',
+    ],
     credentials: true,
   });
 
