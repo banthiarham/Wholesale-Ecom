@@ -1,4 +1,5 @@
 import Link from "next/link"
+import CategoryNav from "@/components/categories/CategoryNav"
 
 export default function Home() {
   return (
@@ -12,11 +13,12 @@ export default function Home() {
           </nav>
         </div>
       </header>
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center">
+        <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">B2B Wholesale Platform</h1>
-          <p className="text-lg text-gray-600 mb-8">
-            Bulk orders, tier pricing, RFQ, and loyalty — all in one place.
+          <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
+            Bulk orders, tier pricing, RFQ, and loyalty — all in one place. Discover products across Electronics, Fashion, Industrial, and more.
           </p>
           <div className="flex gap-4 justify-center">
             <Link
@@ -32,6 +34,11 @@ export default function Home() {
               View Cart
             </Link>
           </div>
+        </div>
+
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Shop by Category</h2>
+          <CategoryNav />
         </div>
       </main>
     </div>
