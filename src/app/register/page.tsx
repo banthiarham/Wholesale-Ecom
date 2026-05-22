@@ -51,7 +51,7 @@ export default function RegisterPage() {
       if (!res.ok) {
         setError(data.message || "Registration failed")
       } else {
-        router.push("/login")
+        router.push(`/verify-otp?email=${encodeURIComponent(form.email)}`)
       }
     } catch (err) {
       setError("Something went wrong")

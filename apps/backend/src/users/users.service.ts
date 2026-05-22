@@ -127,4 +127,51 @@ export class UsersService {
     });
     return this.excludePassword(user);
   }
+
+  // Addresses
+  async findAddresses(userId: string) {
+    return this.prisma.address.findMany({
+      where: { userId },
+      orderBy: { isDefault: 'desc' },
+    });
+  }
+
+  async createAddress(userId: string, data: { label?: string; street: string; city: string; state: string; zip: string; country?: string; isDefault?: boolean }) {
+    if (data.isDefault) {
+      await this.prisma.address.updateMany({
+        where: { userId },
+        data: { isDefault: false },
+      });
+    }
+    return this.prisma.address.create({
+      data: { ...data, userId },
+    });
+  }
+
+  async updateAddress(userId: string, addressId: string, data: { label?: string; street?: string; city?: string; state?: string; zip?: string; country?: string; isDefault?: boolean }) {
+    const address = await this.prisma.address.findFirst({
+      where: { id: addressId, userId },
+    });
+    if (!address) throw new NotFoundException('Address not found');
+
+    if (data.isDefault) {
+      await this.prisma.address.updateMany({
+        where: { userId },
+        data: { isDefault: false },
+      });
+    }
+    return this.prisma.address.update({
+      where: { id: addressId },
+      data,
+    });
+  }
+
+  async deleteAddress(userId: string, addressId: string) {
+    const address = await this.prisma.address.findFirst({
+      where: { id: addressId, userId },
+    });
+    if (!address) throw new NotFoundException('Address not found');
+    await this.prisma.address.delete({ where: { id: addressId } });
+    return { message: 'Address deleted' };
+  }
 }

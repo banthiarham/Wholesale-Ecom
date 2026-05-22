@@ -114,4 +114,47 @@ export class UsersController {
   remove(@Param('id') id: string): Promise<{ message: string }> {
     return this.usersService.remove(id).then(() => ({ message: 'User deleted successfully' }));
   }
+
+  // Addresses
+  @Get('me/addresses')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user addresses' })
+  getMyAddresses(@CurrentUser('id') userId: string) {
+    return this.usersService.findAddresses(userId);
+  }
+
+  @Post('me/addresses')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add address for current user' })
+  createAddress(
+    @CurrentUser('id') userId: string,
+    @Body() body: { label?: string; street: string; city: string; state: string; zip: string; country?: string; isDefault?: boolean },
+  ) {
+    return this.usersService.createAddress(userId, body);
+  }
+
+  @Patch('me/addresses/:addressId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update an address' })
+  updateAddress(
+    @CurrentUser('id') userId: string,
+    @Param('addressId') addressId: string,
+    @Body() body: { label?: string; street?: string; city?: string; state?: string; zip?: string; country?: string; isDefault?: boolean },
+  ) {
+    return this.usersService.updateAddress(userId, addressId, body);
+  }
+
+  @Delete('me/addresses/:addressId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete an address' })
+  deleteAddress(
+    @CurrentUser('id') userId: string,
+    @Param('addressId') addressId: string,
+  ) {
+    return this.usersService.deleteAddress(userId, addressId);
+  }
 }
