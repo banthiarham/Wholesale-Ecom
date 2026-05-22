@@ -115,8 +115,7 @@ export default function ProductDetailPage() {
                 <input type="number" min={product.moq} max={product.inventoryQuantity} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="w-16 text-center border-x border-gray-200 py-2" />
                 <button onClick={() => setQuantity(Math.min(product.inventoryQuantity, quantity + 1))} className="px-3 py-2 hover:bg-gray-50">+</button>
               </div>
-              <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < product.moq} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
-003e
+              <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < product.moq} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
                 <ShoppingCart size={18} /> {adding ? "Adding..." : "Add to Cart"}
               </button>
             </div>
