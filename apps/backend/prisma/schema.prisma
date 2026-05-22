@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  BUYER
+  VENDOR
+  DISTRIBUTOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+}
+
+enum AccountType {
+  LOCAL
+  GOOGLE
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String?
+  firstName String
+  lastName  String
+  phone     String?
+  avatar    String?
+
+  role      UserRole @default(BUYER)
+  status    UserStatus @default(PENDING_VERIFICATION)
+  accountType AccountType @default(LOCAL)
+  googleId  String?  @unique
+
+  emailVerified Boolean @default(false)
+  phoneVerified Boolean @default(false)
+
+  companyName    String?
+  companyAddress String?
+  taxId          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLoginAt DateTime?
+
+  // Relations
+  otps            OTP[]
+  passwordResets  PasswordReset[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+model OTP {
+  id        String   @id @default(uuid())
+  code      String
+  purpose   String   // EMAIL_VERIFICATION, PHONE_VERIFICATION, PASSWORD_RESET
+  expiresAt DateTime
+  used      Boolean  @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([code])
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
