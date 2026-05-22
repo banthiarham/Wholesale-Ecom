@@ -8,8 +8,13 @@ import {
   Req,
   Headers,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader } from '@nestjs/swagger';
 import { CartService } from './cart.service';
+import { AddCartItemDto } from './dto/add-cart-item.dto';
+import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { RemoveCartItemDto } from './dto/remove-cart-item.dto';
 
+@ApiTags('Cart')
 @Controller('cart')
 export class CartController {
   constructor(private cartService: CartService) {}
@@ -19,6 +24,10 @@ export class CartController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'Get or create guest/user cart' })
+  @ApiResponse({ status: 200, description: 'Cart retrieved with totals' })
+  @ApiHeader({ name: 'x-session-id', required: false, description: 'Guest cart session identifier' })
+  @ApiHeader({ name: 'x-user-id', required: false, description: 'User ID for authenticated cart' })
   async getCart(@Req() req: any, @Headers('x-user-id') userId?: string) {
     const sessionId = this.getSessionId(req);
     const cart = await this.cartService.getOrCreateCart(
@@ -30,15 +39,19 @@ export class CartController {
   }
 
   @Post()
+  @ApiOperation({ summary: 'Add a product to the cart' })
+  @ApiResponse({ status: 200, description: 'Item added to cart' })
+  @ApiResponse({ status: 400, description: 'Invalid quantity, product not available, or insufficient inventory' })
+  @ApiBody({ type: AddCartItemDto })
   async addItem(
-    @Body() body: { productId: string; quantity: number; sessionId?: string; userId?: string },
+    @Body() dto: AddCartItemDto,
     @Req() req: any,
   ) {
-    const sessionId = body.sessionId || this.getSessionId(req);
+    const sessionId = dto.sessionId || this.getSessionId(req);
     const cart = await this.cartService.addItem(
-      body.productId,
-      body.quantity,
-      body.userId || undefined,
+      dto.productId,
+      dto.quantity,
+      dto.userId || undefined,
       sessionId || undefined,
     );
     const totals = this.cartService.calculateTotals(cart);
@@ -46,19 +59,22 @@ export class CartController {
   }
 
   @Put()
-  async updateItem(
-    @Body() body: { itemId: string; quantity: number },
-  ) {
-    const cart = await this.cartService.updateItem(body.itemId, body.quantity);
+  @ApiOperation({ summary: 'Update quantity of a cart item' })
+  @ApiResponse({ status: 200, description: 'Cart item updated' })
+  @ApiResponse({ status: 400, description: 'Invalid quantity or insufficient inventory' })
+  @ApiBody({ type: UpdateCartItemDto })
+  async updateItem(@Body() dto: UpdateCartItemDto) {
+    const cart = await this.cartService.updateItem(dto.itemId, dto.quantity);
     const totals = this.cartService.calculateTotals(cart);
     return { cart, totals };
   }
 
   @Delete()
-  async removeItem(
-    @Body() body: { itemId: string },
-  ) {
-    const cart = await this.cartService.removeItem(body.itemId);
+  @ApiOperation({ summary: 'Remove an item from the cart' })
+  @ApiResponse({ status: 200, description: 'Item removed from cart' })
+  @ApiBody({ type: RemoveCartItemDto })
+  async removeItem(@Body() dto: RemoveCartItemDto) {
+    const cart = await this.cartService.removeItem(dto.itemId);
     const totals = this.cartService.calculateTotals(cart);
     return { cart, totals };
   }

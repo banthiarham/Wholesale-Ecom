@@ -25,7 +25,20 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('WholesaleX Pro API')
-    .setDescription('B2B Wholesale E-commerce Platform API')
+    .setDescription(
+      'B2B Wholesale E-commerce Platform API — Phase 1\n\n' +
+      'This API powers the WholesaleX Pro platform, a B2B wholesale e-commerce solution with tier pricing, guest/user carts, order management, and COD payments.\n\n' +
+      '**Phase 1 Modules:** Authentication, Users, Products, Categories, Cart, Orders, Payments, Reviews\n\n' +
+      '**Features:**\n' +
+      '- JWT + Google OAuth authentication\n' +
+      '- Role-based access control (Buyer, Vendor, Distributor, Admin)\n' +
+      '- Product catalog with search, filters, and tier pricing\n' +
+      '- Guest & user cart management\n' +
+      '- Order lifecycle (Pending → Confirmed → Processing → Shipped → Delivered)\n' +
+      '- COD payment flow\n' +
+      '- Product reviews with auto-calculated ratings\n\n' +
+      '**Project Plan:** See plan.md for full requirements, database schema, and development roadmap.',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();

@@ -7,21 +7,28 @@ import {
   Param,
   Query,
   UseGuards,
-  Req,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
+import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole, OrderStatus } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { UserRole, OrderStatus } from '@prisma/client';
 
+@ApiTags('Orders')
 @Controller('orders')
 export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Place an order from the current cart' })
+  @ApiResponse({ status: 201, description: 'Order placed successfully' })
+  @ApiResponse({ status: 400, description: 'Cart is empty' })
+  @ApiBody({ type: CreateOrderDto })
   async create(
     @Body() body: { cartId: string; shippingAddress: any; billingAddress?: any; notes?: string },
     @CurrentUser() user: any,
@@ -40,6 +47,10 @@ export class OrdersController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List orders (Admins see all, users see their own)' })
+  @ApiResponse({ status: 200, description: 'Orders retrieved' })
+  @ApiQuery({ name: 'status', enum: OrderStatus, required: false })
   async findAll(@CurrentUser() user: any, @Query('status') status?: OrderStatus) {
     const isAdmin = user.role === UserRole.ADMIN;
     const orders = await this.ordersService.findAll(
@@ -51,6 +62,11 @@ export class OrdersController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get order details by ID' })
+  @ApiResponse({ status: 200, description: 'Order found' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
   async findById(@Param('id') id: string, @CurrentUser() user: any) {
     const isAdmin = user.role === UserRole.ADMIN;
     const order = await this.ordersService.findById(
@@ -63,6 +79,11 @@ export class OrdersController {
   @Put(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update order status (Admin / Vendor)' })
+  @ApiResponse({ status: 200, description: 'Order status updated' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
   async updateStatus(@Param('id') id: string, @Body('status') status: OrderStatus) {
     const order = await this.ordersService.updateStatus(id, status);
     return { order };
@@ -70,6 +91,11 @@ export class OrdersController {
 
   @Put(':id/cancel')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel an order (owner only)' })
+  @ApiResponse({ status: 200, description: 'Order cancelled' })
+  @ApiResponse({ status: 400, description: 'Cannot cancel delivered/cancelled order' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
   async cancel(@Param('id') id: string, @CurrentUser() user: any) {
     const order = await this.ordersService.cancelOrder(id, user.userId);
     return { order };

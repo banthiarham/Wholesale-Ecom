@@ -1,289 +1,315 @@
-# PRD - Project Requirements Document
+# WholesaleX Pro — Project Plan & Requirements
 
-> For full project information, setup guides, and documentation, see [`docs/README.md`](../docs/README.md).
-
-## 1. SYSTEM FLOW OVERVIEW
-
-- **User Layer**
-- **Authentication System**
-- **Dashboard System**
-- **Product Catalog**
-- **Tier Pricing**
-- **Loyalty Program**
-- **Digital Catalogs**
-- **Reviews & Ratings**
-- **Cart & RFQ**
-- **Orders**
-- **Payments**
-- **Delivery Tracking**
-- **AI Recommendations**
+> **Live API Documentation:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs) (Swagger/OpenAPI)
 
 ---
 
-## 2. RECOMMENDED REPOSITORY STRUCTURE
+## 1. Project Overview
+
+**WholesaleX Pro** is a B2B wholesale e-commerce platform built for manufacturers, distributors, and bulk buyers. It supports tier pricing, guest carts, order management, loyalty programs, and digital catalogs.
+
+### Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js 14 (App Router), Tailwind CSS, React |
+| Backend | NestJS 10, Prisma ORM, PostgreSQL |
+| Auth | JWT (localStorage) + Google OAuth 2.0 |
+| API Docs | Swagger / OpenAPI 3.0 |
+
+---
+
+## 2. Phase 1 — Core Commerce (Current)
+
+Phase 1 delivers the minimum viable B2B commerce experience.
+
+### 2.1 Completed Modules
+
+| Module | Status | Key Features |
+|--------|--------|--------------|
+| **Authentication** | Complete | Register, Login, OTP verification, Google OAuth, Forgot/Reset password, JWT Bearer tokens |
+| **Users** | Complete | CRUD, role/status management, address book |
+| **Products** | Complete | Catalog listing, detail page, search, filters, tier pricing, reviews embed |
+| **Categories** | Complete | Hierarchical tree, product counts, handle-based routing |
+| **Cart** | Complete | Guest session cart, user cart, add/update/remove, inventory/MOQ validation |
+| **Orders** | Complete | Place from cart, status lifecycle, cancel, admin/vendor status updates |
+| **Payments** | Complete | COD payment creation and verification |
+| **Reviews** | Complete | Submit, list, delete, auto-update product rating |
+
+### 2.2 Frontend Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| Home | `/` | Hero, category cards, quick links |
+| Products | `/products` | Grid with search, filters, tier pricing badges |
+| Product Detail | `/products/[handle]` | Images, tier table, reviews, quantity selector, Add to Cart |
+| Category | `/categories/[handle]` | Category info + filtered product grid |
+| Cart | `/cart` | Guest/user cart, quantity update, remove, totals |
+| Checkout | `/checkout` | Shipping address, order summary, COD placement |
+| Orders | `/orders` | List with status badges |
+| Order Detail | `/orders/[id]` | Items, shipping, payment, cancel button |
+| Login | `/login` | Email/password + Google Sign In |
+| Register | `/register` | First/last name, email, phone, role, password |
+| Verify OTP | `/verify-otp` | Email verification after registration |
+| Forgot Password | `/forgot-password` | Email reset link request |
+| Reset Password | `/reset-password` | New password with token |
+| Auth Callback | `/auth/callback` | Google OAuth token capture |
+
+### 2.3 API Endpoints (Swagger)
+
+All endpoints are documented at `http://localhost:3000/api/docs` with:
+- Request/response schemas
+- Authentication requirements
+- Query parameters and path variables
+- Role-based access notes
+
+**Base URL:** `http://localhost:3000/api/v1`
+
+---
+
+## 3. Database Schema
+
+### 3.1 Core Models
+
+```
+User
+  ├── id, email, password, firstName, lastName, phone, avatar
+  ├── role (BUYER | VENDOR | DISTRIBUTOR | ADMIN)
+  ├── status (ACTIVE | INACTIVE | PENDING_VERIFICATION | SUSPENDED)
+  ├── accountType (LOCAL | GOOGLE), googleId
+  ├── companyName, companyAddress, taxId
+  └── Relations: OTP[], PasswordReset[], Cart?, Order[], Review[], LoyaltyAccount?, Address[]
+
+Category
+  ├── id, name, handle, description, image, isActive, rank, parentId?
+  └── Relations: children[], products[]
+
+Product
+  ├── id, title, handle, description, sku, moq, unitPrice, compareAtPrice
+  ├── status (DRAFT | PUBLISHED | ARCHIVED), inventoryQuantity
+  ├── images[], thumbnail, vendorName, vendorId, rating, reviewCount, tags[]
+  └── Relations: category?, tierPrices[], cartItems[], orderItems[], reviews[]
+
+TierPrice
+  ├── id, productId, minQty, maxQty?, price
+
+Cart
+  ├── id, userId?, sessionId?
+  └── Relations: items[]
+
+CartItem
+  ├── id, cartId, productId, quantity, unitPrice
+
+Order
+  ├── id, orderNumber, userId, status, totalAmount, currency
+  ├── shippingAddress, billingAddress, notes
+  └── Relations: items[], payment?
+
+OrderItem
+  ├── id, orderId, productId, quantity, unitPrice, totalPrice
+
+Payment
+  ├── id, orderId, provider, providerRef?, amount, currency, status
+
+Review
+  ├── id, productId, userId, rating, title?, body?, isVerified, helpful, images[]
+
+Address
+  ├── id, label?, street, city, state, zip, country, isDefault
+
+LoyaltyAccount
+  ├── id, userId, points, tier, lifetimePoints, walletBalance
+  └── Relations: transactions[]
+
+LoyaltyTransaction
+  ├── id, accountId, type, points, amount?, description?
+```
+
+### 3.2 Enums
+
+- `UserRole`: BUYER, VENDOR, DISTRIBUTOR, ADMIN
+- `UserStatus`: ACTIVE, INACTIVE, PENDING_VERIFICATION, SUSPENDED
+- `AccountType`: LOCAL, GOOGLE
+- `ProductStatus`: DRAFT, PUBLISHED, ARCHIVED
+- `OrderStatus`: PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED
+- `PaymentStatus`: PENDING, AUTHORIZED, CAPTURED, FAILED, REFUNDED, CANCELLED
+
+---
+
+## 4. Authentication & Authorization
+
+### 4.1 Auth Flow
+
+1. **Registration** → `POST /auth/register` → Email OTP sent
+2. **Verify OTP** → `POST /auth/verify-otp` → Account activated
+3. **Login** → `POST /auth/login` → JWT `access_token` returned
+4. **Google OAuth** → `GET /auth/google` → Callback to `/auth/callback?token=...`
+5. **Token Usage** → `Authorization: Bearer <token>` header on protected routes
+
+### 4.2 Role Permissions
+
+| Role | Permissions |
+|------|-------------|
+| BUYER | Browse, cart, orders, reviews, addresses |
+| VENDOR | Product CRUD (own), order status updates |
+| DISTRIBUTOR | (Phase 2) |
+| ADMIN | Full access to all resources |
+
+---
+
+## 5. Feature Specifications
+
+### 5.1 Tier Pricing
+
+Products have quantity-based price breaks:
+- `minQty` to `maxQty` → specific price
+- `maxQty: null` → open-ended upper tier
+- Frontend automatically highlights the applicable tier based on selected quantity
+
+### 5.2 Guest Cart
+
+- Unauthenticated users receive a `cart_session` cookie/UUID
+- Cart persists across page reloads via `x-session-id` header or cookie
+- On login, guest cart can be merged (Phase 2 enhancement)
+
+### 5.3 Order Lifecycle
+
+```
+PENDING → CONFIRMED → PROCESSING → SHIPPED → DELIVERED
+   ↓
+CANCELLED (buyer or admin)
+```
+
+### 5.4 Reviews
+
+- Authenticated buyers can submit one review per product
+- Rating auto-averages update `product.rating` and `product.reviewCount`
+- Reviews include star rating, title, body, and optional images (Phase 2)
+
+---
+
+## 6. Development Roadmap
+
+### Phase 1 — Core Commerce ✅
+Authentication, Users, Products, Categories, Cart, Orders, Payments, Reviews
+
+### Phase 2 — Wholesale Features
+- Tier Pricing engine enhancements (contract pricing, seasonal discounts)
+- RFQ (Request for Quote) system
+- Bulk order CSV upload
+- Vendor dashboard and inventory management
+- Digital catalogs and PDF generation
+
+### Phase 3 — Engagement & Growth
+- Loyalty program (points, tiers, cashback)
+- Notifications (email, SMS, push)
+- Analytics dashboard
+- AI product recommendations
+- Multi-language support
+
+---
+
+## 7. Environment Setup
+
+### Backend `.env`
+
+```env
+DATABASE_URL="postgresql://postgres:Deepanshu@localhost:5432/wholesalex?schema=public"
+JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
+JWT_EXPIRATION="7d"
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+GOOGLE_CALLBACK_URL="http://localhost:3000/api/v1/auth/google/callback"
+PORT=3000
+NODE_ENV=development
+FRONTEND_URL="http://localhost:3001"
+ADMIN_URL="http://localhost:3002"
+```
+
+### Running Locally
+
+```bash
+# 1. PostgreSQL must be running (Windows Service: postgresql-x64-18)
+# 2. Backend
+cd apps/backend
+npx prisma migrate dev
+npm run db:seed
+npm run start:dev      # http://localhost:3000
+
+# 3. Frontend
+cd ../..
+npm run dev            # http://localhost:3001
+```
+
+### API Docs
+
+```
+http://localhost:3000/api/docs
+```
+
+---
+
+## 8. Repository Structure
 
 ```
 WholesaleX-Pro/
 ├── apps/
-│   ├── frontend/
-│   ├── admin-dashboard/
 │   └── backend/
+│       ├── prisma/
+│       │   ├── schema.prisma
+│       │   ├── seed.ts
+│       │   └── migrations/
 │       └── src/
-│           └── modules/
-│               ├── auth/
-│               ├── users/
-│               ├── products/
-│               ├── catalogs/
-│               ├── pricing/
-│               ├── loyalty/
-│               ├── reviews/
-│               ├── cart/
-│               ├── rfq/
-│               ├── orders/
-│               ├── payments/
-│               ├── logistics/
-│               ├── inventory/
-│               ├── analytics/
-│               ├── notifications/
-│               └── vendors/
-├── database/
-├── queues/
-├── workers/
-├── events/
-├── integrations/
-├── shared/
-│   ├── types/
-│   ├── constants/
-│   └── utils/
-├── config/
-└── docs/
-    ├── PRD.md
-    ├── TRD.md
-    ├── API_FLOW.md
-    ├── DATABASE_SCHEMA.md
-    └── README.md
+│           ├── auth/
+│           ├── users/
+│           ├── products/
+│           ├── categories/
+│           ├── cart/
+│           ├── orders/
+│           ├── payments/
+│           ├── reviews/
+│           ├── prisma/
+│           ├── common/
+│           │   ├── decorators/
+│           │   └── guards/
+│           ├── main.ts
+│           └── app.module.ts
+├── src/
+│   └── app/
+│       ├── page.tsx
+│       ├── products/
+│       ├── categories/
+│       ├── cart/
+│       ├── checkout/
+│       ├── orders/
+│       ├── login/
+│       ├── register/
+│       ├── forgot-password/
+│       ├── reset-password/
+│       ├── verify-otp/
+│       └── auth/callback/
+├── next.config.mjs
+├── tailwind.config.ts
+└── plan.md
 ```
 
 ---
 
-## 3. USER FLOW ARCHITECTURE
+## 9. Seeded Test Data
 
-### A. Authentication Flow
+After running `npm run db:seed`:
 
-1. User Visits Website
-2. Authentication Page
-   - Login
-   - Register
-   - OTP Verification
-   - Google Login (use API)
-   - Forgot Password
-3. Role Assignment
-   - Buyer
-   - Vendor
-   - Distributor
-   - Admin
-4. Dashboard Access
-
-### B. Dashboard Flow
-
-- Revenue Overview
-- Orders Summary
-- Loyalty Status
-- Inventory Alerts
-- Recommended Products
-- RFQ Requests
-- Analytics Widgets
-
-### C. Product Catalog Flow
-
-- **Product Catalog**
-  - Categories
-    - Electronics
-    - Fashion
-    - Industrial
-    - Grocery
-  - Product Search
-    - Smart Search
-    - Voice Search
-    - AI Search
-  - Product Filters
-    - Price
-    - MOQ
-    - Vendor
-    - Ratings
-    - Availability
-  - Product Cards
-    - Product Image
-    - SKU
-    - MOQ
-    - Tier Pricing
-    - Rating
-    - Stock Status
-  - Product Details Page
-    - Product Description
-    - Technical Specifications
-    - Product Images/Videos
-    - 360 Viewer
-    - Reviews & Ratings
-    - Related Products
-    - Vendor Information
-    - Bulk Pricing Table
-    - Delivery Estimates
-    - Add to Cart / RFQ
-
-### D. Tier Pricing Flow
-
-- **Tier Pricing Engine**
-  - Quantity Discounts
-  - Seasonal Discounts
-  - Coupon Discounts
-  - Contract Pricing
-  - Dynamic Pricing
-
-### E. Loyalty Program Flow
-
-- **Loyalty Program**
-  - Reward Points
-  - Cashback
-  - Referral Program
-  - Tier Upgrade System
-  - Reward Redemption
-  - Exclusive Discounts
-  - Early Sale Access
-  - Wallet Cashback
-  - Achievement Badges
-
-### F. Digital Catalog Flow
-
-- **Digital Catalogs**
-  - Interactive Catalogs
-  - PDF Catalog Downloads
-  - Vendor Catalogs
-  - Seasonal Catalogs
-  - Product Collections
-  - Video Catalogs
-  - Multi-language Catalogs
-  - QR Catalog Sharing
-
-### G. Reviews & Ratings Flow
-
-- **Reviews Module**
-  - Star Ratings
-  - Buyer Reviews
-  - Verified Purchase Badge
-  - Image Reviews
-  - Video Reviews
-  - Helpful Votes
-  - Product Q&A
-  - AI Spam Detection
-
-### H. Cart & RFQ Flow
-
-- **Cart & RFQ System**
-  - Add to Cart
-  - Bulk Orders
-  - CSV Upload Orders
-  - Saved Order Templates
-  - Request For Quote
-  - Vendor Negotiation
-  - Checkout
-
-### I. Payment Flow
-
-- **Payment System**
-  - Razorpay
-  - CC Avenue
-  - PayU
-  - Payment Verification
-  - Invoice Generation
-  - Refund Management
-  - Fraud Detection
-
-### J. Logistics Flow
-
-- **Delivery & Logistics**
-  - Warehouse Allocation
-  - Shipping Partner APIs
-  - Live Tracking
-  - Delivery ETA
-  - Shipping Notifications
-  - Delivery Confirmation
+| Entity | Details |
+|--------|---------|
+| Admin | `admin@wholesalex.com` / `Admin@123` |
+| Categories | Electronics (2 products), Fashion (1), Industrial (1) |
+| Products | 4 products with tier pricing, SKUs, vendor names |
 
 ---
 
-## 4. DATABASE MODULE RELATION FLOW
+## 10. Notes & Decisions
 
-- **Users** <-> Orders, Loyalty, Reviews, Wallet, RFQ
-- **Products** <-> Categories, Pricing, Inventory, Reviews, Catalogs, Vendors
-- **Orders** <-> Payments, Logistics, Invoices, Analytics
-
----
-
-## 5. BACKEND SERVICE FLOW
-
-```
-Frontend Request
-    |
-    v
-API Gateway
-    |
-    +-- Auth Service
-    +-- Product Service
-    +-- Pricing Service
-    +-- Loyalty Service
-    +-- RFQ Service
-    +-- Payment Service
-    +-- Logistics Service
-    +-- Review Service
-    +-- Analytics Service
-```
-
----
-
-## 6. AI-FRIENDLY DEVELOPMENT RULES
-
-**Keep Every Module Independent**
-
-Each module should contain:
-
-```
-/module-name
-  controller
-  service
-  routes
-  model
-  repository
-  validators
-  dto
-  events
-  tests
-```
-
----
-
-## 7. DEVELOPMENT PRIORITY ORDER
-
-### Phase 1 - Core Commerce
-
-1. Authentication
-2. Users
-3. Products
-4. Categories
-5. Cart
-6. Orders
-7. Payments
-
-### Phase 2 - Wholesale Features
-
-8. Tier Pricing
-9. RFQ
-10. Bulk Orders
-11. Vendor System
-12. Inventory
-
-### Phase 3 - Engagement Features
-
-13. Loyalty
-14. Reviews
-15. Digital Catalogs
-16. Notifications
+- **Guest cart:** Backend supports `sessionId`, but frontend currently does not generate/persist one. This is the highest-priority Phase 1 gap.
+- **Payments:** COD-only in Phase 1. Online gateways (Razorpay, PayU) are Phase 2.
+- **Images:** Products use placeholder thumbnails. Full image upload is Phase 2.
+- **Middleware:** No Next.js middleware for auth redirect; pages handle auth checks client-side.

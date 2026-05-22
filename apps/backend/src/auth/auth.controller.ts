@@ -35,7 +35,7 @@ export class AuthController {
   login(
     @Body() _loginDto: LoginDto,
     @Req() req: Request,
-  ): Promise<AuthResponse> {
+  ): AuthResponse {
     return this.authService.buildAuthResponse(req.user as User);
   }
 
