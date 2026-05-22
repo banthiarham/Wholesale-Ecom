@@ -1,5 +1,7 @@
 # PRD - Project Requirements Document
 
+> For full project information, setup guides, and documentation, see [`docs/README.md`](../docs/README.md).
+
 ## 1. SYSTEM FLOW OVERVIEW
 
 - **User Layer**
