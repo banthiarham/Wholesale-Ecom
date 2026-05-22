@@ -26,18 +26,32 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('WholesaleX Pro API')
     .setDescription(
-      'B2B Wholesale E-commerce Platform API — Phase 1\n\n' +
-      'This API powers the WholesaleX Pro platform, a B2B wholesale e-commerce solution with tier pricing, guest/user carts, order management, and COD payments.\n\n' +
-      '**Phase 1 Modules:** Authentication, Users, Products, Categories, Cart, Orders, Payments, Reviews\n\n' +
-      '**Features:**\n' +
-      '- JWT + Google OAuth authentication\n' +
-      '- Role-based access control (Buyer, Vendor, Distributor, Admin)\n' +
-      '- Product catalog with search, filters, and tier pricing\n' +
-      '- Guest & user cart management\n' +
-      '- Order lifecycle (Pending → Confirmed → Processing → Shipped → Delivered)\n' +
-      '- COD payment flow\n' +
-      '- Product reviews with auto-calculated ratings\n\n' +
-      '**Project Plan:** See plan.md for full requirements, database schema, and development roadmap.',
+      '# WholesaleX Pro — B2B Wholesale E-commerce API\n\n' +
+      'This API powers the **WholesaleX Pro** platform, a full-stack B2B wholesale e-commerce solution built with **NestJS + Prisma + PostgreSQL**.\n\n' +
+      '## Phase 1 Modules (Current)\n\n' +
+      '- **Authentication** — JWT + Google OAuth, OTP verification, forgot/reset password\n' +
+      '- **Users** — CRUD, role/status management, address book\n' +
+      '- **Products** — Catalog with search, filters, tier pricing, reviews\n' +
+      '- **Categories** — Hierarchical tree with product counts\n' +
+      '- **Cart** — Guest session cart + authenticated user cart\n' +
+      '- **Orders** — Full lifecycle: Pending → Confirmed → Processing → Shipped → Delivered\n' +
+      '- **Payments** — COD payment records and verification\n' +
+      '- **Reviews** — Submit, list, delete with auto-calculated product ratings\n\n' +
+      '## Authentication\n\n' +
+      '1. Register → `POST /auth/register`\n' +
+      '2. Verify OTP → `POST /auth/verify-otp`\n' +
+      '3. Login → `POST /auth/login` (returns JWT token)\n' +
+      '4. Use token → `Authorization: Bearer <token>`\n\n' +
+      '## Role-Based Access\n\n' +
+      '| Role | Permissions |\n' +
+      '|------|-------------|\n' +
+      '| BUYER | Browse, cart, orders, reviews, addresses |\n' +
+      '| VENDOR | Product CRUD (own), order status updates |\n' +
+      '| ADMIN | Full access to all resources |\n\n' +
+      '## Documentation\n\n' +
+      '- **Project README:** See `README.md` in the repository root for full setup, architecture, and roadmap.\n' +
+      '- **PRD / Plan:** See `plan.md/plan.md` for detailed requirements and development phases.\n' +
+      '- **Docs Index:** See `docs/README.md` for quick navigation.',
     )
     .setVersion('1.0')
     .addBearerAuth()
