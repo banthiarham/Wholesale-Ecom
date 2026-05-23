@@ -15,6 +15,10 @@ import { InventoryModule } from './inventory/inventory.module';
 import { RfqsModule } from './rfqs/rfqs.module';
 import { VendorModule } from './vendor/vendor.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { RecommendationsModule } from './recommendations/recommendations.module';
 
 @Module({
   imports: [
@@ -36,6 +40,10 @@ import { CatalogsModule } from './catalogs/catalogs.module';
     RfqsModule,
     VendorModule,
     CatalogsModule,
+    LoyaltyModule,
+    NotificationsModule,
+    AnalyticsModule,
+    RecommendationsModule,
   ],
   controllers: [AppController],
 })
