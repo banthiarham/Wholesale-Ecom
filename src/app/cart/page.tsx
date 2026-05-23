@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ShoppingCart, ArrowLeft } from "lucide-react"
 import CartItemCard from "@/components/cart/CartItemCard"
 import CartSummary from "@/components/cart/CartSummary"
+import { getCartSessionId } from "@/lib/utils"
 
 interface CartItem {
   id: string
@@ -47,7 +48,7 @@ export default function CartPage() {
 
   const fetchCart = useCallback(async () => {
     try {
-      const res = await fetch("/api/cart", { cache: "no-store" })
+      const res = await fetch("/api/cart", { cache: "no-store", headers: { "x-session-id": getCartSessionId() } })
       if (res.ok) {
         const json = await res.json()
         setData(json)
@@ -66,7 +67,7 @@ export default function CartPage() {
   const handleUpdate = async (itemId: string, quantity: number) => {
     setUpdating(true)
     try {
-      const res = await fetch("/api/cart", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId, quantity }) })
+      const res = await fetch("/api/cart", { method: "PUT", headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() }, body: JSON.stringify({ itemId, quantity }) })
       if (res.ok) { const json = await res.json(); setData(json); recalcCoupon(json.totals.subtotal) }
     } catch (err) { console.error(err) } finally { setUpdating(false) }
   }
@@ -74,7 +75,7 @@ export default function CartPage() {
   const handleRemove = async (itemId: string) => {
     setUpdating(true)
     try {
-      const res = await fetch("/api/cart", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId }) })
+      const res = await fetch("/api/cart", { method: "DELETE", headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() }, body: JSON.stringify({ itemId }) })
       if (res.ok) { const json = await res.json(); setData(json); recalcCoupon(json.totals.subtotal) }
     } catch (err) { console.error(err) } finally { setUpdating(false) }
   }
@@ -83,7 +84,7 @@ export default function CartPage() {
     if (couponCode && data) {
       fetch("/api/cart/coupon", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
         body: JSON.stringify({ code: couponCode }),
       })
         .then((res) => res.json())
@@ -105,7 +106,7 @@ export default function CartPage() {
     try {
       const res = await fetch("/api/cart/coupon", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
         body: JSON.stringify({ code }),
       })
       const result = await res.json()

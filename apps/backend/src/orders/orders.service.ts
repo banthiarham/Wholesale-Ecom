@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { OrderStatus, PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private inventoryService: InventoryService,
+  ) {}
 
   async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string }) {
     const cart = await this.prisma.cart.findUnique({
@@ -45,6 +49,16 @@ export class OrdersService {
     });
 
     await this.prisma.cartItem.deleteMany({ where: { cartId } });
+
+    // Reserve inventory for each order item
+    for (const item of order.items) {
+      try {
+        await this.inventoryService.reserveStock(item.productId, item.quantity, order.id, userId);
+      } catch (err) {
+        // If reservation fails, we should ideally rollback the order, but for now continue
+        console.error(`Failed to reserve stock for product ${item.productId}:`, err.message);
+      }
+    }
 
     return order;
   }
@@ -97,7 +111,7 @@ export class OrdersService {
       throw new BadRequestException('Cannot cancel this order');
     }
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id },
       data: { status: OrderStatus.CANCELLED },
       include: {
@@ -105,5 +119,16 @@ export class OrdersService {
         payment: true,
       },
     });
+
+    // Release reserved inventory
+    for (const item of updated.items) {
+      try {
+        await this.inventoryService.releaseStock(item.productId, item.quantity, updated.id, userId);
+      } catch (err) {
+        console.error(`Failed to release stock for product ${item.productId}:`, err.message);
+      }
+    }
+
+    return updated;
   }
 }

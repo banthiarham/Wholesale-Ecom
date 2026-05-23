@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, MapPin, CreditCard, Tag } from "lucide-react"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, getCartSessionId } from "@/lib/utils"
 import Header from "@/components/layout/Header"
 
 interface CartItem {
@@ -28,7 +28,7 @@ export default function CheckoutPage() {
   const [couponError, setCouponError] = useState("")
 
   useEffect(() => {
-    fetch("/api/cart", { cache: "no-store" })
+    fetch("/api/cart", { cache: "no-store", headers: { "x-session-id": getCartSessionId() } })
       .then((res) => res.json())
       .then((data) => {
         if (data.cart?.items?.length > 0) setCart(data)

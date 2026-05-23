@@ -10,6 +10,10 @@ import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { PricingModule } from './pricing/pricing.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { RfqsModule } from './rfqs/rfqs.module';
+import { VendorModule } from './vendor/vendor.module';
+import { CatalogsModule } from './catalogs/catalogs.module';
 
 @Module({
   imports: [
@@ -27,6 +31,10 @@ import { PricingModule } from './pricing/pricing.module';
     PaymentsModule,
     ReviewsModule,
     PricingModule,
+    InventoryModule,
+    RfqsModule,
+    VendorModule,
+    CatalogsModule,
   ],
 })
 export class AppModule {}

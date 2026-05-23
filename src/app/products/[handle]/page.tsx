@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { ShoppingCart, ArrowLeft, Star, Truck, Package } from "lucide-react"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface TierPrice { id: string; minQty: number; maxQty: number | null; price: number }
 
@@ -39,7 +39,7 @@ export default function ProductDetailPage() {
     if (!product) return
     setAdding(true)
     try {
-      await fetch("/api/cart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: product.id, quantity }) })
+      await fetch("/api/cart", { method: "POST", headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() }, body: JSON.stringify({ productId: product.id, quantity }) })
       alert("Added to cart!")
     } catch (err) { console.error(err) } finally { setAdding(false) }
   }

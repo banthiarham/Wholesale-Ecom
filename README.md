@@ -39,6 +39,11 @@
 | **Orders** | `POST /orders`, `GET /orders`, `GET /orders/:id`, `PUT /orders/:id/status`, `PUT /orders/:id/cancel` | JWT | Place from cart, status lifecycle, cancel |
 | **Payments** | `POST /payments`, `POST /payments/:orderId/verify` | JWT | COD payment records |
 | **Reviews** | `GET /reviews`, `GET /reviews/:id`, `POST /reviews`, `DELETE /reviews/:id` | Mixed | Submit, list, delete, auto-rating update |
+| **Pricing** | `POST /pricing/calculate`, `POST /pricing/coupons/apply` | Mixed | Tier + seasonal + contract + coupon engine |
+| **Inventory** | `GET /inventory`, `POST /inventory/:id/adjust`, `GET /inventory/:id/logs` | VENDOR/ADMIN | Stock adjustments, reservation, release |
+| **RFQs** | `POST /rfqs`, `GET /rfqs`, `PUT /rfqs/:id/submit`, `POST /rfqs/:id/quotes` | BUYER/VENDOR | Full RFQ lifecycle with quotes |
+| **Vendor** | `GET /vendor/dashboard`, `GET /vendor/products`, `GET /vendor/orders` | VENDOR/ADMIN | Dashboard stats, sales analytics |
+| **Catalogs** | `POST /catalogs`, `GET /catalogs`, `POST /catalogs/:id/generate-pdf` | VENDOR/ADMIN | Digital catalogs with PDF generation |
 
 ### Frontend Pages (Next.js)
 
@@ -238,13 +243,13 @@ After running `npm run db:seed`:
 ### Phase 1 — Core Commerce (Complete)
 Authentication, Users, Products, Categories, Cart, Orders, Payments, Reviews
 
-### Phase 2 — Wholesale Features
-- Contract / seasonal pricing
-- RFQ (Request for Quote)
-- Bulk CSV order upload
-- Vendor dashboard
-- Inventory management
-- Digital catalogs
+### Phase 2 — Wholesale Features (Complete)
+- Contract / seasonal pricing ✅
+- RFQ (Request for Quote) ✅
+- Bulk CSV order upload ✅
+- Vendor dashboard ✅
+- Inventory management ✅
+- Digital catalogs ✅
 
 ### Phase 3 — Engagement & Growth
 - Loyalty program (points, tiers, cashback)

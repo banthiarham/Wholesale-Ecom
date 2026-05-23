@@ -1,10 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
 
   app.setGlobalPrefix('api/v1');
   app.enableCors({
@@ -36,7 +39,12 @@ async function bootstrap() {
       '- **Cart** — Guest session cart + authenticated user cart\n' +
       '- **Orders** — Full lifecycle: Pending → Confirmed → Processing → Shipped → Delivered\n' +
       '- **Payments** — COD payment records and verification\n' +
-      '- **Reviews** — Submit, list, delete with auto-calculated product ratings\n\n' +
+      '- **Reviews** — Submit, list, delete with auto-calculated product ratings\n' +
+      '- **Inventory** — Stock adjustments, reservation, release, logs\n' +
+      '- **RFQ** — Request for Quote lifecycle with vendor quotes\n' +
+      '- **Vendor Dashboard** — Stats, products, orders, sales analytics\n' +
+      '- **Catalogs** — Digital catalogs with PDF generation\n' +
+      '- **Bulk CSV Upload** — Upload orders via CSV\n\n' +
       '## Authentication\n\n' +
       '1. Register → `POST /auth/register`\n' +
       '2. Verify OTP → `POST /auth/verify-otp`\n' +

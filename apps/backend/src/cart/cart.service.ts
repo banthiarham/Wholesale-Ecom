@@ -103,7 +103,8 @@ export class CartService {
       throw new BadRequestException('Product is not available');
     if (quantity < product.moq)
       throw new BadRequestException(`Minimum order quantity is ${product.moq}`);
-    if (product.manageInventory && quantity > product.inventoryQuantity)
+    const availableStock = product.inventoryQuantity - product.reservedQuantity;
+    if (product.manageInventory && quantity > availableStock)
       throw new BadRequestException('Not enough inventory');
 
     // Calculate effective price with discounts
@@ -119,7 +120,8 @@ export class CartService {
 
     if (existingItem) {
       const newQuantity = existingItem.quantity + quantity;
-      if (product.manageInventory && newQuantity > product.inventoryQuantity)
+      const availableStock2 = product.inventoryQuantity - product.reservedQuantity;
+      if (product.manageInventory && newQuantity > availableStock2)
         throw new BadRequestException('Not enough inventory');
 
       // Recalculate price for new quantity
@@ -163,7 +165,8 @@ export class CartService {
       throw new BadRequestException(
         `Minimum order quantity is ${item.product.moq}`,
       );
-    if (item.product.manageInventory && quantity > item.product.inventoryQuantity)
+    const availableStock3 = item.product.inventoryQuantity - item.product.reservedQuantity;
+    if (item.product.manageInventory && quantity > availableStock3)
       throw new BadRequestException('Not enough inventory');
 
     const cartUserId = item.cart.userId || undefined;

@@ -7,9 +7,13 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
+import { CsvOrderParserService } from './csv-order-parser.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -20,7 +24,10 @@ import { UserRole, OrderStatus } from '@prisma/client';
 @ApiTags('Orders')
 @Controller('orders')
 export class OrdersController {
-  constructor(private ordersService: OrdersService) {}
+  constructor(
+    private ordersService: OrdersService,
+    private csvParser: CsvOrderParserService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -43,6 +50,37 @@ export class OrdersController {
       },
     );
     return { order };
+  }
+
+  @Post('bulk-csv')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk order upload via CSV (sku, quantity, notes)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        shippingAddress: { type: 'object' },
+        notes: { type: 'string' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async bulkCsv(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { shippingAddress: string; notes?: string },
+    @CurrentUser() user: any,
+  ) {
+    const shippingAddress = JSON.parse(body.shippingAddress || '{}');
+    const result = await this.csvParser.parseAndCreateOrder(
+      user.userId,
+      file.buffer,
+      shippingAddress,
+      body.notes,
+    );
+    return result;
   }
 
   @Get()
