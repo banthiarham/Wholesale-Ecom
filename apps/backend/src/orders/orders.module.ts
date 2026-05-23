@@ -4,9 +4,10 @@ import { OrdersController } from './orders.controller';
 import { CsvOrderParserService } from './csv-order-parser.service';
 import { InventoryModule } from '../inventory/inventory.module';
 import { PricingModule } from '../pricing/pricing.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [InventoryModule, PricingModule],
+  imports: [InventoryModule, PricingModule, NotificationsModule],
   controllers: [OrdersController],
   providers: [OrdersService, CsvOrderParserService],
   exports: [OrdersService],

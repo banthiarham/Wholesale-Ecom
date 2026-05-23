@@ -1,12 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { ShoppingCart, User, LogOut, Menu } from "lucide-react"
+import { ShoppingCart, User, LogOut, Menu, Globe } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useTranslation } from "@/lib/i18n/LanguageProvider"
 
 export default function Header() {
   const [user, setUser] = useState<any>(null)
   const [mobileMenu, setMobileMenu] = useState(false)
+  const { locale, setLocale, t } = useTranslation()
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -26,23 +28,31 @@ export default function Header() {
     window.location.href = "/"
   }
 
+  const toggleLang = () => {
+    setLocale(locale === "en" ? "hi" : "en")
+  }
+
   return (
     <header className="bg-white shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
         <Link href="/" className="text-xl font-bold text-primary-700">WholesaleX Pro</Link>
 
         <nav className="hidden md:flex gap-6 items-center">
-          <Link href="/products" className="text-gray-600 hover:text-primary-600 transition">Products</Link>
-          <Link href="/categories" className="text-gray-600 hover:text-primary-600 transition">Categories</Link>
-          {user && <Link href="/orders" className="text-gray-600 hover:text-primary-600 transition">My Orders</Link>}
-          <Link href="/rfqs" className="text-gray-600 hover:text-primary-600 transition">RFQs</Link>
-          <Link href="/catalogs" className="text-gray-600 hover:text-primary-600 transition">Catalogs</Link>
-          {user && <Link href="/loyalty" className="text-gray-600 hover:text-primary-600 transition">Loyalty</Link>}
-          {user && <Link href="/notifications" className="text-gray-600 hover:text-primary-600 transition relative">Notifications</Link>}
-          {user?.role === 'VENDOR' && <Link href="/vendor/dashboard" className="text-gray-600 hover:text-primary-600 transition">Vendor</Link>}
+          <Link href="/products" className="text-gray-600 hover:text-primary-600 transition">{t("nav.products")}</Link>
+          <Link href="/categories" className="text-gray-600 hover:text-primary-600 transition">{t("nav.categories")}</Link>
+          {user && <Link href="/orders" className="text-gray-600 hover:text-primary-600 transition">{t("nav.orders")}</Link>}
+          <Link href="/rfqs" className="text-gray-600 hover:text-primary-600 transition">{t("nav.rfqs")}</Link>
+          <Link href="/catalogs" className="text-gray-600 hover:text-primary-600 transition">{t("nav.catalogs")}</Link>
+          {user && <Link href="/loyalty" className="text-gray-600 hover:text-primary-600 transition">{t("nav.loyalty")}</Link>}
+          {user && <Link href="/notifications" className="text-gray-600 hover:text-primary-600 transition relative">{t("nav.notifications")}</Link>}
+          {user?.role === 'VENDOR' && <Link href="/vendor/dashboard" className="text-gray-600 hover:text-primary-600 transition">{t("nav.vendor")}</Link>}
           <Link href="/cart" className="text-gray-600 hover:text-primary-600 transition">
             <ShoppingCart size={20} />
           </Link>
+          <button onClick={toggleLang} className="flex items-center gap-1 text-sm text-gray-600 hover:text-primary-600 transition">
+            <Globe size={16} />
+            {locale === "en" ? t("language.hindi") : t("language.english")}
+          </button>
           {user ? (
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-700">{user.firstName}</span>
@@ -50,8 +60,8 @@ export default function Header() {
             </div>
           ) : (
             <div className="flex gap-3">
-              <Link href="/login" className="px-4 py-2 text-primary-600 border border-primary-600 rounded-lg hover:bg-primary-50 transition">Sign In</Link>
-              <Link href="/register" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">Sign Up</Link>
+              <Link href="/login" className="px-4 py-2 text-primary-600 border border-primary-600 rounded-lg hover:bg-primary-50 transition">{t("nav.signin")}</Link>
+              <Link href="/register" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">{t("nav.signup")}</Link>
             </div>
           )}
         </nav>
@@ -63,17 +73,20 @@ export default function Header() {
 
       {mobileMenu && (
         <div className="md:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-3">
-          <Link href="/products" className="block text-gray-600">Products</Link>
-          <Link href="/cart" className="block text-gray-600">Cart</Link>
+          <Link href="/products" className="block text-gray-600">{t("nav.products")}</Link>
+          <Link href="/cart" className="block text-gray-600">{t("nav.cart")}</Link>
+          <button onClick={toggleLang} className="block text-primary-600">
+            {locale === "en" ? t("language.hindi") : t("language.english")}
+          </button>
           {user ? (
             <>
-              <Link href="/orders" className="block text-gray-600">My Orders</Link>
-              <button onClick={logout} className="block text-red-500">Sign Out</button>
+              <Link href="/orders" className="block text-gray-600">{t("nav.orders")}</Link>
+              <button onClick={logout} className="block text-red-500">{t("nav.signout")}</button>
             </>
           ) : (
             <>
-              <Link href="/login" className="block text-primary-600">Sign In</Link>
-              <Link href="/register" className="block text-primary-600">Sign Up</Link>
+              <Link href="/login" className="block text-primary-600">{t("nav.signin")}</Link>
+              <Link href="/register" className="block text-primary-600">{t("nav.signup")}</Link>
             </>
           )}
         </div>

@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from './email.service';
 import { NotificationType } from '@prisma/client';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   async getMyNotifications(userId: string, unreadOnly = false) {
     return this.prisma.notification.findMany({
@@ -21,9 +25,23 @@ export class NotificationsService {
   }
 
   async createNotification(userId: string, type: NotificationType, title: string, message: string, data?: any) {
-    return this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: { userId, type, title, message, data: data ?? null },
     });
+
+    // Send email notification for important types
+    if (type === 'ORDER' || type === 'PAYMENT' || type === 'RFQ' || type === 'QUOTE') {
+      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+      if (user?.email) {
+        try {
+          await this.emailService.sendNotificationEmail(user.email, title, message);
+        } catch (err) {
+          console.error('Failed to send notification email:', err.message);
+        }
+      }
+    }
+
+    return notification;
   }
 
   async markAsRead(userId: string, notificationId: string) {

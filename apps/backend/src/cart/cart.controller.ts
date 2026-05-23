@@ -96,4 +96,16 @@ export class CartController {
     );
     return this.cartService.validateCoupon(cart, code);
   }
+
+  @Post('merge')
+  @ApiOperation({ summary: 'Merge guest cart items into authenticated user cart' })
+  @ApiResponse({ status: 200, description: 'Carts merged successfully' })
+  @ApiBody({ schema: { type: 'object', properties: { sessionId: { type: 'string' }, userId: { type: 'string' } } } })
+  async mergeCart(
+    @Body('sessionId') sessionId: string,
+    @Body('userId') userId: string,
+  ) {
+    const result = await this.cartService.mergeGuestCart(sessionId, userId);
+    return { cart: result, message: 'Cart merged successfully' };
+  }
 }

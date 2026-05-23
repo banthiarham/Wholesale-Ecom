@@ -42,4 +42,5 @@ prisma/migrations/*/migration_lock.toml
 .next/
 screenshot-*.png
 screenshot.js
+screenshots/
 next-env.d.ts

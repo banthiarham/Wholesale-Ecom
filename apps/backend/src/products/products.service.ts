@@ -89,4 +89,16 @@ export class ProductsService {
   async remove(id: string) {
     return this.prisma.product.delete({ where: { id } });
   }
+
+  async addImages(id: string, urls: string[]) {
+    const product = await this.prisma.product.findUnique({ where: { id } });
+    if (!product) throw new NotFoundException('Product not found');
+    const existing = (product.images as string[]) || [];
+    const updated = [...existing, ...urls];
+    return this.prisma.product.update({
+      where: { id },
+      data: { images: updated },
+      include: { category: true, tierPrices: true },
+    });
+  }
 }

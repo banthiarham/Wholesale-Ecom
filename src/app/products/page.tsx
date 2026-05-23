@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ShoppingCart, Search, SlidersHorizontal, X } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { useTranslation } from "@/lib/i18n/LanguageProvider"
 
 interface Product {
   id: string
@@ -33,6 +34,7 @@ export default function ProductsPage() {
   const [addingId, setAddingId] = useState<string | null>(null)
   const [filters, setFilters] = useState({ category: "", minPrice: "", maxPrice: "", inStock: false })
   const [showFilters, setShowFilters] = useState(false)
+  const { t } = useTranslation()
 
   useEffect(() => {
     fetch("/api/categories")
@@ -77,7 +79,7 @@ export default function ProductsPage() {
         headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
         body: JSON.stringify({ productId, quantity: qty }),
       })
-      alert("Added to cart!")
+      alert(t("products.addToCart"))
     } catch (err) {
       console.error(err)
     } finally {
@@ -104,12 +106,12 @@ export default function ProductsPage() {
         <div className="bg-white border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Filters</h3>
+              <h3 className="font-semibold">{t("nav.categories")}</h3>
               <button onClick={() => setShowFilters(false)}><X size={18} /></button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="text-sm font-medium text-gray-700">Category</label>
+                <label className="text-sm font-medium text-gray-700">{t("nav.categories")}</label>
                 <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
                   <option value="">All</option>
                   {categories.map((cat) => (<option key={cat.id} value={cat.id}>{cat.name}</option>
@@ -143,11 +145,11 @@ export default function ProductsPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Products</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("products.title")}</h1>
           <div className="flex gap-3 items-center">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loadProducts()} className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-48" />
+              <input type="text" placeholder={t("products.search")} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loadProducts()} className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-48" />
             </div>
             <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded-lg border ${hasActiveFilters ? "border-primary-600 text-primary-600" : "border-gray-200 text-gray-600"}`}>
               <SlidersHorizontal size={18} />
@@ -181,8 +183,8 @@ export default function ProductsPage() {
                   <Link href={`/products/${product.handle}`}>
                     <h3 className="font-semibold text-gray-900 truncate hover:text-primary-600">{product.title}</h3>
                   </Link>
-                  {product.sku && <p className="text-xs text-gray-500 mt-1">SKU: {product.sku}</p>}
-                  <p className="text-xs text-gray-500">MOQ: {product.moq}</p>
+                  {product.sku && <p className="text-xs text-gray-500 mt-1">{t("product.sku")}: {product.sku}</p>}
+                  <p className="text-xs text-gray-500">{t("product.moq")}: {product.moq}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <span className="font-bold text-primary-700">{formatPrice(Number(product.unitPrice))}</span>
                     {product.compareAtPrice && <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>}
@@ -196,7 +198,7 @@ export default function ProductsPage() {
                     disabled={addingId === product.id || product.inventoryQuantity <= 0}
                     className="mt-4 w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
                   >
-                    {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? "Out of Stock" : `Add ${product.moq} to Cart`}
+                    {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? t("product.outOfStock") : t("product.addToCart")}
                   </button>
                 </div>
               </div>

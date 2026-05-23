@@ -15,6 +15,7 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { EmailService } from '../notifications/email.service';
 
 export interface TokenPayload {
   sub: string;
@@ -33,6 +34,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private emailService: EmailService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponse> {
@@ -272,12 +274,12 @@ export class AuthService {
     });
   }
 
-  private generateAndSaveOtp(userId: string, purpose: string): Promise<any> {
+  private async generateAndSaveOtp(userId: string, purpose: string): Promise<any> {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
-    return this.prisma.oTP.create({
+    const otp = await this.prisma.oTP.create({
       data: {
         code,
         purpose,
@@ -285,6 +287,18 @@ export class AuthService {
         expiresAt,
       },
     });
+
+    // Send OTP via email if configured
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (user?.email && this.emailService.isConfigured()) {
+      try {
+        await this.emailService.sendOtpEmail(user.email, code);
+      } catch (err) {
+        console.error('Failed to send OTP email:', err.message);
+      }
+    }
+
+    return otp;
   }
 
   private generateRandomToken(): string {

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { EmailService } from '../notifications/email.service';
 import { OrderStatus, PaymentStatus } from '@prisma/client';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class OrdersService {
   constructor(
     private prisma: PrismaService,
     private inventoryService: InventoryService,
+    private emailService: EmailService,
   ) {}
 
   async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string }) {
@@ -55,8 +57,16 @@ export class OrdersService {
       try {
         await this.inventoryService.reserveStock(item.productId, item.quantity, order.id, userId);
       } catch (err) {
-        // If reservation fails, we should ideally rollback the order, but for now continue
         console.error(`Failed to reserve stock for product ${item.productId}:`, err.message);
+      }
+    }
+
+    // Send order confirmation email
+    if (order.user?.email && this.emailService.isConfigured()) {
+      try {
+        await this.emailService.sendOrderConfirmation(order.user.email, order.orderNumber.slice(0, 8), Number(order.totalAmount));
+      } catch (err) {
+        console.error('Failed to send order confirmation email:', err.message);
       }
     }
 

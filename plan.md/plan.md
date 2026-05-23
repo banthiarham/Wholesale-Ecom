@@ -193,19 +193,21 @@ CANCELLED (buyer or admin)
 ### Phase 1 — Core Commerce ✅
 Authentication, Users, Products, Categories, Cart, Orders, Payments, Reviews
 
-### Phase 2 — Wholesale Features
-- Tier Pricing engine enhancements (contract pricing, seasonal discounts)
-- RFQ (Request for Quote) system
+### Phase 2 — Wholesale Features ✅
+- Tier Pricing engine enhancements (contract pricing, seasonal discounts, coupon codes)
+- RFQ (Request for Quote) system with quotes and lifecycle
 - Bulk order CSV upload
-- Vendor dashboard and inventory management
-- Digital catalogs and PDF generation
+- Vendor dashboard and inventory management with stock adjustments
+- Digital catalogs and PDF generation with Puppeteer
+- CCAvenue online payment gateway integration
+- Product image upload (multi-file)
 
-### Phase 3 — Engagement & Growth
+### Phase 3 — Engagement & Growth ✅
 - Loyalty program (points, tiers, cashback)
-- Notifications (email, SMS, push)
-- Analytics dashboard
+- Notifications (in-app + email via SMTP/nodemailer)
+- Analytics dashboard (admin + vendor)
 - AI product recommendations
-- Multi-language support
+- Multi-language support (English + Hindi with next-intl)
 
 ---
 
@@ -268,6 +270,12 @@ WholesaleX-Pro/
 │           ├── orders/
 │           ├── payments/
 │           ├── reviews/
+│           ├── rfqs/
+│           ├── inventory/
+│           ├── vendor/
+│           ├── catalogs/
+│           ├── pricing/
+│           ├── notifications/
 │           ├── prisma/
 │           ├── common/
 │           │   ├── decorators/
@@ -282,6 +290,12 @@ WholesaleX-Pro/
 │       ├── cart/
 │       ├── checkout/
 │       ├── orders/
+│       ├── rfqs/
+│       ├── catalogs/
+│       ├── vendor/
+│       ├── loyalty/
+│       ├── notifications/
+│       ├── analytics/
 │       ├── login/
 │       ├── register/
 │       ├── forgot-password/
@@ -309,7 +323,8 @@ After running `npm run db:seed`:
 
 ## 10. Notes & Decisions
 
-- **Guest cart:** Backend supports `sessionId`, but frontend currently does not generate/persist one. This is the highest-priority Phase 1 gap.
-- **Payments:** COD-only in Phase 1. Online gateways (Razorpay, PayU) are Phase 2.
-- **Images:** Products use placeholder thumbnails. Full image upload is Phase 2.
+- **Guest cart:** Backend and frontend fully support `x-session-id` header with localStorage `cart_session`. Auto-merge on login/Google OAuth.
+- **Payments:** COD + CCAvenue online payments (AES-128-CBC encryption) are live.
+- **Images:** Multi-file image upload endpoint available at `POST /products/:id/images`.
 - **Middleware:** No Next.js middleware for auth redirect; pages handle auth checks client-side.
+- **i18n:** English and Hindi translations wired across Header, Home, Products, Cart, Login, Register pages.

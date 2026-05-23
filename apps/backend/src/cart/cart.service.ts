@@ -213,6 +213,53 @@ export class CartService {
     return this.getOrCreateCart(userId, sessionId);
   }
 
+  async mergeGuestCart(sessionId: string, userId: string) {
+    const guestCart = await this.prisma.cart.findUnique({
+      where: { sessionId },
+      include: { items: true },
+    });
+
+    if (!guestCart || guestCart.items.length === 0) {
+      return this.getOrCreateCart(userId, undefined);
+    }
+
+    let userCart = await this.prisma.cart.findUnique({
+      where: { userId },
+      include: { items: true },
+    });
+
+    if (!userCart) {
+      userCart = await this.prisma.cart.create({
+        data: { userId },
+        include: { items: true },
+      });
+    }
+
+    for (const guestItem of guestCart.items) {
+      const existingItem = userCart.items.find((i) => i.productId === guestItem.productId);
+      if (existingItem) {
+        await this.prisma.cartItem.update({
+          where: { id: existingItem.id },
+          data: { quantity: existingItem.quantity + guestItem.quantity },
+        });
+      } else {
+        await this.prisma.cartItem.create({
+          data: {
+            cartId: userCart.id,
+            productId: guestItem.productId,
+            quantity: guestItem.quantity,
+            unitPrice: guestItem.unitPrice,
+          },
+        });
+      }
+    }
+
+    // Delete guest cart after merge
+    await this.prisma.cart.delete({ where: { id: guestCart.id } }).catch(() => null);
+
+    return this.getOrCreateCart(userId, undefined);
+  }
+
   calculateTotals(cart: any, couponCode?: string) {
     const subtotal = cart.items.reduce(
       (sum: number, item: any) =>

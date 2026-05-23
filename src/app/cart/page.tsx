@@ -6,6 +6,7 @@ import { ShoppingCart, ArrowLeft } from "lucide-react"
 import CartItemCard from "@/components/cart/CartItemCard"
 import CartSummary from "@/components/cart/CartSummary"
 import { getCartSessionId } from "@/lib/utils"
+import { useTranslation } from "@/lib/i18n/LanguageProvider"
 
 interface CartItem {
   id: string
@@ -45,6 +46,7 @@ export default function CartPage() {
   const [couponError, setCouponError] = useState("")
   const [couponCode, setCouponCode] = useState<string | null>(null)
   const [couponDiscount, setCouponDiscount] = useState(0)
+  const { t } = useTranslation()
 
   const fetchCart = useCallback(async () => {
     try {
@@ -141,23 +143,17 @@ export default function CartPage() {
   if (!data || data.cart.items.length === 0) return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
       <ShoppingCart size={64} className="text-gray-300 mb-4" />
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Your cart is empty</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("cart.empty")}</h1>
       <Link href="/products" className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
-        <ArrowLeft size={18} /> Continue Shopping
+        <ArrowLeft size={18} /> {t("cart.continue")}
       </Link>
     </div>
   )
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="text-xl font-bold text-primary-700">WholesaleX Pro</div>
-          <Link href="/" className="text-gray-600 hover:text-primary-600">Home</Link>
-        </div>
-      </header>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Shopping Cart</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">{t("cart.title")}</h1>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-4">
             {data.cart.items.map((item) => (
