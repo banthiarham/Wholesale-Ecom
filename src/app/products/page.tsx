@@ -173,7 +173,7 @@ export default function ProductsPage() {
                 <Link href={`/products/${product.handle}`}>
                   <div className="h-48 bg-gray-100 relative">
                     {product.thumbnail ? (
-                      <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover" />
+                      <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
                     )}
