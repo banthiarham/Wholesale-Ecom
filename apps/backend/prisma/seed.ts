@@ -1,6 +1,9 @@
 import { PrismaClient, UserRole, UserStatus, AccountType, ProductStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
+const COUPON_CODE = 'DEEPANSHU';
+const COUPON_DISCOUNT_PERCENT = 10;
+
 const prisma = new PrismaClient();
 
 async function main() {
@@ -145,6 +148,25 @@ async function main() {
       },
     },
   });
+
+  // Upsert default coupon
+  const now = new Date();
+  const oneYearLater = new Date();
+  oneYearLater.setFullYear(now.getFullYear() + 1);
+
+  await prisma.coupon.upsert({
+    where: { code: COUPON_CODE },
+    update: {},
+    create: {
+      code: COUPON_CODE,
+      type: 'PERCENTAGE',
+      value: COUPON_DISCOUNT_PERCENT,
+      isActive: true,
+      startDate: now,
+      endDate: oneYearLater,
+    },
+  });
+  console.log(`✅ Coupon created: ${COUPON_CODE} (${COUPON_DISCOUNT_PERCENT}% off)`);
 
   console.log('✅ Seed complete: Categories and Products created');
 }

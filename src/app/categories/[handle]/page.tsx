@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { ShoppingCart, ArrowLeft } from "lucide-react"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface Product {
   id: string; title: string; handle: string; sku: string | null; thumbnail: string | null;
@@ -32,7 +32,7 @@ export default function CategoryPage() {
   const handleAddToCart = async (productId: string, qty: number) => {
     setAddingId(productId)
     try {
-      await fetch("/api/cart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId, quantity: qty }) })
+      await fetch("/api/cart", { method: "POST", headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() }, body: JSON.stringify({ productId, quantity: qty }) })
       alert("Added to cart!")
     } catch (err) { console.error(err) } finally { setAddingId(null) }
   }
