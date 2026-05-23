@@ -13,6 +13,7 @@ interface Review { id: string; rating: number; title: string | null; body: strin
 interface Product {
   id: string; title: string; handle: string; description: string | null; sku: string | null; moq: number;
   unitPrice: number; compareAtPrice: number | null; inventoryQuantity: number; thumbnail: string | null;
+  images: string[];
   vendorName: string | null; rating: number; reviewCount: number; tags: string[];
   category: { id: string; name: string; handle: string } | null;
   tierPrices: TierPrice[]; reviews: Review[];
@@ -24,13 +25,14 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true)
   const [quantity, setQuantity] = useState(1)
   const [adding, setAdding] = useState(false)
+  const [mainImage, setMainImage] = useState<string | null>(null)
 
   useEffect(() => {
     if (!params.handle) return
     fetch(`/api/products/${params.handle}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.product) { setProduct(data.product); setQuantity(data.product.moq) }
+        if (data.product) { setProduct(data.product); setQuantity(data.product.moq); setMainImage(data.product.thumbnail || (data.product.images?.[0] ?? null)) }
         setLoading(false)
       })
   }, [params.handle])
@@ -69,10 +71,19 @@ export default function ProductDetailPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white rounded-lg overflow-hidden">
-            {product.thumbnail ? (
-              <img src={product.thumbnail} alt={product.title} className="w-full h-96 object-cover" />
+            {mainImage ? (
+              <img src={mainImage} alt={product.title} className="w-full h-96 object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             ) : (
               <div className="w-full h-96 bg-gray-100 flex items-center justify-center text-gray-400">No Image</div>
+            )}
+            {product.images && product.images.length > 1 && (
+              <div className="flex gap-2 p-4 overflow-x-auto">
+                {product.images.map((img, idx) => (
+                  <button key={idx} onClick={() => setMainImage(img)} className={`flex-shrink-0 w-20 h-20 rounded border-2 overflow-hidden ${mainImage === img ? 'border-primary-600' : 'border-transparent'}`}>
+                    <img src={img} alt={`${product.title} ${idx + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
