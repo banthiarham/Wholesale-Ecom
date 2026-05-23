@@ -39,3 +39,7 @@ coverage/
 
 # Prisma
 prisma/migrations/*/migration_lock.toml
+.next/
+screenshot-*.png
+screenshot.js
+next-env.d.ts
