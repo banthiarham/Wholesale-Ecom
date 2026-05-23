@@ -5,10 +5,10 @@ const productImages = [
   {
     id: '4819428d-a247-4381-b080-23ed7835982f',
     title: 'Industrial Drill Machine',
-    thumbnail: 'https://images.unsplash.com/photo-1504328345606-18bbc8fce9d7?w=400&h=400&fit=crop',
+    thumbnail: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400&h=400&fit=crop',
     images: [
+      'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1504328345606-18bbc8fce9d7?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1581094794329-c8112c4e5a3f?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=800&h=600&fit=crop',
     ],
   },
@@ -25,10 +25,10 @@ const productImages = [
   {
     id: 'e023a755-373c-48f7-9a34-7212d7db8dd9',
     title: 'Wireless Earbuds Pro',
-    thumbnail: 'https://images.unsplash.com/photo-1590658268037-6bf24145e6e9?w=400&h=400&fit=crop',
+    thumbnail: 'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=400&h=400&fit=crop',
     images: [
-      'https://images.unsplash.com/photo-1590658268037-6bf24145e6e9?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=800&h=600&fit=crop',
+      'https://images.unsplash.com/photo-1581235720704-06d3acfcb36f?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1572569028738-411a1973d274?w=800&h=600&fit=crop',
     ],
   },
@@ -53,7 +53,7 @@ async function main() {
         images: p.images,
       },
     });
-    console.log(`Updated ${p.title} with ${p.images.length} images.`);
+    console.log(`Updated ${p.title} with working images.`);
   }
   console.log('Done.');
 }
