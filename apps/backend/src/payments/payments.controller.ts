@@ -1,10 +1,11 @@
-import { Controller, Post, Body, UseGuards, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody } from '@nestjs/swagger';
+import { Controller, Post, Body, UseGuards, Param, Get, Req, Res, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PaymentStatus } from '@prisma/client';
+import { Request, Response } from 'express';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -44,5 +45,67 @@ export class PaymentsController {
       dto.status,
     );
     return { payment };
+  }
+
+  @Get(':orderId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get payment details for an order' })
+  @ApiResponse({ status: 200, description: 'Payment found' })
+  @ApiResponse({ status: 404, description: 'Payment not found' })
+  @ApiParam({ name: 'orderId', description: 'Order UUID' })
+  async findByOrderId(@Param('orderId') orderId: string) {
+    const payment = await this.paymentsService.findByOrderId(orderId);
+    return { payment };
+  }
+
+  // ─── CCAvenue Online Payments ───
+
+  @Post('ccavenue/initiate/:orderId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Initiate CCAvenue payment for an order' })
+  @ApiResponse({ status: 200, description: 'Returns encrypted data for CCAvenue form submission' })
+  @ApiResponse({ status: 400, description: 'CCAvenue not configured or order not found' })
+  @ApiParam({ name: 'orderId', description: 'Order UUID' })
+  @ApiQuery({ name: 'returnUrl', required: false, description: 'URL to redirect after payment (defaults to frontend order page)' })
+  async initiateCcavenue(
+    @Param('orderId') orderId: string,
+    @Query('returnUrl') returnUrl?: string,
+  ) {
+    const defaultReturnUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/orders/${orderId}`;
+    const result = await this.paymentsService.initiateCcavenue(
+      orderId,
+      returnUrl || defaultReturnUrl,
+    );
+    return result;
+  }
+
+  @Post('ccavenue/callback')
+  @ApiOperation({ summary: 'CCAvenue payment callback handler (no auth — called by CCAvenue gateway)' })
+  @ApiResponse({ status: 302, description: 'Redirects to frontend with payment result' })
+  @ApiBody({ schema: { type: 'object', properties: { encResp: { type: 'string' } } } })
+  async ccavenueCallback(
+    @Body('encResp') encResp: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const result = await this.paymentsService.handleCcavenueCallback(encResp);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      const redirectUrl = `${frontendUrl}/orders/${result.orderId}?payment=${result.status.toLowerCase()}`;
+      res.redirect(redirectUrl);
+    } catch (err) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      res.redirect(`${frontendUrl}/orders?payment=error`);
+    }
+  }
+
+  @Get('ccavenue/callback')
+  @ApiOperation({ summary: 'CCAvenue GET callback handler (fallback)' })
+  async ccavenueCallbackGet(
+    @Query('encResp') encResp: string,
+    @Res() res: Response,
+  ) {
+    return this.ccavenueCallback(encResp, res);
   }
 }
