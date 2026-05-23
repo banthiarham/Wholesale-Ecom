@@ -1,9 +1,13 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PricingService } from '../pricing/pricing.service';
 
 @Injectable()
 export class CartService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private pricingService: PricingService,
+  ) {}
 
   async getOrCreateCart(userId?: string, sessionId?: string) {
     let cart = null;
@@ -102,6 +106,13 @@ export class CartService {
     if (product.manageInventory && quantity > product.inventoryQuantity)
       throw new BadRequestException('Not enough inventory');
 
+    // Calculate effective price with discounts
+    const pricing = await this.pricingService.calculateEffectivePrice(
+      productId,
+      quantity,
+      userId,
+    );
+
     const existingItem = cart.items.find(
       (item) => item.productId === productId,
     );
@@ -111,9 +122,20 @@ export class CartService {
       if (product.manageInventory && newQuantity > product.inventoryQuantity)
         throw new BadRequestException('Not enough inventory');
 
+      // Recalculate price for new quantity
+      const newPricing = await this.pricingService.calculateEffectivePrice(
+        productId,
+        newQuantity,
+        userId,
+      );
+
       await this.prisma.cartItem.update({
         where: { id: existingItem.id },
-        data: { quantity: newQuantity },
+        data: {
+          quantity: newQuantity,
+          unitPrice: newPricing.finalPrice,
+          metadata: { pricing: newPricing },
+        },
       });
     } else {
       await this.prisma.cartItem.create({
@@ -121,7 +143,8 @@ export class CartService {
           cartId: cart.id,
           productId,
           quantity,
-          unitPrice: product.unitPrice,
+          unitPrice: pricing.finalPrice,
+          metadata: { pricing },
         },
       });
     }
@@ -129,7 +152,7 @@ export class CartService {
     return this.getOrCreateCart(userId, sessionId);
   }
 
-  async updateItem(itemId: string, quantity: number) {
+  async updateItem(itemId: string, quantity: number, userId?: string) {
     const item = await this.prisma.cartItem.findUnique({
       where: { id: itemId },
       include: { product: true, cart: true },
@@ -143,9 +166,20 @@ export class CartService {
     if (item.product.manageInventory && quantity > item.product.inventoryQuantity)
       throw new BadRequestException('Not enough inventory');
 
+    const cartUserId = item.cart.userId || undefined;
+    const pricing = await this.pricingService.calculateEffectivePrice(
+      item.productId,
+      quantity,
+      cartUserId,
+    );
+
     await this.prisma.cartItem.update({
       where: { id: itemId },
-      data: { quantity },
+      data: {
+        quantity,
+        unitPrice: pricing.finalPrice,
+        metadata: { pricing },
+      },
     });
 
     return this.getOrCreateCart(
@@ -176,7 +210,7 @@ export class CartService {
     return this.getOrCreateCart(userId, sessionId);
   }
 
-  calculateTotals(cart: any) {
+  calculateTotals(cart: any, couponCode?: string) {
     const subtotal = cart.items.reduce(
       (sum: number, item: any) =>
         sum + Number(item.unitPrice) * item.quantity,
@@ -186,6 +220,20 @@ export class CartService {
       (sum: number, item: any) => sum + item.quantity,
       0,
     );
-    return { subtotal, itemCount, tax: 0, shipping: 0, total: subtotal };
+    const tax = subtotal * 0.18; // 18% GST
+    const shipping = subtotal > 50000 ? 0 : 500; // Free shipping above 50k
+    let couponDiscount = 0;
+    let couponApplied = null;
+
+    return { subtotal, itemCount, tax, shipping, couponDiscount, couponApplied, total: subtotal + tax + shipping - couponDiscount };
+  }
+
+  async validateCoupon(cart: any, couponCode: string) {
+    const subtotal = cart.items.reduce(
+      (sum: number, item: any) =>
+        sum + Number(item.unitPrice) * item.quantity,
+      0,
+    );
+    return this.pricingService.applyCoupon(couponCode, subtotal);
   }
 }

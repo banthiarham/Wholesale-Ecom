@@ -7,8 +7,9 @@ import {
   Body,
   Req,
   Headers,
+  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { CartService } from './cart.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
@@ -77,5 +78,22 @@ export class CartController {
     const cart = await this.cartService.removeItem(dto.itemId);
     const totals = this.cartService.calculateTotals(cart);
     return { cart, totals };
+  }
+
+  @Post('coupon')
+  @ApiOperation({ summary: 'Validate a coupon against current cart subtotal' })
+  @ApiResponse({ status: 200, description: 'Coupon validation result' })
+  @ApiBody({ schema: { type: 'object', properties: { code: { type: 'string' } } } })
+  async validateCoupon(
+    @Body('code') code: string,
+    @Req() req: any,
+    @Headers('x-user-id') userId?: string,
+  ) {
+    const sessionId = this.getSessionId(req);
+    const cart = await this.cartService.getOrCreateCart(
+      userId || undefined,
+      sessionId || undefined,
+    );
+    return this.cartService.validateCoupon(cart, code);
   }
 }

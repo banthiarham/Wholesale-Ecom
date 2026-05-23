@@ -48,6 +48,9 @@ export default function ProductDetailPage() {
   if (!product) return <div className="min-h-screen flex flex-col items-center justify-center"><h1 className="text-2xl font-bold">Product not found</h1><Link href="/products" className="mt-4 text-primary-600">Back to products</Link></div>
 
   const effectivePrice = product.tierPrices.find((tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty))?.price || product.unitPrice
+  const discountPercent = product.compareAtPrice && effectivePrice < product.compareAtPrice
+    ? Math.round(((Number(product.compareAtPrice) - Number(effectivePrice)) / Number(product.compareAtPrice)) * 100)
+    : 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -84,7 +87,12 @@ export default function ProductDetailPage() {
 
             <div className="flex items-baseline gap-3">
               <span className="text-3xl font-bold text-primary-700">{formatPrice(Number(effectivePrice))}</span>
-              {product.compareAtPrice && effectivePrice < product.compareAtPrice && <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>}
+              {product.compareAtPrice && effectivePrice < product.compareAtPrice && (
+              <>
+                <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>
+                <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded">{discountPercent}% off</span>
+              </>
+            )}
             </div>
 
             {product.sku && <p className="text-sm text-gray-500">SKU: {product.sku}</p>}

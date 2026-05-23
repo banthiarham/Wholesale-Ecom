@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, MapPin, CreditCard } from "lucide-react"
+import { ArrowLeft, MapPin, CreditCard, Tag } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import Header from "@/components/layout/Header"
 
@@ -14,7 +14,7 @@ interface CartItem {
 
 interface CartData {
   cart: { id: string; items: CartItem[] }
-  totals: { subtotal: number; itemCount: number; total: number }
+  totals: { subtotal: number; itemCount: number; tax: number; shipping: number; total: number }
 }
 
 export default function CheckoutPage() {
@@ -23,6 +23,9 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true)
   const [placing, setPlacing] = useState(false)
   const [address, setAddress] = useState({ street: "", city: "", state: "", zip: "", country: "India" })
+  const [couponCode, setCouponCode] = useState("")
+  const [couponDiscount, setCouponDiscount] = useState(0)
+  const [couponError, setCouponError] = useState("")
 
   useEffect(() => {
     fetch("/api/cart", { cache: "no-store" })
@@ -32,6 +35,27 @@ export default function CheckoutPage() {
         setLoading(false)
       })
   }, [])
+
+  const applyCoupon = async () => {
+    if (!couponCode || !cart) return
+    setCouponError("")
+    try {
+      const res = await fetch("/api/pricing/coupons/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponCode, subtotal: cart.totals.subtotal }),
+      })
+      const result = await res.json()
+      if (result.valid) {
+        setCouponDiscount(result.discountAmount)
+      } else {
+        setCouponDiscount(0)
+        setCouponError(result.message)
+      }
+    } catch (err) {
+      setCouponError("Failed to validate coupon")
+    }
+  }
 
   const placeOrder = async () => {
     if (!cart) return
@@ -46,6 +70,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           cartId: cart.cart.id,
           shippingAddress: address,
+          couponCode: couponCode || undefined,
         }),
       })
       const data = await res.json()
@@ -61,6 +86,9 @@ export default function CheckoutPage() {
       setPlacing(false)
     }
   }
+
+  const totals = cart?.totals ?? { subtotal: 0, itemCount: 0, tax: 0, shipping: 0, total: 0 }
+  const finalTotal = totals.total - couponDiscount
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
   if (!cart || cart.cart.items.length === 0) return (
@@ -116,9 +144,49 @@ export default function CheckoutPage() {
                 ))}
               </div>
               <hr className="my-4" />
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Subtotal</span>
+                  <span className="font-medium">{formatPrice(totals.subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Tax (18% GST)</span>
+                  <span className="font-medium">{formatPrice(totals.tax)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Shipping</span>
+                  <span className="font-medium">{totals.shipping > 0 ? formatPrice(totals.shipping) : <span className="text-green-600">Free</span>}</span>
+                </div>
+                {couponDiscount > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Coupon ({couponCode.toUpperCase()})</span>
+                    <span className="font-medium text-green-600">-{formatPrice(couponDiscount)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Coupon code"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+                <button
+                  onClick={applyCoupon}
+                  disabled={!couponCode}
+                  className="px-3 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 transition disabled:opacity-50"
+                >
+                  <Tag size={16} />
+                </button>
+              </div>
+              {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
+
+              <hr className="my-4" />
               <div className="flex justify-between items-center">
                 <span className="text-lg font-bold">Total</span>
-                <span className="text-xl font-bold text-primary-700">{formatPrice(cart.totals.total)}</span>
+                <span className="text-xl font-bold text-primary-700">{formatPrice(finalTotal)}</span>
               </div>
               <button onClick={placeOrder} disabled={placing} className="w-full mt-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
                 {placing ? "Placing Order..." : "Place Order"}

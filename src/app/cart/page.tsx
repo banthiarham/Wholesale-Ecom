@@ -21,15 +21,29 @@ interface CartItem {
   }
 }
 
+interface Totals {
+  subtotal: number
+  itemCount: number
+  tax: number
+  shipping: number
+  couponDiscount: number
+  couponApplied: string | null
+  total: number
+}
+
 interface CartData {
   cart: { id: string; items: CartItem[] }
-  totals: { subtotal: number; itemCount: number; tax: number; shipping: number; total: number }
+  totals: Totals
 }
 
 export default function CartPage() {
   const [data, setData] = useState<CartData | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
+  const [couponLoading, setCouponLoading] = useState(false)
+  const [couponError, setCouponError] = useState("")
+  const [couponCode, setCouponCode] = useState<string | null>(null)
+  const [couponDiscount, setCouponDiscount] = useState(0)
 
   const fetchCart = useCallback(async () => {
     try {
@@ -53,7 +67,7 @@ export default function CartPage() {
     setUpdating(true)
     try {
       const res = await fetch("/api/cart", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId, quantity }) })
-      if (res.ok) { const json = await res.json(); setData(json) }
+      if (res.ok) { const json = await res.json(); setData(json); recalcCoupon(json.totals.subtotal) }
     } catch (err) { console.error(err) } finally { setUpdating(false) }
   }
 
@@ -61,9 +75,61 @@ export default function CartPage() {
     setUpdating(true)
     try {
       const res = await fetch("/api/cart", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId }) })
-      if (res.ok) { const json = await res.json(); setData(json) }
+      if (res.ok) { const json = await res.json(); setData(json); recalcCoupon(json.totals.subtotal) }
     } catch (err) { console.error(err) } finally { setUpdating(false) }
   }
+
+  const recalcCoupon = (subtotal: number) => {
+    if (couponCode && data) {
+      fetch("/api/cart/coupon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponCode }),
+      })
+        .then((res) => res.json())
+        .then((result) => {
+          if (result.valid) {
+            setCouponDiscount(result.discountAmount)
+          } else {
+            setCouponCode(null)
+            setCouponDiscount(0)
+            setCouponError(result.message)
+          }
+        })
+    }
+  }
+
+  const handleApplyCoupon = async (code: string) => {
+    setCouponLoading(true)
+    setCouponError("")
+    try {
+      const res = await fetch("/api/cart/coupon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      })
+      const result = await res.json()
+      if (result.valid) {
+        setCouponCode(code.toUpperCase())
+        setCouponDiscount(result.discountAmount)
+      } else {
+        setCouponError(result.message)
+      }
+    } catch (err) {
+      setCouponError("Failed to apply coupon")
+    } finally {
+      setCouponLoading(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setCouponCode(null)
+    setCouponDiscount(0)
+    setCouponError("")
+  }
+
+  const totals = data?.totals ?? { subtotal: 0, itemCount: 0, tax: 0, shipping: 0, total: 0 }
+  const adjustedTotal = totals.total - couponDiscount
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -98,7 +164,19 @@ export default function CartPage() {
             ))}
           </div>
           <div className="lg:col-span-1">
-            <CartSummary subtotal={data.totals.subtotal} itemCount={data.totals.itemCount} total={data.totals.total} />
+            <CartSummary
+              subtotal={totals.subtotal}
+              itemCount={totals.itemCount}
+              tax={totals.tax}
+              shipping={totals.shipping}
+              couponDiscount={couponDiscount}
+              couponCode={couponCode}
+              total={adjustedTotal}
+              onApplyCoupon={handleApplyCoupon}
+              onRemoveCoupon={handleRemoveCoupon}
+              couponLoading={couponLoading}
+              couponError={couponError}
+            />
           </div>
         </div>
       </main>

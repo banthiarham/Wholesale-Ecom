@@ -83,6 +83,7 @@ model User {
   reviews         Review[]
   loyalty         LoyaltyAccount?
   addresses       Address[]
+  contractPrices  ContractPrice[]
 
   @@index([email])
   @@index([role])
@@ -154,7 +155,8 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products  Product[]
+  products          Product[]
+  seasonalDiscounts SeasonalDiscount[]
 
   @@index([handle])
   @@index([isActive])
@@ -188,10 +190,12 @@ model Product {
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id])
 
-  tierPrices TierPrice[]
-  cartItems  CartItem[]
-  orderItems OrderItem[]
-  reviews    Review[]
+  tierPrices      TierPrice[]
+  seasonalDiscounts SeasonalDiscount[]
+  contractPrices  ContractPrice[]
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  reviews         Review[]
 
   @@index([handle])
   @@index([status])
@@ -211,6 +215,66 @@ model TierPrice {
 
   @@unique([productId, minQty])
   @@index([productId])
+}
+
+model SeasonalDiscount {
+  id          String    @id @default(uuid())
+  name        String
+  type        String    // PERCENTAGE | FLAT
+  value       Decimal   @db.Decimal(12, 2)
+  minQty      Int       @default(1)
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean   @default(true)
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+model Coupon {
+  id            String    @id @default(uuid())
+  code          String    @unique
+  type          String    // PERCENTAGE | FLAT
+  value         Decimal   @db.Decimal(12, 2)
+  minOrderValue Decimal?  @db.Decimal(12, 2)
+  maxUses       Int?
+  usedCount     Int       @default(0)
+  isActive      Boolean   @default(true)
+  startDate     DateTime
+  endDate       DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model ContractPrice {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  price       Decimal  @db.Decimal(12, 2)
+  minQty      Int      @default(1)
+  validUntil  DateTime?
+  isActive    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, userId])
+  @@index([productId])
+  @@index([userId])
 }
 
 model Cart {
