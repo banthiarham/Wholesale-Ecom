@@ -2,6 +2,7 @@ export type Locale = "en" | "hi"
 
 export const dictionary: Record<Locale, Record<string, string>> = {
   en: {
+    "nav.home": "Home",
     "nav.products": "Products",
     "nav.categories": "Categories",
     "nav.rfqs": "RFQs",
@@ -84,6 +85,7 @@ export const dictionary: Record<Locale, Record<string, string>> = {
     "language.hindi": "Hindi",
   },
   hi: {
+    "nav.home": "होम",
     "nav.products": "उत्पाद",
     "nav.categories": "श्रेणियां",
     "nav.rfqs": "आरएफक्यू",
