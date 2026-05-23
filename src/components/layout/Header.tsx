@@ -37,6 +37,8 @@ export default function Header() {
           {user && <Link href="/orders" className="text-gray-600 hover:text-primary-600 transition">My Orders</Link>}
           <Link href="/rfqs" className="text-gray-600 hover:text-primary-600 transition">RFQs</Link>
           <Link href="/catalogs" className="text-gray-600 hover:text-primary-600 transition">Catalogs</Link>
+          {user && <Link href="/loyalty" className="text-gray-600 hover:text-primary-600 transition">Loyalty</Link>}
+          {user && <Link href="/notifications" className="text-gray-600 hover:text-primary-600 transition relative">Notifications</Link>}
           {user?.role === 'VENDOR' && <Link href="/vendor/dashboard" className="text-gray-600 hover:text-primary-600 transition">Vendor</Link>}
           <Link href="/cart" className="text-gray-600 hover:text-primary-600 transition">
             <ShoppingCart size={20} />

@@ -118,6 +118,7 @@ model User {
   rfqs            Rfq[]
   quotes          Quote[]
   catalogs        Catalog[]
+  notifications   Notification[]
 
   @@index([email])
   @@index([role])
@@ -591,4 +592,30 @@ model CatalogItem {
   @@unique([catalogId, productId])
   @@index([catalogId])
   @@index([productId])
+}
+
+enum NotificationType {
+  ORDER
+  PAYMENT
+  RFQ
+  QUOTE
+  PROMOTION
+  SYSTEM
+  LOYALTY
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(SYSTEM)
+  title     String
+  message   String           @db.Text
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
 }
