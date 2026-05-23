@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ShoppingCart, Search, SlidersHorizontal, X } from "lucide-react"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface Product {
   id: string
@@ -74,7 +74,7 @@ export default function ProductsPage() {
     try {
       await fetch("/api/cart", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
         body: JSON.stringify({ productId, quantity: qty }),
       })
       alert("Added to cart!")
