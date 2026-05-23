@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { useRouter, useParams } from "next/navigation"
-import { ArrowLeft, Package, Truck, MapPin, CreditCard } from "lucide-react"
+import { useRouter, useParams, useSearchParams } from "next/navigation"
+import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import Header from "@/components/layout/Header"
 
@@ -25,16 +25,18 @@ interface OrderDetail {
     totalPrice: number
     product: { id: string; title: string; thumbnail: string | null; sku: string | null }
   }[]
-  payment: { provider: string; status: string; amount: number } | null
+  payment: { provider: string; status: string; amount: number; providerRef: string | null } | null
   user: { firstName: string; lastName: string; email: string; phone: string | null }
 }
 
 export default function OrderDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const [order, setOrder] = useState<OrderDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
+  const [paymentAlert, setPaymentAlert] = useState<string | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -45,6 +47,15 @@ export default function OrderDetailPage() {
       .then((data) => { setOrder(data.order || null); setLoading(false) })
       .catch(() => setLoading(false))
   }, [params.id, router])
+
+  // Show payment status alert from CCAvenue callback
+  useEffect(() => {
+    const payment = searchParams.get("payment")
+    if (payment === "success") setPaymentAlert("Payment successful! Your order is confirmed.")
+    if (payment === "failure") setPaymentAlert("Payment failed. Please try again or choose COD.")
+    if (payment === "aborted") setPaymentAlert("Payment was cancelled. You can retry from this page.")
+    if (payment === "error") setPaymentAlert("Something went wrong with the payment. Contact support if amount was deducted.")
+  }, [searchParams])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -62,6 +73,21 @@ export default function OrderDetailPage() {
       case "DELIVERED": return <Package size={18} />
       case "SHIPPED": return <Truck size={18} />
       default: return <Package size={18} />
+    }
+  }
+
+  const getPaymentStatusBadge = (status: string) => {
+    switch (status) {
+      case "CAPTURED":
+      case "AUTHORIZED":
+        return <span className="inline-flex items-center gap-1 text-green-600 text-sm font-medium"><CheckCircle size={14} /> Paid</span>
+      case "FAILED":
+        return <span className="inline-flex items-center gap-1 text-red-600 text-sm font-medium"><XCircle size={14} /> Failed</span>
+      case "CANCELLED":
+        return <span className="inline-flex items-center gap-1 text-gray-500 text-sm font-medium"><XCircle size={14} /> Cancelled</span>
+      case "PENDING":
+      default:
+        return <span className="inline-flex items-center gap-1 text-yellow-600 text-sm font-medium"><AlertCircle size={14} /> Pending</span>
     }
   }
 
@@ -121,6 +147,12 @@ export default function OrderDetailPage() {
         <Link href="/orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6">
           <ArrowLeft size={16} /> Back to orders
         </Link>
+
+        {paymentAlert && (
+          <div className={`mb-6 p-4 rounded-lg border ${paymentAlert.includes("successful") ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+            <p className="font-medium">{paymentAlert}</p>
+          </div>
+        )}
 
         <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -202,8 +234,14 @@ export default function OrderDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span>Status</span>
-                <span className="font-medium">{order.payment?.status || "PENDING"}</span>
+                {getPaymentStatusBadge(order.payment?.status || "PENDING")}
               </div>
+              {order.payment?.providerRef && (
+                <div className="flex justify-between">
+                  <span>Transaction ID</span>
+                  <span className="font-medium text-xs">{order.payment.providerRef}</span>
+                </div>
+              )}
               <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100">
                 <span>Total</span>
                 <span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span>
