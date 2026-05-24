@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, CheckCircle, XCircle, Send, FileText } from "lucide-react"
-import Header from "@/components/layout/Header"
 
 interface Quote {
   id: string

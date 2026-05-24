@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, BookOpen, Download, FileText } from "lucide-react"
-import Header from "@/components/layout/Header"
 
 interface CatalogDetail {
   id: string

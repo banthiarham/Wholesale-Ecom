@@ -4,8 +4,8 @@ import { useEffect, useState, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote } from "lucide-react"
-import { formatPrice, getCartSessionId } from "@/lib/utils"
 import Header from "@/components/layout/Header"
+import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface CartItem {
   id: string; quantity: number; unitPrice: number;

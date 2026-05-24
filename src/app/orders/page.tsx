@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ShoppingBag, ArrowLeft } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
-import Header from "@/components/layout/Header"
 
 interface Order {
   id: string; orderNumber: string; status: string; totalAmount: number; currency: string;

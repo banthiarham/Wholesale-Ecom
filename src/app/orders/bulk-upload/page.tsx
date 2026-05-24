@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Upload, FileText } from "lucide-react"
-import Header from "@/components/layout/Header"
 
 export default function BulkUploadPage() {
   const router = useRouter()

@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
-import Header from "@/components/layout/Header"
 
 interface OrderDetail {
   id: string

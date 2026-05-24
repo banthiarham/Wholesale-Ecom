@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { BookOpen } from "lucide-react"
-import Header from "@/components/layout/Header"
 
 interface Catalog {
   id: string

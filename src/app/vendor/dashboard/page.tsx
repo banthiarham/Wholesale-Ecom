@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Package, ShoppingBag, DollarSign, AlertTriangle, FileText } from "lucide-react"
-import Header from "@/components/layout/Header"
+import { Package, ShoppingBag, DollarSign, AlertTriangle, FileText, Plus } from "lucide-react"
 
 interface DashboardData {
   productCount: number
@@ -39,9 +38,16 @@ export default function VendorDashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Vendor Dashboard</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Vendor Dashboard</h1>
+          <Link
+            href="/vendor/products?action=add"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm"
+          >
+            <Plus size={16} /> Add Product
+          </Link>
+        </div>
 
         {loading ? (
           <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div></div>

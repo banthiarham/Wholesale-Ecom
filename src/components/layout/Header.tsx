@@ -10,16 +10,23 @@ export default function Header() {
   const [mobileMenu, setMobileMenu] = useState(false)
   const { locale, setLocale, t } = useTranslation()
 
-  useEffect(() => {
+  const fetchUser = () => {
     const token = localStorage.getItem("token")
-    if (token) {
-      fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.user) setUser(data.user)
-        })
-        .catch(() => localStorage.removeItem("token"))
-    }
+    if (!token) { setUser(null); return }
+    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.user) setUser(data.user)
+        else setUser(null)
+      })
+      .catch(() => { setUser(null); localStorage.removeItem("token") })
+  }
+
+  useEffect(() => {
+    fetchUser()
+    const handler = (e: any) => { setUser(e.detail || null) }
+    window.addEventListener("auth-change", handler)
+    return () => window.removeEventListener("auth-change", handler)
   }, [])
 
   const logout = () => {
@@ -49,6 +56,7 @@ export default function Header() {
           {user && <Link href="/loyalty" className="text-gray-600 hover:text-primary-600 transition">{t("nav.loyalty")}</Link>}
           {user && <Link href="/notifications" className="text-gray-600 hover:text-primary-600 transition relative">{t("nav.notifications")}</Link>}
           {user?.role === 'VENDOR' && <Link href="/vendor/dashboard" className="text-gray-600 hover:text-primary-600 transition">{t("nav.vendor")}</Link>}
+          {user?.role === 'ADMIN' && <Link href="/admin" className="text-gray-600 hover:text-primary-600 transition">Admin</Link>}
           <Link href="/cart" className="text-gray-600 hover:text-primary-600 transition">
             <ShoppingCart size={20} />
           </Link>

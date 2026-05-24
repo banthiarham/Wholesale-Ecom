@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Plus, FileText, ArrowLeft } from "lucide-react"
-import Header from "@/components/layout/Header"
 
 interface Rfq {
   id: string
