@@ -48,7 +48,7 @@ const products = [
     thumbnail: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400&h=400&fit=crop',
     images: [
       'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1621905251189-08b45d39c71c?w=800&h=600&fit=crop',
+      'https://images.unsplash.com/photo-1580894732444-8ecded7900cd?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=800&h=600&fit=crop',
     ],
     tierPrices: [
@@ -104,7 +104,7 @@ const products = [
     thumbnail: 'https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=400&h=400&fit=crop',
     images: [
       'https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1589818288248-24a0a1309827?w=800&h=600&fit=crop',
+      'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=800&h=600&fit=crop',
     ],
     tierPrices: [
@@ -128,11 +128,11 @@ const products = [
     vendorName: 'ChefCraft Supplies',
     categoryId: 'b4629f5c-a2dd-4007-a4ba-f54f3679f0bb', // Fashion (home)
     tags: ['kitchenware', 'stainless-steel', 'hotel-supply', 'catering'],
-    thumbnail: 'https://images.unsplash.com/photo-1556910103-1c02745a30bf?w=400&h=400&fit=crop',
+    thumbnail: 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=400&h=400&fit=crop',
     images: [
-      'https://images.unsplash.com/photo-1556910103-1c02745a30bf?w=800&h=600&fit=crop',
+      'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1590794056226-79ef3a8147e1?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1584990347449-a1d9c9900a2d?w=800&h=600&fit=crop',
+      'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800&h=600&fit=crop',
     ],
     tierPrices: [
       { minQty: 40, maxQty: 149, price: 850 },
@@ -155,9 +155,9 @@ const products = [
     vendorName: 'ChargeMax Electronics',
     categoryId: '5125a882-be3b-4d33-9321-199cfa190064', // Electronics
     tags: ['electronics', 'power-bank', 'travel', 'corporate-gift'],
-    thumbnail: 'https://images.unsplash.com/photo-1609592424323-c92b022d6920?w=400&h=400&fit=crop',
+    thumbnail: 'https://images.unsplash.com/photo-1593642532400-2682810df593?w=400&h=400&fit=crop',
     images: [
-      'https://images.unsplash.com/photo-1609592424323-c92b022d6920?w=800&h=600&fit=crop',
+      'https://images.unsplash.com/photo-1593642532400-2682810df593?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1615526675159-e248c3021d3f?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=800&h=600&fit=crop',
     ],
@@ -242,7 +242,7 @@ const products = [
     thumbnail: 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=400&h=400&fit=crop',
     images: [
       'https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=800&h=600&fit=crop',
-      'https://images.unsplash.com/photo-1605600659908-0ef719419d42?w=800&h=600&fit=crop',
+      'https://images.unsplash.com/photo-1620799140188-3b2a02fd9a77?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800&h=600&fit=crop',
     ],
     tierPrices: [
@@ -267,9 +267,9 @@ const products = [
     vendorName: 'ToolsMax Industries',
     categoryId: '5bd6f2bc-c8a3-4d8f-b0de-f2a05475c228', // Industrial
     tags: ['industrial', 'tools', 'electrical', 'multimeter'],
-    thumbnail: 'https://images.unsplash.com/photo-1621905251189-08b45d39c71c?w=400&h=400&fit=crop',
+    thumbnail: 'https://images.unsplash.com/photo-1580894732444-8ecded7900cd?w=400&h=400&fit=crop',
     images: [
-      'https://images.unsplash.com/photo-1621905251189-08b45d39c71c?w=800&h=600&fit=crop',
+      'https://images.unsplash.com/photo-1580894732444-8ecded7900cd?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&h=600&fit=crop',
       'https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=800&h=600&fit=crop',
     ],
