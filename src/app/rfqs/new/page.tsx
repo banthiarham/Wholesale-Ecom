@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import Header from "@/components/layout/Header"
 import { ArrowLeft, Plus, Trash2 } from "lucide-react"
 
 interface RfqItem {
@@ -75,7 +74,6 @@ export default function NewRfqPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Link href="/rfqs" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6">
           <ArrowLeft size={16} /> Back to RFQs

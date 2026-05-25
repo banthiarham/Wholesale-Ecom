@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote } from "lucide-react"
-import Header from "@/components/layout/Header"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface CartItem {
@@ -128,7 +127,6 @@ export default function CheckoutPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
   if (!cart || cart.cart.items.length === 0) return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-      <Header />
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Your cart is empty</h1>
         <Link href="/products" className="text-primary-600 hover:underline">Continue Shopping</Link>
@@ -138,7 +136,6 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Link href="/cart" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to cart</Link>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Checkout</h1>
