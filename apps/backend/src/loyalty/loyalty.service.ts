@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -41,7 +41,7 @@ export class LoyaltyService {
   async redeemPoints(userId: string, points: number, description: string) {
     const account = await this.prisma.loyaltyAccount.findUnique({ where: { userId } });
     if (!account) throw new NotFoundException('Loyalty account not found');
-    if (account.points < points) throw new NotFoundException('Insufficient points');
+    if (account.points < points) throw new BadRequestException('Insufficient points');
 
     await this.prisma.$transaction([
       this.prisma.loyaltyTransaction.create({

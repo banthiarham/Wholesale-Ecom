@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { User, UserStatus, AccountType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -194,23 +195,21 @@ export class AuthService {
       where: { email: forgotPasswordDto.email },
     });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (user) {
+      const token = this.generateRandomToken();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+
+      await this.prisma.passwordReset.create({
+        data: {
+          token,
+          userId: user.id,
+          expiresAt,
+        },
+      });
     }
 
-    const token = this.generateRandomToken();
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1);
-
-    await this.prisma.passwordReset.create({
-      data: {
-        token,
-        userId: user.id,
-        expiresAt,
-      },
-    });
-
-    return { message: 'Password reset link sent to your email' };
+    return { message: 'If your email is registered, you will receive a reset link' };
   }
 
   async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<{ message: string }> {
@@ -302,8 +301,6 @@ export class AuthService {
   }
 
   private generateRandomToken(): string {
-    return Array.from({ length: 32 }, () =>
-      Math.floor(Math.random() * 36).toString(36),
-    ).join('');
+    return crypto.randomBytes(32).toString('hex');
   }
 }

@@ -1,19 +1,23 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Package, Plus, X } from "lucide-react"
+import { ArrowLeft, Package, Plus, X, Edit, Trash2 } from "lucide-react"
 
 interface Product {
   id: string
   title: string
+  handle: string
   sku: string | null
+  description: string | null
   unitPrice: number
+  compareAtPrice: number | null
   inventoryQuantity: number
   reservedQuantity: number
   moq: number
   status: string
+  categoryId: string | null
   category?: { name: string }
 }
 
@@ -23,13 +27,14 @@ interface Category {
   handle: string
 }
 
-export default function VendorProductsPage() {
+function VendorProductsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   const emptyForm = {
@@ -43,7 +48,6 @@ export default function VendorProductsPage() {
     inventoryQuantity: "0",
     categoryId: "",
     status: "PUBLISHED",
-    vendorName: "",
   }
   const [form, setForm] = useState(emptyForm)
 
@@ -100,18 +104,69 @@ export default function VendorProductsPage() {
     if (!body.description) delete body.description
 
     try {
-      await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      })
+      if (editingProduct) {
+        await fetch(`/api/products/${editingProduct.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        })
+      } else {
+        await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        })
+      }
       setShowForm(false)
+      setEditingProduct(null)
       setForm(emptyForm)
       loadProducts()
     } catch (err) {
       console.error(err)
-      alert("Failed to add product")
+      alert(editingProduct ? "Failed to update product" : "Failed to add product")
     }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this product? This action cannot be undone.")) return
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        setProducts((prev) => prev.filter((p) => p.id !== id))
+      } else {
+        const data = await res.json()
+        alert(data.message || "Failed to delete product")
+      }
+    } catch (err) {
+      console.error(err)
+      alert("Failed to delete product")
+    }
+  }
+
+  const openEdit = (p: Product) => {
+    setEditingProduct(p)
+    setForm({
+      title: p.title,
+      handle: p.handle || "",
+      description: p.description || "",
+      sku: p.sku || "",
+      unitPrice: String(p.unitPrice),
+      compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "",
+      moq: String(p.moq),
+      inventoryQuantity: String(p.inventoryQuantity),
+      categoryId: p.categoryId || "",
+      status: p.status,
+    })
+    setShowForm(true)
+  }
+
+  const openAdd = () => {
+    setEditingProduct(null)
+    setForm(emptyForm)
+    setShowForm(true)
   }
 
   const generateHandle = (title: string) => {
@@ -132,7 +187,7 @@ export default function VendorProductsPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">My Products</h1>
           <button
-            onClick={() => { setShowForm(true); setForm(emptyForm) }}
+            onClick={openAdd}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm"
           >
             <Plus size={16} /> Add Product
@@ -142,8 +197,8 @@ export default function VendorProductsPage() {
         {showForm && (
           <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Add New Product</h3>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <h3 className="font-semibold text-gray-900">{editingProduct ? "Edit Product" : "Add New Product"}</h3>
+              <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm) }} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <input
@@ -152,13 +207,12 @@ export default function VendorProductsPage() {
                 value={form.title}
                 onChange={(e) => {
                   const title = e.target.value
-                  setForm({ ...form, title, handle: generateHandle(title) })
+                  setForm({ ...form, title, handle: editingProduct ? form.handle : generateHandle(title) })
                 }}
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
               <input
-                required
-                placeholder="URL Handle (auto-generated)"
+                placeholder="URL Handle"
                 value={form.handle}
                 onChange={(e) => setForm({ ...form, handle: e.target.value })}
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
@@ -167,12 +221,6 @@ export default function VendorProductsPage() {
                 placeholder="SKU"
                 value={form.sku}
                 onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              />
-              <input
-                placeholder="Vendor Name"
-                value={form.vendorName}
-                onChange={(e) => setForm({ ...form, vendorName: e.target.value })}
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
               <input
@@ -236,7 +284,7 @@ export default function VendorProductsPage() {
               <div className="sm:col-span-2 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm) }}
                   className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-lg text-sm"
                 >
                   Cancel
@@ -245,7 +293,7 @@ export default function VendorProductsPage() {
                   type="submit"
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
                 >
-                  Add Product
+                  {editingProduct ? "Save Changes" : "Add Product"}
                 </button>
               </div>
             </form>
@@ -261,7 +309,7 @@ export default function VendorProductsPage() {
             <Package size={48} className="text-gray-300 mx-auto mb-4" />
             <p className="text-gray-600">No products found.</p>
             <button
-              onClick={() => { setShowForm(true); setForm(emptyForm) }}
+              onClick={openAdd}
               className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
             >
               Add Your First Product
@@ -278,6 +326,7 @@ export default function VendorProductsPage() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Stock</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">MOQ</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -293,11 +342,23 @@ export default function VendorProductsPage() {
                         className={`px-2 py-1 rounded text-xs font-medium ${
                           p.status === "PUBLISHED"
                             ? "bg-green-100 text-green-700"
+                            : p.status === "DRAFT"
+                            ? "bg-yellow-100 text-yellow-700"
                             : "bg-gray-100 text-gray-700"
                         }`}
                       >
                         {p.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => openEdit(p)} className="p-1.5 text-gray-400 hover:text-primary-600 rounded hover:bg-primary-50" title="Edit">
+                          <Edit size={16} />
+                        </button>
+                        <button onClick={() => handleDelete(p.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50" title="Delete">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -307,5 +368,13 @@ export default function VendorProductsPage() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function VendorProductsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div></div>}>
+      <VendorProductsContent />
+    </Suspense>
   )
 }

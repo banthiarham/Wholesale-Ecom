@@ -10,7 +10,7 @@ interface Rfq {
   title: string
   status: string
   buyer: { firstName: string; lastName: string; email: string; companyName: string | null }
-  items: { product?: { id: string; title: string }; description: string | null; quantity: number; unit: string }[]
+  items: { id: string; product?: { id: string; title: string }; description: string | null; quantity: number; unit: string }[]
 }
 
 export default function VendorRfqsPage() {
@@ -32,7 +32,7 @@ export default function VendorRfqsPage() {
   const openQuote = (rfq: Rfq) => {
     setSelected(rfq)
     setQuoteItems(rfq.items.map((it) => ({
-      rfqItemId: it.product?.id || "",
+      rfqItemId: it.id,
       unitPrice: "",
       quantity: String(it.quantity),
       leadTimeDays: "",

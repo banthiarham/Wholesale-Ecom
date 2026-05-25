@@ -10,12 +10,14 @@ interface Product {
   title: string
   handle: string
   sku: string | null
+  description: string | null
   thumbnail: string | null
   unitPrice: number
   compareAtPrice: number | null
   moq: number
   inventoryQuantity: number
   status: string
+  categoryId: string | null
   vendorName: string | null
 }
 
@@ -148,12 +150,12 @@ export default function AdminProductsPage() {
     setForm({
       title: p.title,
       sku: p.sku || "",
-      description: "",
+      description: p.description || "",
       unitPrice: String(p.unitPrice),
       compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "",
       moq: String(p.moq),
       inventoryQuantity: String(p.inventoryQuantity),
-      categoryId: "",
+      categoryId: p.categoryId || "",
       status: p.status,
     })
     setShowForm(true)
@@ -189,6 +191,7 @@ export default function AdminProductsPage() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <input required placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
             <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+            <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm sm:col-span-2" rows={2} />
             <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
             <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
             <input required type="number" placeholder="MOQ" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />

@@ -10,6 +10,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFiles,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiParam, ApiBody, ApiConsumes } from '@nestjs/swagger';
@@ -19,6 +20,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -78,7 +80,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Create a new product (Admin / Vendor)' })
   @ApiResponse({ status: 201, description: 'Product created' })
   @ApiBody({ type: CreateProductDto })
-  async create(@Body() dto: CreateProductDto) {
+  async create(@Body() dto: CreateProductDto, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
+    if (role === UserRole.VENDOR) {
+      dto.vendorId = userId;
+    }
     const product = await this.productsService.create(dto);
     return { product };
   }
@@ -92,20 +97,32 @@ export class ProductsController {
   @ApiResponse({ status: 404, description: 'Product not found' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
   @ApiBody({ type: UpdateProductDto })
-  async update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
+  async update(@Param('id') id: string, @Body() dto: UpdateProductDto, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
+    if (role === UserRole.VENDOR) {
+      const product = await this.productsService.findById(id);
+      if (product.vendorId !== userId) {
+        throw new ForbiddenException('You can only update your own products');
+      }
+    }
     const product = await this.productsService.update(id, dto);
     return { product };
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.VENDOR)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete a product (Admin only)' })
+  @ApiOperation({ summary: 'Delete a product (Admin / Vendor - own products only)' })
   @ApiResponse({ status: 200, description: 'Product deleted' })
   @ApiResponse({ status: 404, description: 'Product not found' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
+    if (role === UserRole.VENDOR) {
+      const product = await this.productsService.findById(id);
+      if (product.vendorId !== userId) {
+        throw new ForbiddenException('You can only delete your own products');
+      }
+    }
     await this.productsService.remove(id);
     return { success: true };
   }
@@ -135,7 +152,15 @@ export class ProductsController {
   async uploadImages(
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
   ) {
+    if (role === UserRole.VENDOR) {
+      const product = await this.productsService.findById(id);
+      if (product.vendorId !== userId) {
+        throw new ForbiddenException('You can only upload images for your own products');
+      }
+    }
     const urls = files.map((f) => `/uploads/products/${f.filename}`);
     const product = await this.productsService.addImages(id, urls);
     return { product, uploaded: urls };

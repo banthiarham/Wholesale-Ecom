@@ -139,7 +139,6 @@ export default function OrderDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Link href="/orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6">
           <ArrowLeft size={16} /> Back to orders

@@ -93,6 +93,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current authenticated user' })
   @ApiResponse({ status: 200, description: 'Current user profile' })
   getMe(@CurrentUser() user: any) {
-    return user;
+    const { password, ...result } = user;
+    return result;
   }
 }

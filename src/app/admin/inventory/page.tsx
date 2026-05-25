@@ -64,7 +64,7 @@ export default function AdminInventoryPage() {
       await fetch(`/api/inventory/${id}/adjust`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ quantity: delta }),
+        body: JSON.stringify({ adjustment: delta, reason: "Admin stock adjustment" }),
       })
       setItems((prev) =>
         prev.map((i) => (i.id === id ? { ...i, inventoryQuantity: Math.max(0, i.inventoryQuantity + delta) } : i))

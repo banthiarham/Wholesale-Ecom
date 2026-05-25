@@ -32,7 +32,7 @@ export default function VendorDashboardPage() {
   const cards = [
     { label: "Products", value: data?.productCount ?? 0, icon: Package, href: "/vendor/products", color: "text-blue-600", bg: "bg-blue-50" },
     { label: "Orders", value: data?.orderCount ?? 0, icon: ShoppingBag, href: "/vendor/orders", color: "text-purple-600", bg: "bg-purple-50" },
-    { label: "Revenue", value: `₹${(data?.revenue ?? 0).toLocaleString("en-IN")}`, icon: DollarSign, href: "/vendor/sales", color: "text-green-600", bg: "bg-green-50" },
+    { label: "Revenue", value: `₹${(data?.revenue ?? 0).toLocaleString("en-IN")}`, icon: DollarSign, href: "/vendor/orders", color: "text-green-600", bg: "bg-green-50" },
     { label: "Low Stock", value: data?.lowStockCount ?? 0, icon: AlertTriangle, href: "/vendor/inventory", color: "text-red-600", bg: "bg-red-50" },
   ]
 

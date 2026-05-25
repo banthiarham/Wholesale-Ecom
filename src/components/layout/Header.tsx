@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ShoppingCart, User, LogOut, Menu, Globe, Home } from "lucide-react"
+import { ShoppingCart, User, LogOut, Menu, Globe } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 
@@ -45,9 +45,6 @@ export default function Header() {
         <Link href="/" className="text-xl font-bold text-primary-700 shrink-0">WholesaleX Pro</Link>
 
         <nav className="hidden md:flex gap-6 items-center">
-          <Link href="/" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 transition">
-            <Home size={18} /> {t("nav.home")}
-          </Link>
           <Link href="/products" className="text-gray-600 hover:text-primary-600 transition">{t("nav.products")}</Link>
           <Link href="/categories" className="text-gray-600 hover:text-primary-600 transition">{t("nav.categories")}</Link>
           {user && <Link href="/orders" className="text-gray-600 hover:text-primary-600 transition">{t("nav.orders")}</Link>}
@@ -84,7 +81,6 @@ export default function Header() {
 
       {mobileMenu && (
         <div className="md:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-3">
-          <Link href="/" className="block text-gray-600">{t("nav.home")}</Link>
           <Link href="/products" className="block text-gray-600">{t("nav.products")}</Link>
           <Link href="/cart" className="block text-gray-600">{t("nav.cart")}</Link>
           <button onClick={toggleLang} className="block text-primary-600">
