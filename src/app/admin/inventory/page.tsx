@@ -126,7 +126,7 @@ export default function AdminInventoryPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {item.inventoryQuantity <= item.moq && (
-                          <AlertTriangle size={14} className="text-red-500" title="Low stock" />
+                          <span title="Low stock"><AlertTriangle size={14} className="text-red-500" /></span>
                         )}
                         <span className="font-medium text-gray-900">{item.title}</span>
                       </div>

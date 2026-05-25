@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import Header from "@/components/layout/Header"
 import { ShoppingBag, ArrowLeft } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 

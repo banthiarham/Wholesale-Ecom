@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import Header from "@/components/layout/Header"
 import { Plus, FileText, ArrowLeft } from "lucide-react"
 
 interface Rfq {

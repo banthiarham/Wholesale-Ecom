@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Header from "@/components/layout/Header"
 
 interface Category {
   id: string

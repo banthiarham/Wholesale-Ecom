@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
+import Header from "@/components/layout/Header"
 import { ArrowLeft, CheckCircle, XCircle, Send, FileText } from "lucide-react"
 
 interface Quote {

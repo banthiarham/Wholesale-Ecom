@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Header from "@/components/layout/Header"
 import { ArrowLeft, Plus, Trash2 } from "lucide-react"
 
 interface RfqItem {
