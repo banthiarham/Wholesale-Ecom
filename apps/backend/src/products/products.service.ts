@@ -107,9 +107,13 @@ export class ProductsService {
     if (!product) throw new NotFoundException('Product not found');
     const existing = (product.images as string[]) || [];
     const updated = [...existing, ...urls];
+    const data: any = { images: updated };
+    if (!product.thumbnail && updated.length > 0) {
+      data.thumbnail = updated[0];
+    }
     return this.prisma.product.update({
       where: { id },
-      data: { images: updated },
+      data,
       include: { category: true, tierPrices: true },
     });
   }

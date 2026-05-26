@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
-import { ShoppingCart, ArrowLeft } from "lucide-react"
+import { ShoppingCart, ArrowLeft, Package, ArrowRight } from "lucide-react"
 import CartItemCard from "@/components/cart/CartItemCard"
 import CartSummary from "@/components/cart/CartSummary"
-import { getCartSessionId } from "@/lib/utils"
+import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
+
+interface TierPrice { minQty: number; maxQty: number | null; price: string }
 
 interface CartItem {
   id: string
@@ -20,6 +22,9 @@ interface CartItem {
     thumbnail: string | null
     moq: number
     inventoryQuantity: number
+    unitPrice: string
+    compareAtPrice: string | null
+    tierPrices: TierPrice[]
   }
 }
 
@@ -134,6 +139,12 @@ export default function CartPage() {
   const totals = data?.totals ?? { subtotal: 0, itemCount: 0, tax: 0, shipping: 0, total: 0 }
   const adjustedTotal = totals.total - couponDiscount
 
+  const totalSavings = (data?.cart.items ?? []).reduce((sum, item) => {
+    const listPrice = Number(item.product.unitPrice)
+    const effectivePrice = Number(item.unitPrice)
+    return sum + (listPrice - effectivePrice) * item.quantity
+  }, 0)
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -141,24 +152,48 @@ export default function CartPage() {
   )
 
   if (!data || data.cart.items.length === 0) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-      <ShoppingCart size={64} className="text-gray-300 mb-4" />
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("cart.empty")}</h1>
-      <Link href="/products" className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
-        <ArrowLeft size={18} /> {t("cart.continue")}
-      </Link>
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-20">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center max-w-md">
+        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-5">
+          <ShoppingCart size={36} className="text-gray-300" />
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("cart.empty")}</h1>
+        <p className="text-sm text-gray-500 mb-6">Start adding products to see your wholesale savings here.</p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Link href="/products" className="flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+            <Package size={18} /> Browse Products
+          </Link>
+          <Link href="/" className="flex items-center justify-center gap-2 px-6 py-3 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+            <ArrowLeft size={18} /> Back to Home
+          </Link>
+        </div>
+      </div>
     </div>
   )
 
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">{t("cart.title")}</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{t("cart.title")}</h1>
+            <p className="text-sm text-gray-500 mt-1">{totals.itemCount} item{totals.itemCount !== 1 ? "s" : ""} in your cart</p>
+          </div>
+          {totalSavings > 0 && (
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-100 rounded-lg">
+              <span className="text-sm text-green-700 font-medium">Total savings:</span>
+              <span className="text-sm font-bold text-green-700">{formatPrice(totalSavings)}</span>
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-4">
             {data.cart.items.map((item) => (
               <CartItemCard key={item.id} item={item} onUpdate={handleUpdate} onRemove={handleRemove} updating={updating} />
             ))}
+            <Link href="/products" className="inline-flex items-center gap-2 text-sm text-primary-600 font-medium hover:gap-3 transition-all mt-2">
+              <ArrowLeft size={16} /> Continue Shopping
+            </Link>
           </div>
           <div className="lg:col-span-1">
             <CartSummary
@@ -169,6 +204,7 @@ export default function CartPage() {
               couponDiscount={couponDiscount}
               couponCode={couponCode}
               total={adjustedTotal}
+              totalSavings={totalSavings}
               onApplyCoupon={handleApplyCoupon}
               onRemoveCoupon={handleRemoveCoupon}
               couponLoading={couponLoading}

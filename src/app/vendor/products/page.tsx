@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Package, Plus, X, Edit, Trash2 } from "lucide-react"
+import { ArrowLeft, Package, Plus, X, Edit, Trash2, ImagePlus } from "lucide-react"
 
 interface Product {
   id: string
@@ -19,6 +19,8 @@ interface Product {
   status: string
   categoryId: string | null
   category?: { name: string }
+  thumbnail: string | null
+  images: string[]
 }
 
 interface Category {
@@ -35,6 +37,9 @@ function VendorProductsContent() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   const emptyForm = {
@@ -91,6 +96,7 @@ function VendorProductsContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setUploading(true)
     const body: any = {
       ...form,
       unitPrice: Number(form.unitPrice),
@@ -104,6 +110,7 @@ function VendorProductsContent() {
     if (!body.description) delete body.description
 
     try {
+      let productId = editingProduct?.id
       if (editingProduct) {
         await fetch(`/api/products/${editingProduct.id}`, {
           method: "PUT",
@@ -111,19 +118,36 @@ function VendorProductsContent() {
           body: JSON.stringify(body),
         })
       } else {
-        await fetch("/api/products", {
+        const res = await fetch("/api/products", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify(body),
         })
+        const data = await res.json()
+        productId = data.id
       }
+
+      if (imageFiles.length > 0 && productId) {
+        const formData = new FormData()
+        imageFiles.forEach((f) => formData.append("images", f))
+        await fetch(`/api/products/${productId}/images`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        })
+      }
+
       setShowForm(false)
       setEditingProduct(null)
       setForm(emptyForm)
+      setImageFiles([])
+      setImagePreviews([])
       loadProducts()
     } catch (err) {
       console.error(err)
       alert(editingProduct ? "Failed to update product" : "Failed to add product")
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -160,12 +184,16 @@ function VendorProductsContent() {
       categoryId: p.categoryId || "",
       status: p.status,
     })
+    setImageFiles([])
+    setImagePreviews((p.images || []).map((img) => img))
     setShowForm(true)
   }
 
   const openAdd = () => {
     setEditingProduct(null)
     setForm(emptyForm)
+    setImageFiles([])
+    setImagePreviews([])
     setShowForm(true)
   }
 
@@ -174,6 +202,28 @@ function VendorProductsContent() {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
+  }
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const remaining = 5 - (editingProduct ? (editingProduct.images?.length || 0) : 0)
+    const toAdd = files.slice(0, Math.max(0, remaining - imageFiles.length))
+    if (toAdd.length === 0) { alert("Maximum 5 images per product"); return }
+    setImageFiles((prev) => [...prev, ...toAdd])
+    const newPreviews = toAdd.map((f) => URL.createObjectURL(f))
+    setImagePreviews((prev) => [...prev, ...newPreviews])
+    e.target.value = ""
+  }
+
+  const removeNewImage = (index: number) => {
+    const offset = editingProduct ? (editingProduct.images?.length || 0) : 0
+    if (index < offset) return
+    const fileIndex = index - offset
+    const url = imagePreviews[index]
+    if (url.startsWith("blob:")) URL.revokeObjectURL(url)
+    setImageFiles((prev) => prev.filter((_, i) => i !== fileIndex))
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index))
   }
 
   return (
@@ -198,7 +248,7 @@ function VendorProductsContent() {
           <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">{editingProduct ? "Edit Product" : "Add New Product"}</h3>
-              <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm) }} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]) }} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <input
@@ -281,19 +331,44 @@ function VendorProductsContent() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 className="sm:col-span-2 px-3 py-2 border border-gray-200 rounded-lg text-sm h-24 resize-none"
               />
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Product Images (max 5)</label>
+                <div className="flex flex-wrap gap-3 mb-3">
+                  {imagePreviews.map((src, i) => (
+                    <div key={i} className="relative w-20 h-20 rounded-lg border border-gray-200 overflow-hidden group">
+                      <img src={src} alt={`Preview ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeNewImage(i)}
+                        className="absolute top-0.5 right-0.5 bg-white rounded-full p-0.5 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shadow-sm"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {imagePreviews.length < 5 && (
+                    <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition">
+                      <ImagePlus size={20} className="text-gray-400" />
+                      <input type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
+                    </label>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">Click the + button to add images. Supports JPG, PNG, WebP.</p>
+              </div>
               <div className="sm:col-span-2 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm) }}
+                  onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]) }}
                   className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-lg text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                  disabled={uploading}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
                 >
-                  {editingProduct ? "Save Changes" : "Add Product"}
+                  {uploading ? "Saving..." : editingProduct ? "Save Changes" : "Add Product"}
                 </button>
               </div>
             </form>
@@ -320,6 +395,7 @@ function VendorProductsContent() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Image</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Title</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">SKU</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Price</th>
@@ -332,6 +408,15 @@ function VendorProductsContent() {
               <tbody>
                 {products.map((p) => (
                   <tr key={p.id} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                        {p.thumbnail || (p.images && p.images.length > 0) ? (
+                          <img src={p.thumbnail || p.images[0]} alt={p.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package size={16} className="text-gray-400" />
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 font-medium">{p.title}</td>
                     <td className="px-4 py-3 text-gray-600">{p.sku || "-"}</td>
                     <td className="px-4 py-3">₹{Number(p.unitPrice).toLocaleString("en-IN")}</td>

@@ -138,7 +138,7 @@ export default function Header() {
     for (let i = 0; i < segments.length; i++) {
       currentPath += `/${segments[i]}`
       const label = labelMap[segments[i]] || segments[i].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-      items.push({ href: currentPath, label, icon: undefined })
+      items.push({ href: currentPath, label, icon: null as any })
     }
     return items
   })()
