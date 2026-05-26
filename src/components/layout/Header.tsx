@@ -40,9 +40,9 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-8">
-        <Link href="/" className="text-xl font-bold text-primary-700 shrink-0">WholesaleX Pro</Link>
+    <header className="bg-white shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+        <Link href="/" className="text-xl font-bold text-primary-700">WholesaleX Pro</Link>
 
         <nav className="hidden md:flex gap-6 items-center">
           <Link href="/products" className="text-gray-600 hover:text-primary-600 transition">{t("nav.products")}</Link>
