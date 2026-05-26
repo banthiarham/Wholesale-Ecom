@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Search, SlidersHorizontal, X } from "lucide-react"
+import { Search, SlidersHorizontal, X, GitCompare, Heart } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 
@@ -36,7 +36,18 @@ export default function ProductsPage() {
   const [addingId, setAddingId] = useState<string | null>(null)
   const [filters, setFilters] = useState({ category: "", minPrice: "", maxPrice: "", inStock: false })
   const [showFilters, setShowFilters] = useState(false)
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set())
   const { t } = useTranslation()
+
+  useEffect(() => {
+    const token = localStorage.getItem("token")
+    if (token) {
+      fetch("/api/wishlist", { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => res.json())
+        .then((data) => { setWishlistIds(new Set((data.items || []).map((i: any) => i.productId))) })
+        .catch(() => {})
+    }
+  }, [])
 
   useEffect(() => {
     fetch("/api/categories")
@@ -87,6 +98,33 @@ export default function ProductsPage() {
     } finally {
       setAddingId(null)
     }
+  }
+
+  const toggleWishlist = async (e: React.MouseEvent, productId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const token = localStorage.getItem("token")
+    if (!token) return
+    try {
+      if (wishlistIds.has(productId)) {
+        await fetch(`/api/wishlist/${productId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+        setWishlistIds((prev) => { const n = new Set(prev); n.delete(productId); return n })
+      } else {
+        await fetch("/api/wishlist", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ productId }) })
+        setWishlistIds((prev) => new Set(prev).add(productId))
+      }
+    } catch (err) { console.error(err) }
+  }
+
+  const addToCompare = (e: React.MouseEvent, productId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const stored = localStorage.getItem("compareItems")
+    const items: string[] = stored ? JSON.parse(stored) : []
+    if (items.includes(productId)) return
+    if (items.length >= 4) { alert("Max 4 products to compare"); return }
+    items.push(productId)
+    localStorage.setItem("compareItems", JSON.stringify(items))
   }
 
   const hasActiveFilters = filters.category || filters.minPrice || filters.maxPrice || filters.inStock
@@ -145,6 +183,12 @@ export default function ProductsPage() {
             <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded-lg border ${hasActiveFilters ? "border-primary-600 text-primary-600" : "border-gray-200 text-gray-600"}`}>
               <SlidersHorizontal size={18} />
             </button>
+            <Link href="/compare" className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:text-primary-600 hover:border-primary-600 transition relative">
+              <GitCompare size={18} />
+              {typeof window !== "undefined" && JSON.parse(localStorage.getItem("compareItems") || "[]").length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-600 text-white text-[10px] rounded-full flex items-center justify-center">{JSON.parse(localStorage.getItem("compareItems") || "[]").length}</span>
+              )}
+            </Link>
           </div>
         </div>
 
@@ -160,17 +204,25 @@ export default function ProductsPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {products.map((product) => (
-              <div key={product.id} className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition">
+              <div key={product.id} className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition group">
                 <Link href={`/products/${product.handle}`}>
                   <div className="h-48 bg-gray-100 relative">
                     {product.thumbnail ? (
-                      <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
                     )}
                     {product.tags?.includes('best-seller') && (
                       <span className="absolute top-2 left-2 bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded">Best Seller</span>
                     )}
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={(e) => toggleWishlist(e, product.id)} className={`p-1.5 rounded-full shadow-sm ${wishlistIds.has(product.id) ? "bg-red-50 text-red-500" : "bg-white/90 text-gray-500 hover:text-red-500"}`}>
+                        <Heart size={14} fill={wishlistIds.has(product.id) ? "currentColor" : "none"} />
+                      </button>
+                      <button onClick={(e) => addToCompare(e, product.id)} className="p-1.5 rounded-full bg-white/90 text-gray-500 hover:text-primary-600 shadow-sm">
+                        <GitCompare size={14} />
+                      </button>
+                    </div>
                   </div>
                 </Link>
                 <div className="p-4">

@@ -3,18 +3,21 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { ShoppingCart, ArrowLeft, Star, Truck, Package } from "lucide-react"
+import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface TierPrice { id: string; minQty: number; maxQty: number | null; price: number }
 
 interface Review { id: string; rating: number; title: string | null; body: string | null; user: { firstName: string | null; lastName: string | null } }
 
+interface RelatedProduct {
+  id: string; title: string; handle: string; thumbnail: string | null; unitPrice: string; compareAtPrice: string | null; moq: number; rating: number; tierPrices: TierPrice[]
+}
+
 interface Product {
   id: string; title: string; handle: string; description: string | null; sku: string | null; moq: number;
   unitPrice: number; compareAtPrice: number | null; inventoryQuantity: number; thumbnail: string | null;
-  images: string[];
-  vendorName: string | null; rating: number; reviewCount: number; tags: string[];
+  images: string[]; vendorName: string | null; rating: number; reviewCount: number; tags: string[];
   category: { id: string; name: string; handle: string } | null;
   tierPrices: TierPrice[]; reviews: Review[];
 }
@@ -22,64 +25,135 @@ interface Product {
 export default function ProductDetailPage() {
   const params = useParams()
   const [product, setProduct] = useState<Product | null>(null)
+  const [related, setRelated] = useState<RelatedProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [quantity, setQuantity] = useState(1)
   const [adding, setAdding] = useState(false)
   const [mainImage, setMainImage] = useState<string | null>(null)
+  const [inWishlist, setInWishlist] = useState(false)
+  const [wishlistLoading, setWishlistLoading] = useState(false)
 
   useEffect(() => {
     if (!params.handle) return
     fetch(`/api/products/${params.handle}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.product) { setProduct(data.product); setQuantity(data.product.moq); setMainImage(data.product.thumbnail || (data.product.images?.[0] ?? null)) }
+        if (data.product) {
+          setProduct(data.product)
+          setQuantity(data.product.moq)
+          setMainImage(data.product.thumbnail || (data.product.images?.[0] ?? null))
+          loadRelated(data.product)
+          checkWishlist(data.product.id)
+        }
         setLoading(false)
       })
   }, [params.handle])
+
+  const checkWishlist = (productId: string) => {
+    const token = localStorage.getItem("token")
+    if (!token) return
+    fetch("/api/wishlist", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => {
+        const items = data.items || []
+        setInWishlist(items.some((i: any) => i.productId === productId))
+      })
+      .catch(() => {})
+  }
+
+  const loadRelated = (p: Product) => {
+    if (!p.category) return
+    fetch(`/api/categories/${p.category.handle}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const prods = (data.category?.products || []).filter((rp: any) => rp.id !== p.id).slice(0, 4)
+        setRelated(prods)
+      })
+      .catch(() => {})
+  }
 
   const handleAddToCart = async () => {
     if (!product) return
     setAdding(true)
     try {
       await fetch("/api/cart", { method: "POST", headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() }, body: JSON.stringify({ productId: product.id, quantity }) })
-      alert("Added to cart!")
+      window.dispatchEvent(new CustomEvent("cart-updated"))
     } catch (err) { console.error(err) } finally { setAdding(false) }
   }
+
+  const toggleWishlist = async () => {
+    if (!product) return
+    const token = localStorage.getItem("token")
+    if (!token) return
+    setWishlistLoading(true)
+    try {
+      if (inWishlist) {
+        await fetch(`/api/wishlist/${product.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+        setInWishlist(false)
+      } else {
+        await fetch("/api/wishlist", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ productId: product.id }) })
+        setInWishlist(true)
+      }
+    } catch (err) { console.error(err) } finally { setWishlistLoading(false) }
+  }
+
+  const addToCompare = () => {
+    if (!product) return
+    const stored = localStorage.getItem("compareItems")
+    const items: string[] = stored ? JSON.parse(stored) : []
+    if (!items.includes(product.id)) {
+      if (items.length >= 4) { alert("Max 4 products to compare. Remove one first."); return }
+      items.push(product.id)
+      localStorage.setItem("compareItems", JSON.stringify(items))
+    }
+    alert("Added to comparison!")
+  }
+
+  const getEffectiveTierPrice = (qty: number) => {
+    if (!product) return 0
+    const sorted = [...product.tierPrices].sort((a, b) => a.minQty - b.minQty)
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (qty >= sorted[i].minQty) return sorted[i].price
+    }
+    return product.unitPrice
+  }
+
+  const effectivePrice = getEffectiveTierPrice(quantity)
+  const totalCost = effectivePrice * quantity
+  const savingsPerUnit = product ? Number(product.unitPrice) - effectivePrice : 0
+  const totalSavings = savingsPerUnit * quantity
+  const discountPercent = product?.compareAtPrice && effectivePrice < Number(product.compareAtPrice)
+    ? Math.round(((Number(product.compareAtPrice) - effectivePrice) / Number(product.compareAtPrice)) * 100)
+    : 0
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
   if (!product) return <div className="min-h-screen flex flex-col items-center justify-center"><h1 className="text-2xl font-bold">Product not found</h1><Link href="/products" className="mt-4 text-primary-600">Back to products</Link></div>
 
-  const effectivePrice = product.tierPrices.find((tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty))?.price || product.unitPrice
-  const discountPercent = product.compareAtPrice && effectivePrice < product.compareAtPrice
-    ? Math.round(((Number(product.compareAtPrice) - Number(effectivePrice)) / Number(product.compareAtPrice)) * 100)
-    : 0
-
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="text-xl font-bold text-primary-700">WholesaleX Pro</div>
-          <div className="flex gap-4">
-            <Link href="/products" className="text-gray-600 hover:text-primary-600">Products</Link>
-            <Link href="/cart" className="text-gray-600 hover:text-primary-600">Cart</Link>
-          </div>
-        </div>
-      </header>
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/products" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to products</Link>
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
+          <Link href="/" className="hover:text-primary-600">Home</Link>
+          <ChevronRight size={14} />
+          <Link href="/products" className="hover:text-primary-600">Products</Link>
+          {product.category && (<><ChevronRight size={14} /><Link href={`/categories/${product.category.handle}`} className="hover:text-primary-600">{product.category.name}</Link></>)}
+          <ChevronRight size={14} />
+          <span className="text-gray-900 font-medium truncate">{product.title}</span>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white rounded-lg overflow-hidden">
+          {/* Images */}
+          <div className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm">
             {mainImage ? (
               <img src={mainImage} alt={product.title} className="w-full h-96 object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             ) : (
-              <div className="w-full h-96 bg-gray-100 flex items-center justify-center text-gray-400">No Image</div>
+              <div className="w-full h-96 bg-gray-100 flex items-center justify-center"><Package size={64} className="text-gray-300" /></div>
             )}
             {product.images && product.images.length > 1 && (
               <div className="flex gap-2 p-4 overflow-x-auto">
                 {product.images.map((img, idx) => (
-                  <button key={idx} onClick={() => setMainImage(img)} className={`flex-shrink-0 w-20 h-20 rounded border-2 overflow-hidden ${mainImage === img ? 'border-primary-600' : 'border-transparent'}`}>
+                  <button key={idx} onClick={() => setMainImage(img)} className={`flex-shrink-0 w-20 h-20 rounded-lg border-2 overflow-hidden ${mainImage === img ? 'border-primary-600' : 'border-transparent'}`}>
                     <img src={img} alt={`${product.title} ${idx + 1}`} className="w-full h-full object-cover" />
                   </button>
                 ))}
@@ -87,7 +161,8 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          <div className="space-y-4">
+          {/* Product Info */}
+          <div className="space-y-5">
             {product.category && <Link href={`/categories/${product.category.handle}`} className="text-sm text-primary-600 hover:underline">{product.category.name}</Link>}
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">{product.title} {product.tags?.includes('best-seller') && <span className="text-sm bg-amber-500 text-white px-2 py-0.5 rounded font-semibold">Best Seller</span>}</h1>
 
@@ -98,61 +173,110 @@ export default function ProductDetailPage() {
 
             <div className="flex items-baseline gap-3">
               <span className="text-3xl font-bold text-primary-700">{formatPrice(Number(effectivePrice))}</span>
-              {product.compareAtPrice && effectivePrice < product.compareAtPrice && (
-              <>
-                <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>
-                <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded">{discountPercent}% off</span>
-              </>
-            )}
+              {product.compareAtPrice && effectivePrice < Number(product.compareAtPrice) && (
+                <>
+                  <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>
+                  <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded font-semibold">{discountPercent}% off</span>
+                </>
+              )}
             </div>
+
+            {savingsPerUnit > 0 && (
+              <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
+                <span className="text-sm text-green-700 font-medium">Bulk savings: {formatPrice(savingsPerUnit)}/unit off - you save {formatPrice(totalSavings)} total</span>
+              </div>
+            )}
 
             {product.sku && <p className="text-sm text-gray-500">SKU: {product.sku}</p>}
             {product.vendorName && <p className="text-sm text-gray-500">Vendor: {product.vendorName}</p>}
             <div className="flex items-center gap-2 text-sm text-gray-600"><Package size={16} /><span>MOQ: {product.moq} units</span></div>
             <div className="flex items-center gap-2 text-sm text-gray-600"><Truck size={16} /><span>{product.inventoryQuantity > 0 ? `${product.inventoryQuantity} in stock` : "Out of stock"}</span></div>
+            <div className="flex items-center gap-2 text-sm text-gray-600"><ShieldCheck size={16} /><span>Secure checkout via CCAvenue</span></div>
 
-            {product.tierPrices.length > 0 && (
-              <div>
-                <h3 className="font-semibold mb-2">Tier Pricing</h3>
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">Quantity</th><th className="px-3 py-2 text-right">Price/unit</th></tr></thead>
-                  <tbody>
-                    {product.tierPrices.map((tp) => (
-                      <tr key={tp.id} className={`border-b ${quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty) ? "bg-primary-50 font-medium" : ""}`}>
-                        <td className="px-3 py-2">{tp.minQty}{tp.maxQty ? ` - ${tp.maxQty}` : "+"}</td>
-                        <td className="px-3 py-2 text-right">{formatPrice(Number(tp.price))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
+            {/* Quantity + Actions */}
             <div className="flex items-center gap-4">
               <div className="flex items-center border border-gray-200 rounded-lg">
                 <button onClick={() => setQuantity(Math.max(product.moq, quantity - 1))} className="px-3 py-2 hover:bg-gray-50">-</button>
                 <input type="number" min={product.moq} max={product.inventoryQuantity} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="w-16 text-center border-x border-gray-200 py-2" />
                 <button onClick={() => setQuantity(Math.min(product.inventoryQuantity, quantity + 1))} className="px-3 py-2 hover:bg-gray-50">+</button>
               </div>
-              <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < product.moq} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
+              <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < product.moq} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-medium">
                 <ShoppingCart size={18} /> {adding ? "Adding..." : "Add to Cart"}
               </button>
             </div>
 
-            {product.tags.length > 0 && <div className="flex flex-wrap gap-2">{product.tags.map((tag) => <span key={tag} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">{tag}</span>)}</div>}
+            <div className="flex gap-3">
+              <button onClick={toggleWishlist} disabled={wishlistLoading} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition text-sm font-medium ${inWishlist ? "border-red-200 text-red-600 bg-red-50 hover:bg-red-100" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
+                <Heart size={16} fill={inWishlist ? "currentColor" : "none"} /> {inWishlist ? "Saved" : "Wishlist"}
+              </button>
+              <button onClick={addToCompare} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition text-sm font-medium">
+                <GitCompare size={16} /> Compare
+              </button>
+            </div>
+
+            {product.tags.length > 0 && <div className="flex flex-wrap gap-2">{product.tags.map((tag) => <span key={tag} className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">{tag}</span>)}</div>}
           </div>
         </div>
 
-        {product.description && (
-          <div className="mt-8 bg-white rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-3">Description</h2>
-            <p className="text-gray-700 whitespace-pre-line">{product.description}</p>
+        {/* Tier Pricing Table */}
+        {product.tierPrices.length > 0 && (
+          <div className="mt-10 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Tier Pricing</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left font-medium text-gray-600">Quantity Range</th><th className="px-4 py-3 text-right font-medium text-gray-600">Price/unit</th><th className="px-4 py-3 text-right font-medium text-gray-600">You Save</th></tr></thead>
+                <tbody>
+                  {product.tierPrices.map((tp) => {
+                    const saving = Number(product.unitPrice) - Number(tp.price)
+                    const isActive = quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty)
+                    return (
+                      <tr key={tp.id} className={`border-b border-gray-50 ${isActive ? "bg-primary-50" : ""}`}>
+                        <td className="px-4 py-3 font-medium">{tp.minQty}{tp.maxQty ? ` - ${tp.maxQty}` : "+"} units</td>
+                        <td className="px-4 py-3 text-right font-semibold">{formatPrice(Number(tp.price))}</td>
+                        <td className="px-4 py-3 text-right text-green-600 font-medium">{saving > 0 ? formatPrice(saving) : "-"}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
+        {/* Bulk Discount Calculator */}
+        {product.tierPrices.length > 0 && (
+          <div className="mt-6 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Bulk Discount Calculator</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-gray-500 mb-1">Quantity</p>
+                <p className="text-2xl font-bold text-gray-900">{quantity}</p>
+              </div>
+              <div className="bg-primary-50 rounded-lg p-4">
+                <p className="text-sm text-primary-600 mb-1">Effective Price</p>
+                <p className="text-2xl font-bold text-primary-700">{formatPrice(Number(effectivePrice))}<span className="text-sm font-normal">/unit</span></p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4">
+                <p className="text-sm text-green-600 mb-1">Total Cost</p>
+                <p className="text-2xl font-bold text-green-700">{formatPrice(totalCost)}</p>
+                {totalSavings > 0 && <p className="text-xs text-green-600 mt-1">Save {formatPrice(totalSavings)}</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Description */}
+        {product.description && (
+          <div className="mt-10 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">Description</h2>
+            <p className="text-gray-700 whitespace-pre-line leading-relaxed">{product.description}</p>
+          </div>
+        )}
+
+        {/* Reviews */}
         {product.reviews.length > 0 && (
-          <div className="mt-8 bg-white rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">Reviews</h2>
+          <div className="mt-10 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Reviews ({product.reviewCount})</h2>
             <div className="space-y-4">
               {product.reviews.map((review) => (
                 <div key={review.id} className="border-b border-gray-100 pb-4">
@@ -164,6 +288,47 @@ export default function ProductDetailPage() {
                   {review.body && <p className="text-gray-600 text-sm mt-1">{review.body}</p>}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Related Products */}
+        {related.length > 0 && (
+          <div className="mt-10">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">Related Products</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {related.map((rp) => {
+                const lowestTier = rp.tierPrices?.length > 0 ? rp.tierPrices[rp.tierPrices.length - 1] : null
+                return (
+                  <Link key={rp.id} href={`/products/${rp.handle}`} className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all group">
+                    <div className="relative h-40 bg-gray-100">
+                      {rp.thumbnail ? (
+                        <img src={rp.thumbnail} alt={rp.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center"><Package size={40} className="text-gray-300" /></div>
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1 group-hover:text-primary-600 transition">{rp.title}</h3>
+                      <div className="flex items-center gap-1 mb-2">
+                        <Star size={14} className="text-amber-400 fill-amber-400" />
+                        <span className="text-xs text-gray-600">{rp.rating}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {lowestTier ? (
+                          <>
+                            <span className="text-xs text-green-600 font-semibold">From </span>
+                            <span className="font-bold text-gray-900">{formatPrice(lowestTier.price)}</span>
+                            <span className="text-xs text-gray-400 line-through">{formatPrice(rp.unitPrice)}</span>
+                          </>
+                        ) : (
+                          <span className="font-bold text-gray-900">{formatPrice(rp.unitPrice)}</span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
             </div>
           </div>
         )}

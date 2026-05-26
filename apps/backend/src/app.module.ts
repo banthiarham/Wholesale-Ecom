@@ -19,6 +19,9 @@ import { LoyaltyModule } from './loyalty/loyalty.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
+import { WishlistModule } from './wishlist/wishlist.module';
+import { ReturnsModule } from './returns/returns.module';
+import { AddressesModule } from './addresses/addresses.module';
 
 @Module({
   imports: [
@@ -44,6 +47,9 @@ import { RecommendationsModule } from './recommendations/recommendations.module'
     NotificationsModule,
     AnalyticsModule,
     RecommendationsModule,
+    WishlistModule,
+    ReturnsModule,
+    AddressesModule,
   ],
   controllers: [AppController],
 })

@@ -127,6 +127,20 @@ export class OrdersController {
     return { order };
   }
 
+  @Put(':id/tracking')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update order tracking info (Admin / Vendor)' })
+  @ApiResponse({ status: 200, description: 'Tracking info updated' })
+  async updateTracking(
+    @Param('id') id: string,
+    @Body() body: { trackingNumber?: string; carrier?: string; shippingEta?: string },
+  ) {
+    const order = await this.ordersService.updateTracking(id, body);
+    return { order };
+  }
+
   @Put(':id/cancel')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

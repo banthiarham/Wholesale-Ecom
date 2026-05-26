@@ -3,18 +3,19 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ShoppingBag, ArrowLeft } from "lucide-react"
-import { formatPrice } from "@/lib/utils"
+import { ShoppingBag, ArrowLeft, ShoppingCart, RotateCcw } from "lucide-react"
+import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface Order {
   id: string; orderNumber: string; status: string; totalAmount: number; currency: string;
-  createdAt: string; items: { id: string; quantity: number; totalPrice: number; product: { title: string; thumbnail: string | null } }[]
+  createdAt: string; items: { id: string; productId: string; quantity: number; totalPrice: number; product: { title: string; thumbnail: string | null } }[]
 }
 
 export default function OrdersPage() {
   const router = useRouter()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [reorderingId, setReorderingId] = useState<string | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -33,6 +34,23 @@ export default function OrdersPage() {
       case "CANCELLED": return "bg-red-100 text-red-700"
       default: return "bg-gray-100 text-gray-700"
     }
+  }
+
+  const handleReorder = async (e: React.MouseEvent, order: Order) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setReorderingId(order.id)
+    try {
+      for (const item of order.items) {
+        await fetch("/api/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
+          body: JSON.stringify({ productId: item.productId, quantity: item.quantity }),
+        })
+      }
+      window.dispatchEvent(new CustomEvent("cart-updated"))
+      router.push("/cart")
+    } catch (err) { console.error(err) } finally { setReorderingId(null) }
   }
 
   return (
@@ -56,7 +74,7 @@ export default function OrdersPage() {
           <div className="space-y-4">
             {orders.map((order) => (
               <Link key={order.id} href={`/orders/${order.id}`}>
-                <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 hover:shadow-md transition">
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition">
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-sm text-gray-500">Order #{order.orderNumber}</p>
@@ -70,6 +88,17 @@ export default function OrdersPage() {
                     </div>
                     <span className="font-bold text-primary-700">{formatPrice(Number(order.totalAmount))}</span>
                   </div>
+                  {order.status !== "CANCELLED" && (
+                    <div className="mt-3 pt-3 border-t border-gray-50">
+                      <button
+                        onClick={(e) => handleReorder(e, order)}
+                        disabled={reorderingId === order.id}
+                        className="inline-flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50 transition"
+                      >
+                        <RotateCcw size={14} /> {reorderingId === order.id ? "Adding to cart..." : "Reorder"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </Link>
             ))}

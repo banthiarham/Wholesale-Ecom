@@ -115,6 +115,23 @@ export class OrdersService {
     });
   }
 
+  async updateTracking(id: string, data: { trackingNumber?: string; carrier?: string; shippingEta?: string }) {
+    const updateData: any = {};
+    if (data.trackingNumber !== undefined) updateData.trackingNumber = data.trackingNumber;
+    if (data.carrier !== undefined) updateData.carrier = data.carrier;
+    if (data.shippingEta !== undefined) updateData.shippingEta = new Date(data.shippingEta);
+
+    return this.prisma.order.update({
+      where: { id },
+      data: updateData,
+      include: {
+        items: { include: { product: { select: { id: true, title: true, thumbnail: true, sku: true } } } },
+        payment: true,
+        user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+      },
+    });
+  }
+
   async cancelOrder(id: string, userId?: string) {
     const order = await this.findById(id, userId);
     if (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.CANCELLED) {

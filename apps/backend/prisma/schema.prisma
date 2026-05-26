@@ -119,6 +119,8 @@ model User {
   quotes          Quote[]
   catalogs        Catalog[]
   notifications   Notification[]
+  wishlistItems   WishlistItem[]
+  returnRequests  ReturnRequest[]
 
   @@index([email])
   @@index([role])
@@ -236,6 +238,7 @@ model Product {
   inventoryLogs    InventoryLog[]
   stockAdjustments StockAdjustment[]
   catalogItems     CatalogItem[]
+  wishlistItems    WishlistItem[]
 
   @@index([handle])
   @@index([status])
@@ -360,12 +363,16 @@ model Order {
   shippingAddress Json?
   billingAddress  Json?
   notes           String?
+  trackingNumber  String?
+  carrier         String?
+  shippingEta     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   items   OrderItem[]
   payment Payment?
+  returnRequests ReturnRequest[]
 
   @@index([userId])
   @@index([status])
@@ -594,6 +601,14 @@ model CatalogItem {
   @@index([productId])
 }
 
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PROCESSING
+  COMPLETED
+}
+
 enum NotificationType {
   ORDER
   PAYMENT
@@ -602,6 +617,7 @@ enum NotificationType {
   PROMOTION
   SYSTEM
   LOYALTY
+  RETURN
 }
 
 model Notification {
@@ -618,4 +634,50 @@ model Notification {
   @@index([userId])
   @@index([isRead])
   @@index([type])
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+}
+
+model ReturnRequest {
+  id          String       @id @default(uuid())
+  orderId     String
+  order      Order        @relation(fields: [orderId], references: [id])
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      ReturnStatus @default(REQUESTED)
+  reason      String
+  notes       String?
+  refundAmount Decimal?     @db.Decimal(12, 2)
+
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  items      ReturnItem[]
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([status])
+}
+
+model ReturnItem {
+  id             String   @id @default(uuid())
+  returnRequestId String
+  returnRequest  ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderItemId    String
+  quantity        Int
+  reason         String?
+
+  @@index([returnRequestId])
 }

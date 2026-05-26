@@ -20,6 +20,9 @@ import {
   Settings,
   Home,
   ChevronRight,
+  MapPin,
+  RotateCcw,
+  GitCompare,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
@@ -160,6 +163,10 @@ export default function Header() {
           ? [{ href: "/admin", label: "Admin", icon: Settings }]
           : []),
         { href: "/orders", label: t("nav.orders"), icon: ShoppingBag },
+        { href: "/wishlist", label: "Wishlist", icon: Heart },
+        { href: "/account/addresses", label: "Addresses", icon: MapPin },
+        { href: "/account/returns", label: "Returns", icon: RotateCcw },
+        { href: "/compare", label: "Compare", icon: GitCompare },
         { href: "/loyalty", label: t("nav.loyalty"), icon: Heart },
         { href: "/notifications", label: t("nav.notifications"), icon: Bell },
       ]
