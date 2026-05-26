@@ -32,6 +32,34 @@ async function main() {
     console.log('ℹ️ Admin user already exists');
   }
 
+  // Create vendor user
+  const vendorEmail = 'vendor@wholesalex.com';
+  const existingVendor = await prisma.user.findUnique({
+    where: { email: vendorEmail },
+  });
+
+  let vendorUser = existingVendor;
+  if (!existingVendor) {
+    const hashedPassword = await bcrypt.hash('Vendor@123', 10);
+    vendorUser = await prisma.user.create({
+      data: {
+        email: vendorEmail,
+        password: hashedPassword,
+        firstName: 'Demo',
+        lastName: 'Vendor',
+        role: UserRole.VENDOR,
+        status: UserStatus.ACTIVE,
+        accountType: AccountType.LOCAL,
+        emailVerified: true,
+        companyName: 'Demo Vendor Pvt Ltd',
+      },
+    });
+    console.log('✅ Vendor user created: vendor@wholesalex.com / Vendor@123');
+  } else {
+    console.log('ℹ️ Vendor user already exists');
+  }
+
+  await prisma.cartItem.deleteMany();
   await prisma.tierPrice.deleteMany();
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
@@ -60,6 +88,7 @@ async function main() {
       inventoryQuantity: 500,
       status: ProductStatus.PUBLISHED,
       categoryId: electronics.id,
+      vendorId: vendorUser.id,
       vendorName: 'AudioTech Corp',
       tags: ['electronics', 'audio', 'wireless'],
       rating: 4.5,
@@ -86,6 +115,7 @@ async function main() {
       inventoryQuantity: 2000,
       status: ProductStatus.PUBLISHED,
       categoryId: fashion.id,
+      vendorId: vendorUser.id,
       vendorName: 'TextileHub India',
       tags: ['fashion', 'apparel', 'cotton'],
       rating: 4.2,
@@ -111,6 +141,7 @@ async function main() {
       inventoryQuantity: 50,
       status: ProductStatus.PUBLISHED,
       categoryId: industrial.id,
+      vendorId: vendorUser.id,
       vendorName: 'ToolsMax Industries',
       tags: ['industrial', 'tools', 'machinery'],
       rating: 4.8,
@@ -136,6 +167,7 @@ async function main() {
       inventoryQuantity: 300,
       status: ProductStatus.PUBLISHED,
       categoryId: electronics.id,
+      vendorId: vendorUser.id,
       vendorName: 'BrightLight Solutions',
       tags: ['electronics', 'lighting', 'energy-saving'],
       rating: 4.3,
