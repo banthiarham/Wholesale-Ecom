@@ -18,6 +18,7 @@ interface Product {
   inventoryQuantity: number
   rating: number
   vendorName: string | null
+  tags: string[]
   tierPrices: { minQty: number; maxQty: number | null; price: number }[]
 }
 
@@ -166,6 +167,9 @@ export default function ProductsPage() {
                       <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
+                    )}
+                    {product.tags?.includes('best-seller') && (
+                      <span className="absolute top-2 left-2 bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded">Best Seller</span>
                     )}
                   </div>
                 </Link>

@@ -139,7 +139,7 @@ async function main() {
         'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&h=800&fit=crop',
         'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=800&fit=crop',
       ],
-      tags: ['electronics', 'audio', 'wireless'],
+      tags: ['electronics', 'audio', 'wireless', 'best-seller'],
       rating: 4.5,
       reviewCount: 12,
       tierPrices: {
@@ -204,7 +204,7 @@ async function main() {
         'https://images.unsplash.com/photo-1504328347081-2a6f6c894568?w=800&h=800&fit=crop',
         'https://images.unsplash.com/photo-1581092914488-8f22e2e4a0f1?w=800&h=800&fit=crop',
       ],
-      tags: ['industrial', 'tools', 'machinery'],
+      tags: ['industrial', 'tools', 'machinery', 'best-seller'],
       rating: 4.8,
       reviewCount: 5,
       tierPrices: {
@@ -236,7 +236,7 @@ async function main() {
         'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800&h=800&fit=crop',
         'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=800&h=800&fit=crop',
       ],
-      tags: ['electronics', 'lighting', 'energy-saving'],
+      tags: ['electronics', 'lighting', 'energy-saving', 'best-seller'],
       rating: 4.3,
       reviewCount: 15,
       tierPrices: {
