@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Heart, ShoppingCart, Trash2, Package, ArrowRight } from "lucide-react"
+import { Heart, ShoppingCart, Trash2, Package } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface TierPrice { minQty: number; maxQty: number | null; price: string }
@@ -27,28 +28,38 @@ interface WishlistItem {
 }
 
 export default function WishlistPage() {
+  const router = useRouter()
   const [items, setItems] = useState<WishlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [addingId, setAddingId] = useState<string | null>(null)
+  const [error, setError] = useState("")
 
   useEffect(() => {
     const token = localStorage.getItem("token")
     if (!token) { setLoading(false); return }
     fetch("/api/wishlist", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.json())
-      .then((data) => { setItems(data.items || []); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [])
+      .then((res) => {
+        if (res.status === 401) { localStorage.removeItem("token"); router.push("/login"); return null }
+        return res.json()
+      })
+      .then((data) => {
+        if (data) setItems(data.items || [])
+        setLoading(false)
+      })
+      .catch((err) => { console.error(err); setError("Failed to load wishlist"); setLoading(false) })
+  }, [router])
 
   const handleRemove = async (productId: string) => {
     const token = localStorage.getItem("token")
     if (!token) return
     try {
-      await fetch(`/api/wishlist/${productId}`, {
+      const res = await fetch(`/api/wishlist/${productId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       })
-      setItems((prev) => prev.filter((i) => i.productId !== productId))
+      if (res.ok) {
+        setItems((prev) => prev.filter((i) => i.productId !== productId))
+      }
     } catch (err) { console.error(err) }
   }
 
@@ -67,6 +78,29 @@ export default function WishlistPage() {
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+    </div>
+  )
+
+  if (error) return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-20">
+      <p className="text-red-500 mb-4">{error}</p>
+      <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary-600 text-white rounded-lg">Retry</button>
+    </div>
+  )
+
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+  if (!token) return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-20">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center max-w-md">
+        <div className="w-20 h-20 bg-pink-50 rounded-full flex items-center justify-center mx-auto mb-5">
+          <Heart size={36} className="text-pink-300" />
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Sign in to view your wishlist</h1>
+        <p className="text-sm text-gray-500 mb-6">Save products you're interested in by signing in.</p>
+        <Link href="/login" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+          Sign In
+        </Link>
+      </div>
     </div>
   )
 

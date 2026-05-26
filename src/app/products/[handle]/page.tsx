@@ -91,15 +91,15 @@ export default function ProductDetailPage() {
   const toggleWishlist = async () => {
     if (!product) return
     const token = localStorage.getItem("token")
-    if (!token) return
+    if (!token) { alert("Please sign in to add items to your wishlist"); return }
     setWishlistLoading(true)
     try {
       if (inWishlist) {
-        await fetch(`/api/wishlist/${product.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
-        setInWishlist(false)
+        const res = await fetch(`/api/wishlist/${product.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+        if (res.ok) setInWishlist(false)
       } else {
-        await fetch("/api/wishlist", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ productId: product.id }) })
-        setInWishlist(true)
+        const res = await fetch("/api/wishlist", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ productId: product.id }) })
+        if (res.ok) setInWishlist(true)
       }
     } catch (err) { console.error(err) } finally { setWishlistLoading(false) }
   }

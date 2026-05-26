@@ -104,14 +104,14 @@ export default function ProductsPage() {
     e.preventDefault()
     e.stopPropagation()
     const token = localStorage.getItem("token")
-    if (!token) return
+    if (!token) { alert("Please sign in to add items to your wishlist"); return }
     try {
       if (wishlistIds.has(productId)) {
-        await fetch(`/api/wishlist/${productId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
-        setWishlistIds((prev) => { const n = new Set(prev); n.delete(productId); return n })
+        const res = await fetch(`/api/wishlist/${productId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+        if (res.ok) setWishlistIds((prev) => { const n = new Set(prev); n.delete(productId); return n })
       } else {
-        await fetch("/api/wishlist", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ productId }) })
-        setWishlistIds((prev) => new Set(prev).add(productId))
+        const res = await fetch("/api/wishlist", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ productId }) })
+        if (res.ok) setWishlistIds((prev) => new Set(prev).add(productId))
       }
     } catch (err) { console.error(err) }
   }
