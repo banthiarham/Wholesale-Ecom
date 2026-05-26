@@ -59,6 +59,49 @@ async function main() {
     console.log('ℹ️ Vendor user already exists');
   }
 
+  // Create buyer users for reviews
+  const buyer1Email = 'buyer1@wholesalex.com';
+  let buyer1 = await prisma.user.findUnique({ where: { email: buyer1Email } });
+  if (!buyer1) {
+    const hashedPassword = await bcrypt.hash('Buyer1@123', 10);
+    buyer1 = await prisma.user.create({
+      data: {
+        email: buyer1Email,
+        password: hashedPassword,
+        firstName: 'Rahul',
+        lastName: 'Sharma',
+        role: UserRole.BUYER,
+        status: UserStatus.ACTIVE,
+        accountType: AccountType.LOCAL,
+        emailVerified: true,
+      },
+    });
+    console.log('✅ Buyer1 user created: buyer1@wholesalex.com / Buyer1@123');
+  } else {
+    console.log('ℹ️ Buyer1 user already exists');
+  }
+
+  const buyer2Email = 'buyer2@wholesalex.com';
+  let buyer2 = await prisma.user.findUnique({ where: { email: buyer2Email } });
+  if (!buyer2) {
+    const hashedPassword = await bcrypt.hash('Buyer2@123', 10);
+    buyer2 = await prisma.user.create({
+      data: {
+        email: buyer2Email,
+        password: hashedPassword,
+        firstName: 'Priya',
+        lastName: 'Patel',
+        role: UserRole.BUYER,
+        status: UserStatus.ACTIVE,
+        accountType: AccountType.LOCAL,
+        emailVerified: true,
+      },
+    });
+    console.log('✅ Buyer2 user created: buyer2@wholesalex.com / Buyer2@123');
+  } else {
+    console.log('ℹ️ Buyer2 user already exists');
+  }
+
   await prisma.cartItem.deleteMany();
   await prisma.tierPrice.deleteMany();
   await prisma.product.deleteMany();
@@ -76,7 +119,7 @@ async function main() {
     data: { name: 'Industrial', handle: 'industrial', description: 'Industrial tools and machinery', isActive: true, rank: 2 },
   });
 
-  await prisma.product.create({
+  const earbuds = await prisma.product.create({
     data: {
       title: 'Wireless Earbuds Pro',
       handle: 'wireless-earbuds-pro',
@@ -109,7 +152,7 @@ async function main() {
     },
   });
 
-  await prisma.product.create({
+  const tshirt = await prisma.product.create({
     data: {
       title: 'Cotton T-Shirt Bulk',
       handle: 'cotton-t-shirt-bulk',
@@ -141,7 +184,7 @@ async function main() {
     },
   });
 
-  await prisma.product.create({
+  const drill = await prisma.product.create({
     data: {
       title: 'Industrial Drill Machine',
       handle: 'industrial-drill-machine',
@@ -173,7 +216,7 @@ async function main() {
     },
   });
 
-  await prisma.product.create({
+  const ledPanel = await prisma.product.create({
     data: {
       title: 'Smart LED Panel 24W',
       handle: 'smart-led-panel-24w',
@@ -204,6 +247,30 @@ async function main() {
       },
     },
   });
+
+  // Create reviews for each product
+  await prisma.review.deleteMany();
+
+  await prisma.review.createMany({
+    data: [
+      // Wireless Earbuds Pro reviews
+      { productId: earbuds.id, userId: buyer1.id, rating: 5, title: 'Excellent noise cancellation', body: 'Best earbuds I have used for our office bulk order. Great ANC and battery life. Highly recommend for corporate purchases.', isVerified: true, helpful: 8 },
+      { productId: earbuds.id, userId: buyer2.id, rating: 4, title: 'Good value for bulk purchase', body: 'Sound quality is impressive for the price. Ordered 50 units for our team and everyone is happy. Minor issue with the charging case but overall solid.', isVerified: true, helpful: 5 },
+
+      // Cotton T-Shirt Bulk reviews
+      { productId: tshirt.id, userId: buyer1.id, rating: 4, title: 'Great quality cotton', body: 'Very soft fabric and good stitching. We ordered 200 pieces for our company uniforms. Colors stay vibrant after multiple washes.', isVerified: true, helpful: 12 },
+      { productId: tshirt.id, userId: buyer2.id, rating: 4, title: 'Comfortable and durable', body: 'Perfect for bulk orders. The MOQ of 50 is reasonable. Sizing is consistent across the batch which is important for uniform orders.', isVerified: true, helpful: 7 },
+
+      // Industrial Drill Machine reviews
+      { productId: drill.id, userId: buyer1.id, rating: 5, title: 'Powerful and reliable', body: 'This drill handles heavy-duty industrial work without breaking a sweat. We bought 10 units for our factory floor and they perform flawlessly every day.', isVerified: true, helpful: 15 },
+      { productId: drill.id, userId: buyer2.id, rating: 5, title: 'Best industrial drill we have used', body: 'Excellent build quality and motor power. The tier pricing for 20+ units makes it very cost-effective. Highly recommended for manufacturing units.', isVerified: true, helpful: 10 },
+
+      // Smart LED Panel 24W reviews
+      { productId: ledPanel.id, userId: buyer1.id, rating: 4, title: 'Bright and energy efficient', body: 'Replaced all our office lights with these panels. Energy consumption dropped by 40%. Good quality light with no flickering.', isVerified: true, helpful: 9 },
+      { productId: ledPanel.id, userId: buyer2.id, rating: 5, title: 'Perfect for commercial spaces', body: 'We installed 100 panels across our warehouse. Excellent brightness distribution and very low maintenance. The bulk discount at 100+ units is great.', isVerified: true, helpful: 11 },
+    ],
+  });
+  console.log('✅ Reviews created: 2 reviews per product');
 
   // Upsert default coupon
   const now = new Date();
