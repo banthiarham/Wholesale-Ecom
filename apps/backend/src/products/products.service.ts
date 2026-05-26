@@ -79,9 +79,16 @@ export class ProductsService {
   }
 
   async update(id: string, data: any) {
+    const { tierPrices, ...rest } = data;
+    if (tierPrices) {
+      await this.prisma.tierPrice.deleteMany({ where: { productId: id } });
+    }
     return this.prisma.product.update({
       where: { id },
-      data,
+      data: {
+        ...rest,
+        tierPrices: tierPrices ? { create: tierPrices } : undefined,
+      },
       include: { category: true, tierPrices: true },
     });
   }

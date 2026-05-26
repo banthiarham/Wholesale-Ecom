@@ -42,9 +42,9 @@ export class CategoriesController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.VENDOR)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new category (Admin only)' })
+  @ApiOperation({ summary: 'Create a new category (Admin/Vendor)' })
   @ApiResponse({ status: 201, description: 'Category created' })
   @ApiBody({ type: CreateCategoryDto })
   async create(@Body() dto: CreateCategoryDto) {
