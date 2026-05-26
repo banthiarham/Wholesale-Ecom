@@ -145,6 +145,22 @@ export default function CartPage() {
     return sum + (listPrice - effectivePrice) * item.quantity
   }, 0)
 
+  // Parse pricing metadata to show discount breakdown
+  const discountBreakdown = (data?.cart.items ?? []).reduce((acc, item) => {
+    const meta = (item as any).metadata?.pricing
+    if (!meta) return acc
+    if (meta.contractPrice && meta.contractPrice < meta.basePrice) {
+      acc.contract = (acc.contract || 0) + (meta.basePrice - meta.contractPrice) * item.quantity
+    }
+    if (meta.seasonalDiscount > 0) {
+      acc.seasonal = (acc.seasonal || 0) + meta.seasonalDiscount * item.quantity
+      if (meta.appliedDiscounts?.length) {
+        meta.appliedDiscounts.forEach((d: string) => { if (!acc.labels.includes(d)) acc.labels.push(d) })
+      }
+    }
+    return acc
+  }, { contract: 0, seasonal: 0, labels: [] as string[] } as { contract: number; seasonal: number; labels: string[] })
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -205,6 +221,9 @@ export default function CartPage() {
               couponCode={couponCode}
               total={adjustedTotal}
               totalSavings={totalSavings}
+              contractSavings={discountBreakdown.contract}
+              seasonalSavings={discountBreakdown.seasonal}
+              discountLabels={discountBreakdown.labels}
               onApplyCoupon={handleApplyCoupon}
               onRemoveCoupon={handleRemoveCoupon}
               couponLoading={couponLoading}

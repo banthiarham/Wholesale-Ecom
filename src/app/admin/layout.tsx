@@ -10,6 +10,16 @@ import {
   ShoppingBag,
   Tag,
   Warehouse,
+  FileText,
+  BookOpen,
+  BarChart3,
+  Ticket,
+  Percent,
+  Star,
+  RotateCcw,
+  Award,
+  Bell,
+  CreditCard,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -22,6 +32,17 @@ const navItems = [
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
   { label: "Categories", href: "/admin/categories", icon: Tag },
   { label: "Inventory", href: "/admin/inventory", icon: Warehouse },
+  { label: "RFQs", href: "/admin/rfqs", icon: FileText },
+  { label: "Catalogs", href: "/admin/catalogs", icon: BookOpen },
+  { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
+  { label: "Coupons", href: "/admin/coupons", icon: Ticket },
+  { label: "Discounts", href: "/admin/discounts", icon: Percent },
+  { label: "Contract Prices", href: "/admin/contract-prices", icon: FileText },
+  { label: "Reviews", href: "/admin/reviews", icon: Star },
+  { label: "Returns", href: "/admin/returns", icon: RotateCcw },
+  { label: "Loyalty", href: "/admin/loyalty", icon: Award },
+  { label: "Notifications", href: "/admin/notifications", icon: Bell },
+  { label: "Payments", href: "/admin/payments", icon: CreditCard },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -38,13 +59,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return
     }
     fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Unauthorized")
+        return res.json()
+      })
       .then((data) => {
-        if (data.user?.role !== "ADMIN") {
+        const user = data.user || data
+        if (user?.role !== "ADMIN") {
           router.push("/")
           return
         }
-        setUser(data.user)
+        setUser(user)
         setChecking(false)
       })
       .catch(() => {
@@ -88,7 +113,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
 
-        <nav className="flex-1 py-4 space-y-1">
+        <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const active = pathname === item.href
             return (

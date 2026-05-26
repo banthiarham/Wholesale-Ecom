@@ -6,6 +6,7 @@ import Image from "next/image"
 import CategoryNav from "@/components/categories/CategoryNav"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
 import {
   ShoppingCart,
   Tag,
@@ -19,6 +20,7 @@ import {
   Users,
   BarChart3,
   ChevronRight,
+  Flame,
 } from "lucide-react"
 
 interface TierPrice { minQty: number; maxQty: number | null; price: string }
@@ -38,19 +40,23 @@ interface Product {
   category: { name: string; handle: string }
   inventoryQuantity: number
   tierPrices: TierPrice[]
+  categoryId?: string
 }
 
 export default function Home() {
   const { t } = useTranslation()
   const [products, setProducts] = useState<Product[]>([])
   const [stats, setStats] = useState({ products: 0, categories: 0, vendors: 0 })
+  const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
 
   useEffect(() => {
     Promise.all([
       fetch("/api/products?limit=8").then((r) => r.json()),
       fetch("/api/categories").then((r) => r.json()),
-    ]).then(([pData, cData]) => {
+      fetchSeasonalDiscounts(),
+    ]).then(([pData, cData, activeDiscounts]) => {
       setProducts(pData.products || [])
+      setDiscounts(activeDiscounts)
       const cats = cData.categories || []
       const vendorSet = new Set((pData.products || []).map((p: Product) => p.vendorName))
       setStats({
@@ -211,11 +217,15 @@ export default function Home() {
                         <Package size={40} className="text-gray-300" />
                       </div>
                     )}
-                    {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
-                      <span className="absolute top-3 left-3 px-2 py-0.5 bg-red-500 text-white text-xs font-semibold rounded">
-                        {Math.round(((Number(product.compareAtPrice) - Number(product.unitPrice)) / Number(product.compareAtPrice)) * 100)}% OFF
-                      </span>
-                    )}
+                    {(() => {
+                      const disc = getProductDiscount(discounts, product.id, product.categoryId || undefined)
+                      const compareOff = product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice)
+                        ? Math.round(((Number(product.compareAtPrice) - Number(product.unitPrice)) / Number(product.compareAtPrice)) * 100)
+                        : 0
+                      if (disc) return <span className="absolute top-3 left-3 px-2 py-0.5 bg-orange-500 text-white text-xs font-semibold rounded flex items-center gap-1"><Flame size={10} />{disc.name} · {discountBadge(disc)}</span>
+                      if (compareOff) return <span className="absolute top-3 left-3 px-2 py-0.5 bg-red-500 text-white text-xs font-semibold rounded">{compareOff}% OFF</span>
+                      return null
+                    })()}
                     <span className="absolute bottom-3 left-3 px-2 py-0.5 bg-black/60 text-white text-xs rounded">
                       MOQ: {product.moq}
                     </span>
@@ -274,6 +284,42 @@ export default function Home() {
             >
               View All Products <ArrowRight size={18} />
             </Link>
+          </div>
+        </section>
+      )}
+
+      {/* ── Current Deals ── */}
+      {discounts.length > 0 && (
+        <section className="bg-gradient-to-r from-orange-50 to-red-50 py-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Flame size={24} className="text-orange-500" />
+                  <h2 className="text-2xl font-bold text-gray-900">Current Deals</h2>
+                </div>
+                <p className="text-gray-500">Limited-time offers and seasonal discounts</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {discounts.slice(0, 6).map((d) => (
+                <div key={d.id} className="bg-white rounded-xl border border-orange-100 p-5 hover:shadow-md transition">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">
+                      {d.type === "PERCENTAGE" ? `${d.value}% OFF` : `₹${d.value.toLocaleString("en-IN")} OFF`}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {d.product ? d.product.title : d.category ? d.category.name : "All Products"}
+                    </span>
+                  </div>
+                  <h3 className="font-semibold text-gray-900">{d.name}</h3>
+                  {d.minQty && <p className="text-xs text-gray-500 mt-1">Min. {d.minQty} qty</p>}
+                  <p className="text-xs text-gray-400 mt-1">
+                    Valid until {new Date(d.endDate).toLocaleDateString()}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}

@@ -6,7 +6,13 @@ export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(filters?: any) {
-    const where: any = { status: 'PUBLISHED' };
+    const where: any = {};
+    if (filters?.status) {
+      const statuses = filters.status.split(',').map((s: string) => s.trim());
+      where.status = statuses.length === 1 ? statuses[0] : { in: statuses };
+    } else {
+      where.status = 'PUBLISHED';
+    }
 
     if (filters?.search) {
       where.OR = [

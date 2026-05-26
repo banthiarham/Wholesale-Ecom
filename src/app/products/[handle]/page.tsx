@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight, MessageSquare } from "lucide-react"
+import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight, MessageSquare, Flame } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { PricingBreakdown, SeasonalDiscount, fetchPricing, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
 
 interface TierPrice { id: string; minQty: number; maxQty: number | null; price: number }
 
@@ -20,6 +21,7 @@ interface Product {
   images: string[]; vendorName: string | null; rating: number; reviewCount: number; tags: string[];
   category: { id: string; name: string; handle: string } | null;
   tierPrices: TierPrice[]; reviews: Review[];
+  categoryId?: string
 }
 
 export default function ProductDetailPage() {
@@ -38,6 +40,8 @@ export default function ProductDetailPage() {
   const [reviewBody, setReviewBody] = useState("")
   const [submittingReview, setSubmittingReview] = useState(false)
   const [userHasReviewed, setUserHasReviewed] = useState(false)
+  const [pricing, setPricing] = useState<PricingBreakdown | null>(null)
+  const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
 
   useEffect(() => {
     if (!params.handle) return
@@ -51,10 +55,20 @@ export default function ProductDetailPage() {
           loadRelated(data.product)
           checkWishlist(data.product.id)
           checkUserReview(data.product.id)
+          loadPricing(data.product)
         }
         setLoading(false)
       })
+    fetchSeasonalDiscounts().then(setDiscounts)
   }, [params.handle])
+
+  const loadPricing = (p: Product) => {
+    const token = localStorage.getItem("token")
+    if (!token) return
+    const userId = JSON.parse(atob(token.split(".")[1]))?.userId || JSON.parse(atob(token.split(".")[1]))?.sub
+    if (!userId) return
+    fetchPricing(p.id, 1, userId).then(setPricing)
+  }
 
   const checkWishlist = (productId: string) => {
     const token = localStorage.getItem("token")
@@ -164,6 +178,15 @@ export default function ProductDetailPage() {
     return product.unitPrice
   }
 
+  useEffect(() => {
+    if (!product || !pricing) return
+    const token = localStorage.getItem("token")
+    if (!token) return
+    const userId = JSON.parse(atob(token.split(".")[1]))?.userId || JSON.parse(atob(token.split(".")[1]))?.sub
+    if (!userId) return
+    fetchPricing(product.id, quantity, userId).then(setPricing)
+  }, [quantity, product?.id])
+
   const effectivePrice = getEffectiveTierPrice(quantity)
   const totalCost = effectivePrice * quantity
   const savingsPerUnit = product ? Number(product.unitPrice) - effectivePrice : 0
@@ -210,7 +233,7 @@ export default function ProductDetailPage() {
           {/* Product Info */}
           <div className="space-y-5">
             {product.category && <Link href={`/categories/${product.category.handle}`} className="text-sm text-primary-600 hover:underline">{product.category.name}</Link>}
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">{product.title} {product.tags?.includes('best-seller') && <span className="text-sm bg-amber-500 text-white px-2 py-0.5 rounded font-semibold">Best Seller</span>}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3 flex-wrap">{product.title} {product.tags?.includes('best-seller') && <span className="text-sm bg-amber-500 text-white px-2 py-0.5 rounded font-semibold">Best Seller</span>}{getProductDiscount(discounts, product.id, product.categoryId || product.category?.id) && <span className="text-sm bg-orange-500 text-white px-2 py-0.5 rounded font-semibold flex items-center gap-1"><Flame size={12} />{discountBadge(getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)!)}</span>}</h1>
 
             <div className="flex items-center gap-2">
               <div className="flex text-yellow-500">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={18} fill={i < Math.round(product.rating) ? "currentColor" : "none"} className={i < Math.round(product.rating) ? "" : "text-gray-300"} />)}</div>
@@ -230,6 +253,25 @@ export default function ProductDetailPage() {
             {savingsPerUnit > 0 && (
               <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
                 <span className="text-sm text-green-700 font-medium">Bulk savings: {formatPrice(savingsPerUnit)}/unit off - you save {formatPrice(totalSavings)} total</span>
+              </div>
+            )}
+
+            {/* Contract / Seasonal Pricing Info */}
+            {pricing && (pricing.contractPrice !== null || pricing.seasonalDiscount > 0) && (
+              <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 space-y-1">
+                {pricing.contractPrice !== null && pricing.contractPrice < pricing.basePrice && (
+                  <p className="text-sm text-blue-700 font-medium">Your Contract Price: {formatPrice(pricing.contractPrice)}/unit <span className="font-normal text-blue-500">(saved {formatPrice(pricing.basePrice - pricing.contractPrice)}/unit)</span></p>
+                )}
+                {pricing.seasonalDiscount > 0 && (
+                  <p className="text-sm text-orange-700 font-medium">Seasonal Discount: -{formatPrice(pricing.seasonalDiscount)}/unit <span className="font-normal text-orange-500">({pricing.discountPercent.toFixed(1)}% off)</span></p>
+                )}
+                {pricing.appliedDiscounts?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {pricing.appliedDiscounts.map((d, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-white text-xs font-medium text-primary-700 rounded-full border border-primary-200">{d}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -300,11 +342,12 @@ export default function ProductDetailPage() {
               </div>
               <div className="bg-primary-50 rounded-lg p-4">
                 <p className="text-sm text-primary-600 mb-1">Effective Price</p>
-                <p className="text-2xl font-bold text-primary-700">{formatPrice(Number(effectivePrice))}<span className="text-sm font-normal">/unit</span></p>
+                <p className="text-2xl font-bold text-primary-700">{formatPrice(pricing?.finalPrice || Number(effectivePrice))}<span className="text-sm font-normal">/unit</span></p>
+                {pricing && pricing.discountPercent > 0 && <p className="text-xs text-primary-500 mt-1">incl. all discounts</p>}
               </div>
               <div className="bg-green-50 rounded-lg p-4">
                 <p className="text-sm text-green-600 mb-1">Total Cost</p>
-                <p className="text-2xl font-bold text-green-700">{formatPrice(totalCost)}</p>
+                <p className="text-2xl font-bold text-green-700">{formatPrice((pricing?.finalPrice || Number(effectivePrice)) * quantity)}</p>
                 {totalSavings > 0 && <p className="text-xs text-green-600 mt-1">Save {formatPrice(totalSavings)}</p>}
               </div>
             </div>

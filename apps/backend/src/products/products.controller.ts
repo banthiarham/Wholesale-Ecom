@@ -41,6 +41,7 @@ export class ProductsController {
   @ApiQuery({ name: 'max_price', required: false, description: 'Maximum price filter', type: Number })
   @ApiQuery({ name: 'in_stock', required: false, description: 'Filter in-stock items only', type: Boolean })
   @ApiQuery({ name: 'tags', required: false, description: 'Comma-separated tags' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status (PUBLISHED, DRAFT, ARCHIVED). Leave empty for published only.' })
   async findAll(
     @Query('q') search?: string,
     @Query('category') categoryId?: string,
@@ -49,6 +50,7 @@ export class ProductsController {
     @Query('max_price') maxPrice?: string,
     @Query('in_stock') inStock?: string,
     @Query('tags') tags?: string,
+    @Query('status') status?: string,
   ) {
     const filters: any = {};
     if (search) filters.search = search;
@@ -58,6 +60,7 @@ export class ProductsController {
     if (maxPrice) filters.maxPrice = parseFloat(maxPrice);
     if (inStock === 'true') filters.inStock = true;
     if (tags) filters.tags = tags.split(',');
+    if (status) filters.status = status;
 
     const products = await this.productsService.findAll(filters);
     return { products, count: products.length };

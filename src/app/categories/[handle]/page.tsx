@@ -18,8 +18,10 @@ import {
   Dumbbell,
   Paintbrush,
   Filter,
+  Flame,
 } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
 
 interface Product {
   id: string
@@ -36,6 +38,8 @@ interface Product {
   reviewCount: number
   vendorName: string | null
   tierPrices: { minQty: number; maxQty: number | null; price: string }[]
+  categoryId?: string
+  category?: { id: string }
 }
 
 interface Category {
@@ -69,12 +73,14 @@ export default function CategoryPage() {
   const [category, setCategory] = useState<Category | null>(null)
   const [loading, setLoading] = useState(true)
   const [addingId, setAddingId] = useState<string | null>(null)
+  const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
 
   useEffect(() => {
     if (!params.handle) return
     fetch(`/api/categories/${params.handle}`)
       .then((res) => res.json())
       .then((data) => { if (data.category) setCategory(data.category); setLoading(false) })
+    fetchSeasonalDiscounts().then(setDiscounts)
   }, [params.handle])
 
   const handleAddToCart = async (productId: string, qty: number) => {
@@ -180,6 +186,11 @@ export default function CategoryPage() {
                       {Math.round(((Number(product.compareAtPrice) - Number(product.unitPrice)) / Number(product.compareAtPrice)) * 100)}% OFF
                     </span>
                   )}
+                  {(() => {
+                    const disc = getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)
+                    if (disc) return <span className="absolute top-3 left-3 px-2 py-0.5 bg-orange-500 text-white text-xs font-semibold rounded flex items-center gap-1"><Flame size={10} />{disc.name}</span>
+                    return null
+                  })()}
                   <span className="absolute bottom-3 left-3 px-2 py-0.5 bg-black/60 text-white text-xs rounded">
                     MOQ: {product.moq}
                   </span>

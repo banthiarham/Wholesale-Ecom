@@ -157,9 +157,6 @@ export default function Header() {
 
   const userLinks = user
     ? [
-        ...(user.role === "VENDOR"
-          ? [{ href: "/vendor/dashboard", label: t("nav.vendor"), icon: BarChart3 }]
-          : []),
         ...(user.role === "ADMIN"
           ? [{ href: "/admin", label: "Admin", icon: Settings }]
           : []),
@@ -173,6 +170,8 @@ export default function Header() {
         { href: "/notifications", label: t("nav.notifications"), icon: Bell },
       ]
     : []
+
+  if (pathname?.startsWith("/admin")) return null
 
   return (
     <header

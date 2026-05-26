@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Search, ChevronDown, ChevronUp, Eye, Package } from "lucide-react"
+import { Search, ChevronDown, ChevronUp, Eye, Truck, X } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
 interface Order {
@@ -27,6 +27,10 @@ export default function AdminOrdersPage() {
   const [sortKey, setSortKey] = useState<keyof Order>("createdAt")
   const [sortDesc, setSortDesc] = useState(true)
   const [detailOrder, setDetailOrder] = useState<Order | null>(null)
+  const [showTracking, setShowTracking] = useState(false)
+  const [trackingNumber, setTrackingNumber] = useState("")
+  const [carrier, setCarrier] = useState("")
+  const [trackingLoading, setTrackingLoading] = useState(false)
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   useEffect(() => {
@@ -95,6 +99,26 @@ export default function AdminOrdersPage() {
     } catch (err) {
       console.error(err)
       alert("Failed to cancel order")
+    }
+  }
+
+  const updateTracking = async () => {
+    if (!detailOrder) return
+    setTrackingLoading(true)
+    try {
+      await fetch(`/api/orders/${detailOrder.id}/tracking`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ trackingNumber: trackingNumber || undefined, carrier: carrier || undefined }),
+      })
+      setShowTracking(false)
+      setTrackingNumber("")
+      setCarrier("")
+    } catch (err) {
+      console.error(err)
+      alert("Failed to update tracking")
+    } finally {
+      setTrackingLoading(false)
     }
   }
 
@@ -241,7 +265,7 @@ export default function AdminOrdersPage() {
                 <span className="text-lg font-bold text-primary-700">{formatPrice(Number(detailOrder.total))}</span>
               </div>
 
-              {detailOrder.status !== "CANCELLED" && detailOrder.status !== "DELIVERED" && (
+                  {detailOrder.status !== "CANCELLED" && detailOrder.status !== "DELIVERED" && (
                 <div className="space-y-2 pt-2">
                   <p className="text-sm font-medium text-gray-700">Update Status:</p>
                   <div className="flex flex-wrap gap-2">
@@ -261,6 +285,22 @@ export default function AdminOrdersPage() {
                       Cancel Order
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Update Tracking */}
+              {detailOrder.status !== "CANCELLED" && (
+                <div className="space-y-2 pt-2 border-t border-gray-100">
+                  <button onClick={() => setShowTracking(!showTracking)} className="flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition">
+                    <Truck size={16} /> Update Tracking
+                  </button>
+                  {showTracking && (
+                    <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+                      <input type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Tracking Number" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="text" value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier (e.g. FedEx, DHL)" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <button onClick={updateTracking} disabled={trackingLoading} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50">{trackingLoading ? "Updating..." : "Save Tracking"}</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

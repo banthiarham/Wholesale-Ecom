@@ -48,7 +48,8 @@ export default function LoginPage() {
           }
         }
         window.dispatchEvent(new CustomEvent("auth-change", { detail: data.user }))
-        const redirectTo = data.user?.role === "VENDOR" ? "/vendor/dashboard" : "/"
+        const role = data.user?.role
+        const redirectTo = role === "ADMIN" ? "/admin" : role === "VENDOR" ? "/vendor/dashboard" : "/"
         router.push(redirectTo)
       }
     } catch (err) {

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Search, SlidersHorizontal, X, GitCompare, Heart } from "lucide-react"
+import { Search, SlidersHorizontal, X, GitCompare, Heart, Flame } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
+import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
 
 interface Product {
   id: string
@@ -20,6 +21,8 @@ interface Product {
   vendorName: string | null
   tags: string[]
   tierPrices: { minQty: number; maxQty: number | null; price: number }[]
+  categoryId?: string
+  category?: { id: string; name: string; handle: string }
 }
 
 interface Category {
@@ -37,6 +40,7 @@ export default function ProductsPage() {
   const [filters, setFilters] = useState({ category: "", minPrice: "", maxPrice: "", inStock: false })
   const [showFilters, setShowFilters] = useState(false)
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set())
+  const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const { t } = useTranslation()
 
   useEffect(() => {
@@ -63,6 +67,7 @@ export default function ProductsPage() {
         flatten(data.categories || [])
         setCategories(cats)
       })
+    fetchSeasonalDiscounts().then(setDiscounts)
     loadProducts()
   }, [])
 
@@ -215,6 +220,11 @@ export default function ProductsPage() {
                     {product.tags?.includes('best-seller') && (
                       <span className="absolute top-2 left-2 bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded">Best Seller</span>
                     )}
+                    {(() => {
+                      const disc = getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)
+                      if (disc) return <span className="absolute top-2 left-2 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><Flame size={10} />{discountBadge(disc)}</span>
+                      return null
+                    })()}
                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={(e) => toggleWishlist(e, product.id)} className={`p-1.5 rounded-full shadow-sm ${wishlistIds.has(product.id) ? "bg-red-50 text-red-500" : "bg-white/90 text-gray-500 hover:text-red-500"}`}>
                         <Heart size={14} fill={wishlistIds.has(product.id) ? "currentColor" : "none"} />

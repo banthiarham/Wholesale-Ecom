@@ -37,7 +37,7 @@ export class OrdersController {
   @ApiResponse({ status: 400, description: 'Cart is empty' })
   @ApiBody({ type: CreateOrderDto })
   async create(
-    @Body() body: { cartId: string; shippingAddress: any; billingAddress?: any; notes?: string },
+    @Body() body: CreateOrderDto,
     @CurrentUser() user: any,
   ) {
     const order = await this.ordersService.createFromCart(
@@ -47,6 +47,7 @@ export class OrdersController {
         shippingAddress: body.shippingAddress,
         billingAddress: body.billingAddress,
         notes: body.notes,
+        couponCode: body.couponCode,
       },
     );
     return { order };

@@ -14,6 +14,9 @@ interface Props {
   couponDiscount?: number
   couponCode?: string | null
   totalSavings?: number
+  contractSavings?: number
+  seasonalSavings?: number
+  discountLabels?: string[]
   onApplyCoupon?: (code: string) => void
   onRemoveCoupon?: () => void
   couponLoading?: boolean
@@ -29,6 +32,9 @@ export default function CartSummary({
   couponDiscount = 0,
   couponCode,
   totalSavings = 0,
+  contractSavings = 0,
+  seasonalSavings = 0,
+  discountLabels = [],
   onApplyCoupon,
   onRemoveCoupon,
   couponLoading,
@@ -56,6 +62,18 @@ export default function CartSummary({
                 Wholesale Savings
               </span>
               <span className="font-medium text-green-600">-{formatPrice(totalSavings)}</span>
+            </div>
+          )}
+          {contractSavings > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">Contract Price Savings</span>
+              <span className="font-medium text-green-600">-{formatPrice(contractSavings)}</span>
+            </div>
+          )}
+          {seasonalSavings > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">Seasonal Discount</span>
+              <span className="font-medium text-green-600">-{formatPrice(seasonalSavings)}</span>
             </div>
           )}
           {tax > 0 && (
@@ -127,7 +145,7 @@ export default function CartSummary({
       </div>
 
       {/* Savings callout */}
-      {totalSavings > 0 && (
+      {(totalSavings > 0 || discountLabels.length > 0) && (
         <div className="bg-green-50 border border-green-100 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1">
             <TrendingDown size={18} className="text-green-600" />
@@ -136,6 +154,13 @@ export default function CartSummary({
           <p className="text-xs text-green-700">
             Wholesale tier pricing and bulk discounts are applied automatically to your order.
           </p>
+          {discountLabels.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {discountLabels.map((label, i) => (
+                <span key={i} className="px-2 py-0.5 bg-white text-xs font-medium text-primary-700 rounded-full border border-primary-200">{label}</span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

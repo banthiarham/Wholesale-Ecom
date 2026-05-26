@@ -12,7 +12,7 @@ export class OrdersService {
     private emailService: EmailService,
   ) {}
 
-  async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string }) {
+  async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string; couponCode?: string }) {
     const cart = await this.prisma.cart.findUnique({
       where: { id: cartId },
       include: { items: { include: { product: true } } },
@@ -34,6 +34,35 @@ export class OrdersService {
       };
     });
 
+    // Apply coupon discount if provided
+    let couponDiscount = 0;
+    let appliedCoupon: any = null;
+    if (data.couponCode) {
+      const coupon = await this.prisma.coupon.findFirst({
+        where: { code: data.couponCode.toUpperCase(), isActive: true },
+      });
+      if (coupon) {
+        const now = new Date();
+        const isValid =
+          (!coupon.startDate || new Date(coupon.startDate) <= now) &&
+          (!coupon.endDate || new Date(coupon.endDate) >= now) &&
+          (!coupon.maxUses || coupon.usedCount < coupon.maxUses) &&
+          (!coupon.minOrderValue || totalAmount >= Number(coupon.minOrderValue));
+
+        if (isValid) {
+          if (coupon.type === 'PERCENTAGE') {
+            couponDiscount = totalAmount * (Number(coupon.value) / 100);
+          } else {
+            couponDiscount = Number(coupon.value);
+          }
+          couponDiscount = Math.min(couponDiscount, totalAmount);
+          appliedCoupon = coupon;
+        }
+      }
+    }
+
+    totalAmount = Math.max(0, totalAmount - couponDiscount);
+
     const order = await this.prisma.order.create({
       data: {
         userId,
@@ -49,6 +78,14 @@ export class OrdersService {
         user: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
     });
+
+    // Increment coupon usage if applied
+    if (appliedCoupon) {
+      await this.prisma.coupon.update({
+        where: { id: appliedCoupon.id },
+        data: { usedCount: { increment: 1 } },
+      });
+    }
 
     await this.prisma.cartItem.deleteMany({ where: { cartId } });
 

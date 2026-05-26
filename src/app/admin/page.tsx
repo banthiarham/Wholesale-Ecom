@@ -2,7 +2,23 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Users, Package, ShoppingBag, DollarSign, TrendingUp, TrendingDown, Activity } from "lucide-react"
+import {
+  Users,
+  Package,
+  ShoppingBag,
+  DollarSign,
+  AlertTriangle,
+  FileText,
+  Plus,
+  Activity,
+  ChevronRight,
+  Clock,
+  Boxes,
+  Star,
+  IndianRupee,
+  Truck,
+  BarChart3,
+} from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
 interface DashboardStats {
@@ -10,54 +26,121 @@ interface DashboardStats {
   totalProducts: number
   totalOrders: number
   totalRevenue: number
-  ordersByStatus: { status: string; count: number }[]
   recentActivity: { id: string; action: string; user: string; createdAt: string }[]
+}
+
+interface VendorDashData {
+  productCount: number
+  lowStockCount: number
+  orderCount: number
+  revenue: number
+  pendingRfqCount: number
+}
+
+interface RecentOrder {
+  id: string
+  orderNumber: string
+  status: string
+  totalAmount: number
+  createdAt: string
+  user: { firstName: string; lastName: string }
+  items: { product: { title: string }; quantity: number; totalPrice: number }[]
+}
+
+interface PendingRfq {
+  id: string
+  title: string
+  status: string
+  createdAt: string
+  buyer: { firstName: string; lastName: string }
+  _count: { quotes: number }
+}
+
+interface SalesData {
+  totalRevenue: number
+  totalItems: number
+  revenueByDay: { date: string; revenue: number }[]
+  topProducts: { product: { title: string }; quantity: number; revenue: number }[]
+}
+
+interface OrdersByStatus {
+  [key: string]: number
+}
+
+const statusColor = (status: string) => {
+  const map: Record<string, string> = {
+    PENDING: "bg-yellow-100 text-yellow-700",
+    CONFIRMED: "bg-blue-100 text-blue-700",
+    PROCESSING: "bg-purple-100 text-purple-700",
+    SHIPPED: "bg-indigo-100 text-indigo-700",
+    DELIVERED: "bg-green-100 text-green-700",
+    CANCELLED: "bg-red-100 text-red-700",
+  }
+  return map[status] || "bg-gray-100 text-gray-700"
 }
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [vendorData, setVendorData] = useState<VendorDashData | null>(null)
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([])
+  const [pendingRfqs, setPendingRfqs] = useState<PendingRfq[]>([])
+  const [sales, setSales] = useState<SalesData | null>(null)
+  const [ordersByStatus, setOrdersByStatus] = useState<OrdersByStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [usersRes, productsRes, ordersRes, analyticsRes, activityRes] = await Promise.all([
-          fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/products", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/orders", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/analytics/sales", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/analytics/activity?limit=10", { headers: { Authorization: `Bearer ${token}` } }),
-        ])
+    const token = localStorage.getItem("token")
+    if (!token) return
 
-        const users = usersRes.ok ? await usersRes.json() : { users: [] }
-        const products = productsRes.ok ? await productsRes.json() : { products: [] }
-        const orders = ordersRes.ok ? await ordersRes.json() : { orders: [] }
-        const analytics = analyticsRes.ok ? await analyticsRes.json() : { totalRevenue: 0 }
-        const activity = activityRes.ok ? await activityRes.json() : { activities: [] }
+    Promise.all([
+      fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch("/api/orders", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch("/api/analytics/sales", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch("/api/analytics/orders-by-status", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch("/api/analytics/activity?limit=10", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch("/api/rfqs", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch("/api/inventory", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+    ])
+      .then(([users, products, orders, analytics, ordersStatus, activity, rfqsData, inventoryData]) => {
+        const inventoryItems = Array.isArray(inventoryData) ? inventoryData : inventoryData.items ?? inventoryData.inventory ?? []
+        const lowStockCount = inventoryItems.filter((item: any) => (item.stock ?? item.quantity ?? 0) <= 10).length
 
         setStats({
           totalUsers: users.users?.length ?? 0,
           totalProducts: products.products?.length ?? 0,
           totalOrders: orders.orders?.length ?? 0,
           totalRevenue: analytics.totalRevenue ?? 0,
-          ordersByStatus: orders.ordersByStatus ?? [],
           recentActivity: activity.activities ?? [],
         })
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [token])
+        setOrdersByStatus(ordersStatus)
+        setVendorData({
+          productCount: products.products?.length ?? 0,
+          lowStockCount,
+          orderCount: orders.orders?.length ?? 0,
+          revenue: analytics.totalRevenue ?? 0,
+          pendingRfqCount: Array.isArray(rfqsData) ? rfqsData.filter((r: any) => r.status === 'SUBMITTED' || r.status === 'UNDER_REVIEW').length : 0,
+        })
+        setRecentOrders((orders.orders ?? []).slice(0, 5))
+        const allRfqs = Array.isArray(rfqsData) ? rfqsData : rfqsData.rfqs ?? []
+        setPendingRfqs(allRfqs.filter((r: any) => r.status === 'SUBMITTED' || r.status === 'UNDER_REVIEW').slice(0, 5))
+        setSales(analytics)
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const maxRevenue = sales?.revenueByDay?.length
+    ? Math.max(...sales.revenueByDay.map((d) => d.revenue))
+    : 0
 
   const cards = [
     { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, href: "/admin/users", color: "text-blue-600", bg: "bg-blue-50" },
     { label: "Total Products", value: stats?.totalProducts ?? 0, icon: Package, href: "/admin/products", color: "text-purple-600", bg: "bg-purple-50" },
     { label: "Total Orders", value: stats?.totalOrders ?? 0, icon: ShoppingBag, href: "/admin/orders", color: "text-green-600", bg: "bg-green-50" },
-    { label: "Total Revenue", value: formatPrice(stats?.totalRevenue ?? 0), icon: DollarSign, href: "/admin/orders", color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Total Revenue", value: formatPrice(stats?.totalRevenue ?? 0), icon: IndianRupee, href: "/admin/orders", color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Low Stock", value: vendorData?.lowStockCount ?? 0, icon: AlertTriangle, href: "/admin/inventory", color: (vendorData?.lowStockCount ?? 0) > 0 ? "text-red-600" : "text-gray-400", bg: (vendorData?.lowStockCount ?? 0) > 0 ? "bg-red-50" : "bg-gray-50" },
+    { label: "Pending RFQs", value: vendorData?.pendingRfqCount ?? 0, icon: FileText, href: "/admin/rfqs", color: "text-yellow-600", bg: "bg-yellow-50" },
   ]
 
   if (loading) {
@@ -70,19 +153,209 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stat cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {cards.map((c) => (
-          <Link key={c.label} href={c.href} className={`${c.bg} rounded-lg border border-gray-100 p-5 hover:shadow-sm transition`}>
+          <Link key={c.label} href={c.href} className={`${c.bg} rounded-xl border border-gray-100 p-5 hover:shadow-sm transition group`}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">{c.label}</span>
-              <c.icon size={20} className={c.color} />
+              <c.icon size={18} className={c.color} />
             </div>
             <p className="text-2xl font-bold text-gray-900">{c.value}</p>
           </Link>
         ))}
       </div>
 
+      {/* Quick Actions */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { href: "/admin/products", icon: Plus, label: "Add Product", color: "text-primary-600", bg: "bg-primary-50" },
+            { href: "/admin/inventory", icon: Boxes, label: "Update Inventory", color: "text-amber-600", bg: "bg-amber-50" },
+            { href: "/admin/rfqs", icon: FileText, label: "Respond to RFQs", color: "text-blue-600", bg: "bg-blue-50" },
+            { href: "/admin/catalogs", icon: BarChart3, label: "Create Catalog", color: "text-purple-600", bg: "bg-purple-50" },
+            { href: "/admin/orders", icon: Truck, label: "Manage Orders", color: "text-green-600", bg: "bg-green-50" },
+            { href: "/admin/users", icon: Users, label: "Manage Users", color: "text-red-600", bg: "bg-red-50" },
+          ].map((action) => (
+            <Link key={action.label} href={action.href} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition group">
+              <div className={`w-10 h-10 ${action.bg} rounded-lg flex items-center justify-center shrink-0`}>
+                <action.icon size={18} className={action.color} />
+              </div>
+              <span className="text-sm font-medium text-gray-900">{action.label}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Main content grid: Recent Orders + Pending RFQs */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Orders */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Recent Orders</h2>
+            <Link href="/admin/orders" className="text-sm text-primary-600 hover:underline font-medium flex items-center gap-1">
+              View All <ChevronRight size={14} />
+            </Link>
+          </div>
+          {recentOrders.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              <ShoppingBag size={32} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-sm text-gray-400">No orders yet</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="px-6 py-4 hover:bg-gray-50 transition">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-gray-900">#{order.orderNumber?.slice(0, 8) || order.id.slice(0, 8)}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor(order.status)}`}>
+                        {order.status}
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900">{formatPrice(order.totalAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-400">
+                    <span>{order.user?.firstName} {order.user?.lastName} — {order.items?.length || 0} item(s)</span>
+                    <span className="flex items-center gap-1"><Clock size={12} />{new Date(order.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pending RFQs */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Pending RFQs</h2>
+            <Link href="/admin/rfqs" className="text-sm text-primary-600 hover:underline font-medium flex items-center gap-1">
+              All <ChevronRight size={14} />
+            </Link>
+          </div>
+          {pendingRfqs.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              <FileText size={32} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-sm text-gray-400">No pending RFQs</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {pendingRfqs.map((rfq) => (
+                <Link key={rfq.id} href="/admin/rfqs" className="block px-6 py-4 hover:bg-gray-50 transition">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">{rfq.title}</p>
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-100 text-yellow-700 shrink-0 ml-2">
+                      {rfq.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-400">
+                    <span>{rfq.buyer?.firstName} {rfq.buyer?.lastName}</span>
+                    <span>{rfq._count?.quotes ?? 0} quote(s)</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Revenue Chart + Top Products + Low Stock */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Revenue chart */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div>
+              <h2 className="font-semibold text-gray-900">Revenue (Last 30 Days)</h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {sales?.totalItems ?? 0} items sold — Total: {formatPrice(sales?.totalRevenue ?? 0)}
+              </p>
+            </div>
+          </div>
+          <div className="px-6 py-6">
+            {sales?.revenueByDay && sales.revenueByDay.length > 0 ? (
+              <div className="flex items-end gap-1.5 h-36">
+                {sales.revenueByDay.map((d) => {
+                  const height = maxRevenue > 0 ? (d.revenue / maxRevenue) * 100 : 0
+                  return (
+                    <div key={d.date} className="flex-1 flex flex-col items-center group" title={`${d.date}: ${formatPrice(d.revenue)}`}>
+                      <div className="relative w-full flex justify-center">
+                        <div className="hidden group-hover:block absolute -top-6 text-[10px] font-medium text-white bg-gray-900 px-1.5 py-0.5 rounded whitespace-nowrap">
+                          {formatPrice(d.revenue)}
+                        </div>
+                      </div>
+                      <div className="w-full bg-primary-500 rounded-t hover:bg-primary-600 transition min-h-[4px]" style={{ height: `${Math.max(height, 3)}%` }} />
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="h-36 flex items-center justify-center">
+                <p className="text-sm text-gray-400">No sales data yet</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Top Products */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Top Products</h2>
+            <Link href="/admin/products" className="text-sm text-primary-600 hover:underline font-medium flex items-center gap-1">
+              All <ChevronRight size={14} />
+            </Link>
+          </div>
+          {sales?.topProducts && sales.topProducts.length > 0 ? (
+            <div className="divide-y divide-gray-50">
+              {sales.topProducts.slice(0, 5).map((p, i) => (
+                <div key={i} className="px-6 py-3.5 flex items-center gap-3">
+                  <span className="w-6 h-6 rounded-full bg-primary-50 text-primary-600 text-xs font-bold flex items-center justify-center shrink-0">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{p.product?.title}</p>
+                    <p className="text-xs text-gray-400">{p.quantity} sold</p>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900">{formatPrice(p.revenue)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="px-6 py-12 text-center">
+              <Star size={32} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-sm text-gray-400">No sales data yet</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recent Activity + Low Stock Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Orders by Status */}
+        {ordersByStatus && Object.keys(ordersByStatus).length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900">Orders by Status</h2>
+              <Link href="/admin/orders" className="text-sm text-primary-600 hover:underline font-medium flex items-center gap-1">
+                View All <ChevronRight size={14} />
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {Object.entries(ordersByStatus).map(([status, count]) => (
+                <div key={status} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor(status)}`}>
+                      {status}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900">{count as number}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent Activity */}
         <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
           {stats?.recentActivity && stats.recentActivity.length > 0 ? (
@@ -102,26 +375,37 @@ export default function AdminDashboardPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Links</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/admin/users" className="p-4 rounded-lg border border-gray-100 hover:border-primary-300 hover:bg-primary-50 transition">
-              <Users size={20} className="text-primary-600 mb-2" />
-              <p className="font-medium text-sm text-gray-900">Manage Users</p>
-            </Link>
-            <Link href="/admin/products" className="p-4 rounded-lg border border-gray-100 hover:border-primary-300 hover:bg-primary-50 transition">
-              <Package size={20} className="text-primary-600 mb-2" />
-              <p className="font-medium text-sm text-gray-900">Manage Products</p>
-            </Link>
-            <Link href="/admin/orders" className="p-4 rounded-lg border border-gray-100 hover:border-primary-300 hover:bg-primary-50 transition">
-              <ShoppingBag size={20} className="text-primary-600 mb-2" />
-              <p className="font-medium text-sm text-gray-900">Manage Orders</p>
-            </Link>
-            <Link href="/admin/categories" className="p-4 rounded-lg border border-gray-100 hover:border-primary-300 hover:bg-primary-50 transition">
-              <TrendingUp size={20} className="text-primary-600 mb-2" />
-              <p className="font-medium text-sm text-gray-900">Manage Categories</p>
+        {/* Low Stock Alerts */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Low Stock Alerts</h2>
+            <Link href="/admin/inventory" className="text-sm text-primary-600 hover:underline font-medium flex items-center gap-1">
+              Manage <ChevronRight size={14} />
             </Link>
           </div>
+          {(vendorData?.lowStockCount ?? 0) > 0 ? (
+            <div className="px-6 py-8 text-center">
+              <div className="w-14 h-14 bg-red-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={24} className="text-red-500" />
+              </div>
+              <p className="text-lg font-bold text-gray-900 mb-1">{vendorData?.lowStockCount} products low on stock</p>
+              <p className="text-sm text-gray-400 mb-4">Items with 10 or fewer units remaining</p>
+              <Link
+                href="/admin/inventory"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition text-sm font-semibold"
+              >
+                <Boxes size={16} /> Restock Now
+              </Link>
+            </div>
+          ) : (
+            <div className="px-6 py-12 text-center">
+              <div className="w-14 h-14 bg-green-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <Boxes size={24} className="text-green-500" />
+              </div>
+              <p className="text-sm text-green-600 font-medium">All products well-stocked</p>
+              <p className="text-xs text-gray-400 mt-1">No items below threshold</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
