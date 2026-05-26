@@ -3,17 +3,64 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { ShoppingCart, ArrowLeft } from "lucide-react"
+import {
+  ShoppingCart,
+  ArrowLeft,
+  Star,
+  Package,
+  Cpu,
+  Shirt,
+  Wrench,
+  Sparkles,
+  Utensils,
+  Heart,
+  BookOpen,
+  Dumbbell,
+  Paintbrush,
+  Filter,
+} from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface Product {
-  id: string; title: string; handle: string; sku: string | null; thumbnail: string | null;
-  unitPrice: number; compareAtPrice: number | null; moq: number; inventoryQuantity: number;
-  rating: number; vendorName: string | null;
+  id: string
+  title: string
+  handle: string
+  sku: string | null
+  thumbnail: string | null
+  images: string[]
+  unitPrice: string
+  compareAtPrice: string | null
+  moq: number
+  inventoryQuantity: number
+  rating: number
+  reviewCount: number
+  vendorName: string | null
 }
 
 interface Category {
-  id: string; name: string; handle: string; description: string | null; products: Product[];
+  id: string
+  name: string
+  handle: string
+  description: string | null
+  products: Product[]
+}
+
+const categoryMeta: Record<string, { icon: any; gradient: string }> = {
+  electronics: { icon: Cpu, gradient: "from-blue-600 to-cyan-500" },
+  fashion: { icon: Shirt, gradient: "from-pink-500 to-rose-400" },
+  industrial: { icon: Wrench, gradient: "from-amber-600 to-orange-500" },
+  food: { icon: Utensils, gradient: "from-green-600 to-emerald-500" },
+  health: { icon: Heart, gradient: "from-red-500 to-pink-500" },
+  books: { icon: BookOpen, gradient: "from-indigo-600 to-violet-500" },
+  sports: { icon: Dumbbell, gradient: "from-teal-500 to-cyan-500" },
+  art: { icon: Paintbrush, gradient: "from-fuchsia-500 to-purple-500" },
+  beauty: { icon: Sparkles, gradient: "from-purple-500 to-pink-400" },
+}
+
+const defaultMeta = { icon: Package, gradient: "from-gray-600 to-slate-500" }
+
+function getMeta(handle: string) {
+  return categoryMeta[handle.toLowerCase()] || defaultMeta
 }
 
 export default function CategoryPage() {
@@ -32,55 +79,148 @@ export default function CategoryPage() {
   const handleAddToCart = async (productId: string, qty: number) => {
     setAddingId(productId)
     try {
-      await fetch("/api/cart", { method: "POST", headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() }, body: JSON.stringify({ productId, quantity: qty }) })
-      alert("Added to cart!")
-    } catch (err) { console.error(err) } finally { setAddingId(null) }
+      await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
+        body: JSON.stringify({ productId, quantity: qty }),
+      })
+      window.dispatchEvent(new CustomEvent("cart-updated"))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAddingId(null)
+    }
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
-  if (!category) return <div className="min-h-screen flex flex-col items-center justify-center"><h1 className="text-2xl font-bold">Category not found</h1><Link href="/products" className="mt-4 text-primary-600">Browse products</Link></div>
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    )
+  }
+
+  if (!category) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <Package size={48} className="text-gray-300 mb-4" />
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Category not found</h1>
+        <Link href="/categories" className="text-primary-600 hover:underline">Browse all categories</Link>
+      </div>
+    )
+  }
+
+  const meta = getMeta(category.handle)
+  const Icon = meta.icon
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="text-xl font-bold text-primary-700">WholesaleX Pro</div>
-          <div className="flex gap-4">
-            <Link href="/products" className="text-gray-600 hover:text-primary-600">Products</Link>
-            <Link href="/cart" className="text-gray-600 hover:text-primary-600">Cart</Link>
+      {/* Category hero banner */}
+      <section className={`relative bg-gradient-to-br ${meta.gradient} overflow-hidden`}>
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 right-0 w-72 h-72 bg-white rounded-full blur-3xl -translate-y-12 translate-x-12" />
+          <div className="absolute bottom-0 left-0 w-56 h-56 bg-white rounded-full blur-3xl translate-y-8 -translate-x-8" />
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+          <Link href="/categories" className="inline-flex items-center gap-1.5 text-white/80 hover:text-white text-sm font-medium mb-6 transition">
+            <ArrowLeft size={16} /> All Categories
+          </Link>
+          <div className="flex items-center gap-5 mb-4">
+            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+              <Icon size={30} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl lg:text-4xl font-bold text-white">{category.name}</h1>
+              {category.description && (
+                <p className="text-white/70 mt-1 max-w-lg">{category.description}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-6 mt-6">
+            <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm text-white text-sm font-semibold rounded-full">
+              {category.products.length} {category.products.length === 1 ? "Product" : "Products"}
+            </span>
           </div>
         </div>
-      </header>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/products" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> All products</Link>
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">{category.name}</h1>
-          {category.description && <p className="text-gray-600 mt-2">{category.description}</p>}
-          <p className="text-sm text-gray-500 mt-1">{category.products.length} products</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {category.products.map((product) => (
-            <div key={product.id} className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition">
-              <Link href={`/products/${product.handle}`}>
-                <div className="h-48 bg-gray-100 relative">
-                  {product.thumbnail ? <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>}
+      </section>
+
+      {/* Products grid */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {category.products.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
+            <Package size={40} className="mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500 font-medium">No products in this category yet</p>
+            <Link href="/products" className="mt-3 inline-block text-sm text-primary-600 hover:underline">
+              Browse all products
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {category.products.map((product) => (
+              <Link
+                key={product.id}
+                href={`/products/${product.handle}`}
+                className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all group"
+              >
+                <div className="relative h-48 bg-gray-100">
+                  {product.thumbnail || product.images?.[0] ? (
+                    <img
+                      src={product.thumbnail || product.images[0]}
+                      alt={product.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Package size={40} className="text-gray-300" />
+                    </div>
+                  )}
+                  {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
+                    <span className="absolute top-3 left-3 px-2 py-0.5 bg-red-500 text-white text-xs font-semibold rounded">
+                      {Math.round(((Number(product.compareAtPrice) - Number(product.unitPrice)) / Number(product.compareAtPrice)) * 100)}% OFF
+                    </span>
+                  )}
+                  <span className="absolute bottom-3 left-3 px-2 py-0.5 bg-black/60 text-white text-xs rounded">
+                    MOQ: {product.moq}
+                  </span>
+                  {product.inventoryQuantity <= 0 && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <span className="px-3 py-1 bg-white text-gray-900 text-xs font-bold rounded">Out of Stock</span>
+                    </div>
+                  )}
+                </div>
+                <div className="p-4">
+                  <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1 group-hover:text-primary-600 transition">{product.title}</h3>
+                  {product.sku && <p className="text-xs text-gray-400 mb-1">SKU: {product.sku}</p>}
+                  {product.vendorName && <p className="text-xs text-gray-400 mb-2">{product.vendorName}</p>}
+                  {product.rating > 0 && (
+                    <div className="flex items-center gap-1 mb-2">
+                      <Star size={14} className="text-amber-400 fill-amber-400" />
+                      <span className="text-xs text-gray-600">{product.rating}</span>
+                      <span className="text-xs text-gray-400">({product.reviewCount})</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg font-bold text-gray-900">{formatPrice(product.unitPrice)}</span>
+                    {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
+                      <span className="text-sm text-gray-400 line-through">{formatPrice(product.compareAtPrice)}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (product.inventoryQuantity > 0) handleAddToCart(product.id, product.moq)
+                    }}
+                    disabled={addingId === product.id || product.inventoryQuantity <= 0}
+                    className="w-full py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <ShoppingCart size={16} />
+                    {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? "Out of Stock" : `Add ${product.moq} to Cart`}
+                  </button>
                 </div>
               </Link>
-              <div className="p-4">
-                <Link href={`/products/${product.handle}`}><h3 className="font-semibold text-gray-900 truncate hover:text-primary-600">{product.title}</h3></Link>
-                {product.sku && <p className="text-xs text-gray-500 mt-1">SKU: {product.sku}</p>}
-                <p className="text-xs text-gray-500">MOQ: {product.moq}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="font-bold text-primary-700">{formatPrice(Number(product.unitPrice))}</span>
-                  {product.compareAtPrice && <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>}
-                </div>
-                <button onClick={() => handleAddToCart(product.id, product.moq)} disabled={addingId === product.id || product.inventoryQuantity <= 0} className="mt-3 w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
-                  {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? "Out of Stock" : `Add ${product.moq} to Cart`}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   )
