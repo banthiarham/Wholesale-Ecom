@@ -198,8 +198,33 @@ export default function ProductDetailPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
   if (!product) return <div className="min-h-screen flex flex-col items-center justify-center"><h1 className="text-2xl font-bold">Product not found</h1><Link href="/products" className="mt-4 text-primary-600">Back to products</Link></div>
 
+  const productJsonLd = product ? {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.title,
+    description: product.description || `${product.title} — wholesale pricing from MOQ ${product.moq}`,
+    image: product.thumbnail || (product.images?.[0] ?? undefined),
+    sku: product.sku || undefined,
+    brand: product.vendorName ? { "@type": "Brand", name: product.vendorName } : undefined,
+    offers: {
+      "@type": "Offer",
+      priceCurrency: "INR",
+      price: product.unitPrice,
+      availability: product.inventoryQuantity > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      minPrice: product.tierPrices?.length > 0 ? product.tierPrices[product.tierPrices.length - 1].price : undefined,
+      url: typeof window !== "undefined" ? `${window.location.origin}/products/${product.handle}` : undefined,
+    },
+    aggregateRating: product.reviewCount > 0 ? {
+      "@type": "AggregateRating",
+      ratingValue: product.rating,
+      reviewCount: product.reviewCount,
+    } : undefined,
+  } : null
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      {productJsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />}
+      <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
@@ -473,5 +498,6 @@ export default function ProductDetailPage() {
         )}
       </main>
     </div>
+    </>
   )
 }

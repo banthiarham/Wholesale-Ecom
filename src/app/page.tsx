@@ -76,8 +76,19 @@ export default function Home() {
     window.dispatchEvent(new CustomEvent("cart-updated"))
   }
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "WholesaleX Pro",
+    url: typeof window !== "undefined" ? window.location.origin : "https://wholesalex.com",
+    description: "India's trusted B2B wholesale marketplace. Buy bulk products at the best prices with tier pricing, contract deals, and fast shipping across India.",
+    contactPoint: { "@type": "ContactPoint", contactType: "customer service", availableLanguage: "English" },
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <div className="min-h-screen bg-gray-50">
       {/* ── Hero ── */}
       <section className="relative bg-gradient-to-br from-primary-700 via-primary-600 to-blue-500 overflow-hidden">
         <div className="absolute inset-0 opacity-10">
@@ -409,5 +420,6 @@ export default function Home() {
         </div>
       </section>
     </div>
+    </>
   )
 }
