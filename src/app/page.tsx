@@ -21,6 +21,8 @@ import {
   ChevronRight,
 } from "lucide-react"
 
+interface TierPrice { minQty: number; maxQty: number | null; price: string }
+
 interface Product {
   id: string
   title: string
@@ -35,6 +37,7 @@ interface Product {
   reviewCount: number
   category: { name: string; handle: string }
   inventoryQuantity: number
+  tierPrices: TierPrice[]
 }
 
 export default function Home() {
@@ -216,6 +219,11 @@ export default function Home() {
                     <span className="absolute bottom-3 left-3 px-2 py-0.5 bg-black/60 text-white text-xs rounded">
                       MOQ: {product.moq}
                     </span>
+                    {product.tierPrices && product.tierPrices.length > 0 && (
+                      <span className="absolute top-3 right-3 px-2 py-0.5 bg-green-500 text-white text-xs font-semibold rounded">
+                        Bulk Pricing
+                      </span>
+                    )}
                   </div>
                   <div className="p-4">
                     <p className="text-xs text-gray-400 mb-1">{product.category?.name}</p>
@@ -232,9 +240,21 @@ export default function Home() {
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="text-lg font-bold text-gray-900">{formatPrice(product.unitPrice)}</span>
-                        {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
-                          <span className="text-sm text-gray-400 line-through ml-2">{formatPrice(product.compareAtPrice)}</span>
+                        {product.tierPrices && product.tierPrices.length > 0 ? (
+                          <>
+                            <span className="text-xs text-green-600 font-semibold">Starting from</span>
+                            <div>
+                              <span className="text-lg font-bold text-gray-900">{formatPrice(product.tierPrices[product.tierPrices.length - 1].price)}</span>
+                              <span className="text-sm text-gray-400 line-through ml-1">{formatPrice(product.unitPrice)}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-lg font-bold text-gray-900">{formatPrice(product.unitPrice)}</span>
+                            {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
+                              <span className="text-sm text-gray-400 line-through ml-2">{formatPrice(product.compareAtPrice)}</span>
+                            )}
+                          </>
                         )}
                       </div>
                       <button

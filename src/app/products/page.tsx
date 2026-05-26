@@ -18,6 +18,7 @@ interface Product {
   inventoryQuantity: number
   rating: number
   vendorName: string | null
+  tierPrices: { minQty: number; maxQty: number | null; price: number }[]
 }
 
 interface Category {
@@ -175,8 +176,18 @@ export default function ProductsPage() {
                   {product.sku && <p className="text-xs text-gray-500 mt-1">{t("product.sku")}: {product.sku}</p>}
                   <p className="text-xs text-gray-500">{t("product.moq")}: {product.moq}</p>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="font-bold text-primary-700">{formatPrice(Number(product.unitPrice))}</span>
-                    {product.compareAtPrice && <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>}
+                    {product.tierPrices && product.tierPrices.length > 0 ? (
+                      <>
+                        <span className="text-xs text-green-600 font-semibold">From </span>
+                        <span className="font-bold text-primary-700">{formatPrice(Number(product.tierPrices[product.tierPrices.length - 1].price))}</span>
+                        <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-bold text-primary-700">{formatPrice(Number(product.unitPrice))}</span>
+                        {product.compareAtPrice && <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>}
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 mt-2">
                     <span className="text-yellow-500 text-sm">{"★".repeat(Math.round(product.rating))}</span>

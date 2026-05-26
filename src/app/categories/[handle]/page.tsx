@@ -35,6 +35,7 @@ interface Product {
   rating: number
   reviewCount: number
   vendorName: string | null
+  tierPrices: { minQty: number; maxQty: number | null; price: string }[]
 }
 
 interface Category {
@@ -182,6 +183,11 @@ export default function CategoryPage() {
                   <span className="absolute bottom-3 left-3 px-2 py-0.5 bg-black/60 text-white text-xs rounded">
                     MOQ: {product.moq}
                   </span>
+                  {product.tierPrices && product.tierPrices.length > 0 && (
+                    <span className="absolute top-3 right-3 px-2 py-0.5 bg-green-500 text-white text-xs font-semibold rounded">
+                      Bulk Pricing
+                    </span>
+                  )}
                   {product.inventoryQuantity <= 0 && (
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                       <span className="px-3 py-1 bg-white text-gray-900 text-xs font-bold rounded">Out of Stock</span>
@@ -200,9 +206,19 @@ export default function CategoryPage() {
                     </div>
                   )}
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg font-bold text-gray-900">{formatPrice(product.unitPrice)}</span>
-                    {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
-                      <span className="text-sm text-gray-400 line-through">{formatPrice(product.compareAtPrice)}</span>
+                    {product.tierPrices && product.tierPrices.length > 0 ? (
+                      <>
+                        <span className="text-xs text-green-600 font-semibold">From </span>
+                        <span className="text-lg font-bold text-gray-900">{formatPrice(product.tierPrices[product.tierPrices.length - 1].price)}</span>
+                        <span className="text-sm text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-lg font-bold text-gray-900">{formatPrice(product.unitPrice)}</span>
+                        {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
+                          <span className="text-sm text-gray-400 line-through">{formatPrice(product.compareAtPrice)}</span>
+                        )}
+                      </>
                     )}
                   </div>
                   <button
