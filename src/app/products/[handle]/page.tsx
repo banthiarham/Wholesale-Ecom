@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight } from "lucide-react"
+import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight, MessageSquare } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface TierPrice { id: string; minQty: number; maxQty: number | null; price: number }
@@ -32,6 +32,12 @@ export default function ProductDetailPage() {
   const [mainImage, setMainImage] = useState<string | null>(null)
   const [inWishlist, setInWishlist] = useState(false)
   const [wishlistLoading, setWishlistLoading] = useState(false)
+  const [showReviewForm, setShowReviewForm] = useState(false)
+  const [reviewRating, setReviewRating] = useState(5)
+  const [reviewTitle, setReviewTitle] = useState("")
+  const [reviewBody, setReviewBody] = useState("")
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const [userHasReviewed, setUserHasReviewed] = useState(false)
 
   useEffect(() => {
     if (!params.handle) return
@@ -44,6 +50,7 @@ export default function ProductDetailPage() {
           setMainImage(data.product.thumbnail || (data.product.images?.[0] ?? null))
           loadRelated(data.product)
           checkWishlist(data.product.id)
+          checkUserReview(data.product.id)
         }
         setLoading(false)
       })
@@ -107,6 +114,45 @@ export default function ProductDetailPage() {
       localStorage.setItem("compareItems", JSON.stringify(items))
     }
     alert("Added to comparison!")
+  }
+
+  const checkUserReview = (productId: string) => {
+    const token = localStorage.getItem("token")
+    if (!token) return
+    fetch(`/api/reviews?productId=${productId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => {
+        const mine = (data.reviews || []).filter((r: any) => r.user?.id)
+        setUserHasReviewed(mine.length > 0)
+      })
+      .catch(() => {})
+  }
+
+  const handleSubmitReview = async () => {
+    if (!product || !reviewBody.trim()) return
+    const token = localStorage.getItem("token")
+    if (!token) return
+    setSubmittingReview(true)
+    try {
+      const res = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ productId: product.id, rating: reviewRating, title: reviewTitle, body: reviewBody }),
+      })
+      if (res.ok) {
+        setUserHasReviewed(true)
+        setShowReviewForm(false)
+        setReviewTitle("")
+        setReviewBody("")
+        setReviewRating(5)
+        // Refresh product to show new review
+        const fresh = await fetch(`/api/products/${product.handle}`).then((r) => r.json())
+        if (fresh.product) setProduct(fresh.product)
+      } else {
+        const data = await res.json()
+        alert(data.message || "Failed to submit review")
+      }
+    } catch (err) { console.error(err) } finally { setSubmittingReview(false) }
   }
 
   const getEffectiveTierPrice = (qty: number) => {
@@ -273,24 +319,74 @@ export default function ProductDetailPage() {
           </div>
         )}
 
-        {/* Reviews */}
-        {product.reviews.length > 0 && (
-          <div className="mt-10 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Reviews ({product.reviewCount})</h2>
-            <div className="space-y-4">
-              {product.reviews.map((review) => (
-                <div key={review.id} className="border-b border-gray-100 pb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="flex text-yellow-500">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={14} fill={i < review.rating ? "currentColor" : "none"} className={i < review.rating ? "" : "text-gray-300"} />)}</div>
-                    <span className="text-sm font-medium">{review.user.firstName || "Anonymous"} {review.user.lastName || ""}</span>
+        {/* Reviews Section */}
+        <div className="mt-10 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">Reviews ({product.reviewCount})</h2>
+            {!userHasReviewed && localStorage.getItem("token") && !showReviewForm && (
+              <button onClick={() => setShowReviewForm(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">
+                <MessageSquare size={14} /> Write a Review
+              </button>
+            )}
+            {userHasReviewed && (
+              <span className="text-xs text-green-600 bg-green-50 px-3 py-1 rounded-full font-medium">You've reviewed this product</span>
+            )}
+          </div>
+
+          {/* Write Review Form */}
+          {showReviewForm && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
+              <h3 className="font-semibold text-gray-900 mb-4">Write Your Review</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">Rating</label>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((val) => (
+                      <button key={val} onClick={() => setReviewRating(val)} className="focus:outline-none">
+                        <Star size={28} fill={val <= reviewRating ? "currentColor" : "none"} className={val <= reviewRating ? "text-yellow-500" : "text-gray-300"} />
+                      </button>
+                    ))}
                   </div>
-                  {review.title && <h4 className="font-medium mt-1">{review.title}</h4>}
-                  {review.body && <p className="text-gray-600 text-sm mt-1">{review.body}</p>}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Title (optional)</label>
+                  <input type="text" value={reviewTitle} onChange={(e) => setReviewTitle(e.target.value)} placeholder="Summarize your experience" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Your Review *</label>
+                  <textarea value={reviewBody} onChange={(e) => setReviewBody(e.target.value)} rows={4} placeholder="Share your experience with this product..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={handleSubmitReview} disabled={submittingReview || !reviewBody.trim()} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">
+                    {submittingReview ? "Submitting..." : "Submit Review"}
+                  </button>
+                  <button onClick={() => setShowReviewForm(false)} className="px-6 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm">Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Reviews List */}
+          {product.reviews.length > 0 ? (
+            <div className="space-y-5">
+              {product.reviews.map((review) => (
+                <div key={review.id} className="border-b border-gray-100 pb-5 last:border-0 last:pb-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="flex text-yellow-500">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={14} fill={i < review.rating ? "currentColor" : "none"} className={i < review.rating ? "" : "text-gray-300"} />)}</div>
+                    <span className="text-sm font-medium text-gray-900">{review.user.firstName || "Anonymous"} {review.user.lastName || ""}</span>
+                  </div>
+                  {review.title && <h4 className="font-semibold text-gray-900 mt-1">{review.title}</h4>}
+                  {review.body && <p className="text-gray-600 text-sm mt-1.5 leading-relaxed">{review.body}</p>}
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-8">
+              <MessageSquare size={36} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-500">No reviews yet. Be the first to review this product!</p>
+            </div>
+          )}
+        </div>
 
         {/* Related Products */}
         {related.length > 0 && (

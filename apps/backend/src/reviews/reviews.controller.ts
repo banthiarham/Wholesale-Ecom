@@ -26,8 +26,9 @@ export class ReviewsController {
   @ApiOperation({ summary: 'List all reviews or filter by product' })
   @ApiResponse({ status: 200, description: 'Reviews retrieved' })
   @ApiQuery({ name: 'productId', required: false, description: 'Filter reviews by product ID' })
-  async findAll(@Query('productId') productId?: string) {
-    const reviews = await this.reviewsService.findAll(productId);
+  @ApiQuery({ name: 'userId', required: false, description: 'Filter reviews by user ID' })
+  async findAll(@Query('productId') productId?: string, @Query('userId') userId?: string) {
+    const reviews = await this.reviewsService.findAll(productId, userId);
     return { reviews, count: reviews.length };
   }
 

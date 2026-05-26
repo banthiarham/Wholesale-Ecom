@@ -6,9 +6,10 @@ import { CreateReviewDto } from './dto/create-review.dto';
 export class ReviewsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(productId?: string) {
+  async findAll(productId?: string, userId?: string) {
     const where: any = {};
     if (productId) where.productId = productId;
+    if (userId) where.userId = userId;
 
     return this.prisma.review.findMany({
       where,

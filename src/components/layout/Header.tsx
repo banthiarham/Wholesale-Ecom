@@ -23,6 +23,7 @@ import {
   MapPin,
   RotateCcw,
   GitCompare,
+  Star,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
@@ -166,6 +167,7 @@ export default function Header() {
         { href: "/wishlist", label: "Wishlist", icon: Heart },
         { href: "/account/addresses", label: "Addresses", icon: MapPin },
         { href: "/account/returns", label: "Returns", icon: RotateCcw },
+        { href: "/account/reviews", label: "My Reviews", icon: Star },
         { href: "/compare", label: "Compare", icon: GitCompare },
         { href: "/loyalty", label: t("nav.loyalty"), icon: Heart },
         { href: "/notifications", label: t("nav.notifications"), icon: Bell },
