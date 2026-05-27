@@ -1,39 +1,4 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/swagger';
+import { CreateDeliveryPartnerDto } from './create-delivery-partner.dto';
 
-export class UpdateDeliveryPartnerDto {
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  code?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  trackingUrlTemplate?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  contactEmail?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  contactPhone?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  logo?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
-}
+export class UpdateDeliveryPartnerDto extends PartialType(CreateDeliveryPartnerDto) {}

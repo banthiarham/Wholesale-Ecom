@@ -5,9 +5,10 @@ import { CsvOrderParserService } from './csv-order-parser.service';
 import { InventoryModule } from '../inventory/inventory.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { DeliveryPartnersModule } from '../delivery-partners/delivery-partners.module';
 
 @Module({
-  imports: [InventoryModule, PricingModule, NotificationsModule],
+  imports: [InventoryModule, PricingModule, NotificationsModule, DeliveryPartnersModule],
   controllers: [OrdersController],
   providers: [OrdersService, CsvOrderParserService],
   exports: [OrdersService],

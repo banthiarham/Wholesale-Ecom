@@ -22,6 +22,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole, OrderStatus, DeliveryStatus } from '@prisma/client';
 import { UpdateTrackingDto } from './dto/update-tracking.dto';
 import { CreateTrackingEventDto } from './dto/create-tracking-event.dto';
+import { DeliveryPartnersService } from '../delivery-partners/delivery-partners.service';
 
 @ApiTags('Orders')
 @Controller('orders')
@@ -29,6 +30,7 @@ export class OrdersController {
   constructor(
     private ordersService: OrdersService,
     private csvParser: CsvOrderParserService,
+    private deliveryPartnersService: DeliveryPartnersService,
   ) {}
 
   @Post()
@@ -160,6 +162,19 @@ export class OrdersController {
   @ApiOperation({ summary: 'Add delivery tracking event (Admin / Vendor)' })
   async addTrackingEvent(@Param('id') id: string, @Body() body: CreateTrackingEventDto) {
     return this.ordersService.addTrackingEvent(id, body);
+  }
+
+  @Post(':id/create-shipment')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create shipment via delivery partner API (Admin)' })
+  async createShipmentViaPartner(@Param('id') id: string) {
+    const order = await this.ordersService.findById(id);
+    if (!order.deliveryPartnerId) {
+      throw new Error('Order has no delivery partner assigned');
+    }
+    return this.deliveryPartnersService.createShipment(order.deliveryPartnerId, id);
   }
 
   @Put(':id/cancel')

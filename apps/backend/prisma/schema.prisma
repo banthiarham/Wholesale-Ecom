@@ -387,6 +387,7 @@ model Order {
   payment Payment?
   returnRequests ReturnRequest[]
   deliveryTracking  DeliveryTracking?
+  shipmentSyncLogs  ShipmentSyncLog[]
 
   @@index([userId])
   @@index([status])
@@ -730,13 +731,24 @@ model DeliveryPartner {
   contactPhone        String?
   logo                String?
   isActive            Boolean  @default(true)
+
+  apiEnabled       Boolean  @default(false)
+  credentials      Json?
+  credentialFields Json?
+  apiBaseUrl       String?
+  testMode         Boolean  @default(true)
+  webhookUrl       String?
+  settings         Json?
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   orders              Order[]
+  shipmentSyncLogs    ShipmentSyncLog[]
 
   @@index([code])
   @@index([isActive])
+  @@index([apiEnabled])
 }
 
 model DeliveryTracking {
@@ -779,4 +791,22 @@ model SiteSetting {
 
   @@index([key])
   @@index([group])
+}
+
+model ShipmentSyncLog {
+  id              String   @id @default(uuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  partnerId       String
+  partner         DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  action          String
+  status          String
+  requestPayload  Json?
+  responsePayload Json?
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@index([orderId])
+  @@index([partnerId])
+  @@index([createdAt])
 }

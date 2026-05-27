@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Search, ChevronDown, ChevronUp, Eye, Truck, X, ExternalLink } from "lucide-react"
+import { Search, ChevronDown, ChevronUp, Eye, Truck, X, ExternalLink, Plug } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
 interface Order {
@@ -24,6 +24,8 @@ interface Partner {
   id: string
   name: string
   code: string
+  apiEnabled: boolean
+  testMode: boolean
 }
 
 const statuses = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]
@@ -43,6 +45,7 @@ export default function AdminOrdersPage() {
   const [selectedPartnerId, setSelectedPartnerId] = useState("")
   const [partners, setPartners] = useState<Partner[]>([])
   const [trackingLoading, setTrackingLoading] = useState(false)
+  const [createShipmentLoading, setCreateShipmentLoading] = useState(false)
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   useEffect(() => {
@@ -138,6 +141,28 @@ export default function AdminOrdersPage() {
       alert("Failed to update tracking")
     } finally {
       setTrackingLoading(false)
+    }
+  }
+
+  const createShipment = async () => {
+    if (!detailOrder) return
+    setCreateShipmentLoading(true)
+    try {
+      const res = await fetch(`/api/orders/${detailOrder.id}/create-shipment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error("Failed to create shipment")
+      setShowTracking(false)
+      setTrackingNumber("")
+      setCarrier("")
+      setSelectedPartnerId("")
+      loadOrders()
+    } catch (err) {
+      console.error(err)
+      alert("Failed to create shipment")
+    } finally {
+      setCreateShipmentLoading(false)
     }
   }
 
@@ -325,10 +350,20 @@ export default function AdminOrdersPage() {
                   </button>
                   {showTracking && (
                     <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
-                      <select value={selectedPartnerId} onChange={(e) => setSelectedPartnerId(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                        <option value="">Select Delivery Partner (optional)</option>
-                        {partners.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select value={selectedPartnerId} onChange={(e) => setSelectedPartnerId(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                          <option value="">Select Delivery Partner (optional)</option>
+                          {partners.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
+                        </select>
+                        {selectedPartnerId && (() => {
+                          const partner = partners.find((p) => p.id === selectedPartnerId)
+                          return partner?.apiEnabled ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                              <Plug size={12} /> API Connected
+                            </span>
+                          ) : null
+                        })()}
+                      </div>
                       <input type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Tracking Number" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
                       {!selectedPartnerId && (
                         <input type="text" value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier name (auto-filled from partner)" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
@@ -341,7 +376,18 @@ export default function AdminOrdersPage() {
                         }
                         return null
                       })()}
-                      <button onClick={updateTracking} disabled={trackingLoading} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50">{trackingLoading ? "Updating..." : "Save Tracking"}</button>
+                      <div className="flex items-center gap-2">
+                        <button onClick={updateTracking} disabled={trackingLoading} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50">{trackingLoading ? "Updating..." : "Save Tracking"}</button>
+                        {selectedPartnerId && (() => {
+                          const partner = partners.find((p) => p.id === selectedPartnerId)
+                          return partner?.apiEnabled ? (
+                            <button onClick={createShipment} disabled={createShipmentLoading} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                              <Truck size={14} />
+                              {createShipmentLoading ? "Creating..." : `Create Shipment via ${partner.name}`}
+                            </button>
+                          ) : null
+                        })()}
+                      </div>
                     </div>
                   )}
                 </div>

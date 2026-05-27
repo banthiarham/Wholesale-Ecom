@@ -13,6 +13,8 @@ import {
   Circle,
   ChevronDown,
   ExternalLink,
+  RefreshCw,
+  Send,
 } from "lucide-react"
 
 const DELIVERY_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -33,7 +35,7 @@ interface ShipmentOrder {
   status: string
   createdAt: string
   user?: { firstName: string; lastName: string; email: string }
-  deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null; logo: string | null } | null
+  deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null; logo: string | null; apiEnabled: boolean; testMode: boolean } | null
   deliveryTracking?: { status: string; currentLocation: string | null; estimatedDelivery: string | null; events: { id: string; status: string; location: string | null; notes: string | null; occurredAt: string }[] } | null
 }
 
@@ -41,6 +43,8 @@ interface Partner {
   id: string
   name: string
   code: string
+  apiEnabled: boolean
+  testMode: boolean
 }
 
 export default function AdminDeliveryTrackingPage() {
@@ -55,6 +59,10 @@ export default function AdminDeliveryTrackingPage() {
   const [showEventForm, setShowEventForm] = useState(false)
   const [eventForm, setEventForm] = useState({ status: "PICKED_UP", location: "", notes: "" })
   const [addingEvent, setAddingEvent] = useState(false)
+  const [syncAllLoading, setSyncAllLoading] = useState(false)
+  const [syncAllResult, setSyncAllResult] = useState<any>(null)
+  const [createShipmentLoading, setCreateShipmentLoading] = useState(false)
+  const [syncTrackingLoading, setSyncTrackingLoading] = useState(false)
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
 
@@ -106,6 +114,75 @@ export default function AdminDeliveryTrackingPage() {
     return null
   }
 
+  const syncAllTracking = async () => {
+    setSyncAllLoading(true)
+    setSyncAllResult(null)
+    try {
+      const res = await fetch("/api/delivery-partners/sync-all-tracking", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setSyncAllResult(data)
+    } catch {
+      setSyncAllResult({ synced: 0, failed: 0, results: [], error: "Request failed" })
+    } finally {
+      setSyncAllLoading(false)
+    }
+  }
+
+  const createShipment = async () => {
+    if (!detailOrder?.deliveryPartner) return
+    setCreateShipmentLoading(true)
+    try {
+      const res = await fetch(`/api/delivery-partners/${detailOrder.deliveryPartner.id}/create-shipment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderId: detailOrder.id }),
+      })
+      await res.json()
+      // Refresh shipment data
+      const ordersRes = await fetch("/api/orders", { headers: { Authorization: `Bearer ${token}` } })
+      const ordersData = await ordersRes.json()
+      const allOrders: ShipmentOrder[] = ordersData.orders || []
+      const withDelivery = allOrders.filter((o: ShipmentOrder) => o.deliveryPartner || o.trackingNumber)
+      const shipmentsList = withDelivery.length > 0 ? withDelivery : allOrders.filter((o: ShipmentOrder) => o.status === "SHIPPED" || o.status === "PROCESSING" || o.status === "DELIVERED")
+      setShipments(shipmentsList)
+      const updated = shipmentsList.find((o: ShipmentOrder) => o.id === detailOrder.id) || null
+      setDetailOrder(updated)
+    } catch {
+      alert("Failed to create shipment")
+    } finally {
+      setCreateShipmentLoading(false)
+    }
+  }
+
+  const syncTracking = async () => {
+    if (!detailOrder?.deliveryPartner || !detailOrder.trackingNumber) return
+    setSyncTrackingLoading(true)
+    try {
+      const res = await fetch(`/api/delivery-partners/${detailOrder.deliveryPartner.id}/sync-tracking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderId: detailOrder.id }),
+      })
+      const data = await res.json()
+      // Refresh detail modal data
+      const ordersRes = await fetch("/api/orders", { headers: { Authorization: `Bearer ${token}` } })
+      const ordersData = await ordersRes.json()
+      const allOrders: ShipmentOrder[] = ordersData.orders || []
+      const withDelivery = allOrders.filter((o: ShipmentOrder) => o.deliveryPartner || o.trackingNumber)
+      const shipmentsList = withDelivery.length > 0 ? withDelivery : allOrders.filter((o: ShipmentOrder) => o.status === "SHIPPED" || o.status === "PROCESSING" || o.status === "DELIVERED")
+      setShipments(shipmentsList)
+      const updated = shipmentsList.find((o: ShipmentOrder) => o.id === detailOrder.id) || null
+      setDetailOrder(updated)
+    } catch {
+      alert("Failed to sync tracking")
+    } finally {
+      setSyncTrackingLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -116,9 +193,26 @@ export default function AdminDeliveryTrackingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Shipment Tracking</h1>
-        <p className="text-sm text-gray-500">Monitor all deliveries and tracking updates</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Shipment Tracking</h1>
+          <p className="text-sm text-gray-500">Monitor all deliveries and tracking updates</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={syncAllTracking}
+            disabled={syncAllLoading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+          >
+            {syncAllLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Sync All Tracking
+          </button>
+          {syncAllResult && (
+            <span className="text-xs text-gray-500">
+              Synced: {syncAllResult.synced ?? 0}, Failed: {syncAllResult.failed ?? 0}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Stats cards */}
@@ -171,6 +265,7 @@ export default function AdminDeliveryTrackingPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Order #</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Customer</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Partner</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">API</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Tracking #</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Delivery Status</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Location</th>
@@ -194,6 +289,14 @@ export default function AdminDeliveryTrackingPage() {
                     ) : (
                       <span className="text-sm text-gray-400">{s.carrier || "None"}</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {s.deliveryPartner?.apiEnabled ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                        API
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600 font-mono">{s.trackingNumber || "-"}</td>
                   <td className="px-4 py-3">
@@ -291,6 +394,28 @@ export default function AdminDeliveryTrackingPage() {
                     })}
                   </div>
                 </div>
+              )}
+
+              {/* Create Shipment / Sync Tracking */}
+              {detailOrder.deliveryPartner?.apiEnabled && !detailOrder.trackingNumber && (
+                <button
+                  onClick={createShipment}
+                  disabled={createShipmentLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {createShipmentLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  Create Shipment via {detailOrder.deliveryPartner.name}
+                </button>
+              )}
+              {detailOrder.deliveryPartner?.apiEnabled && detailOrder.trackingNumber && (
+                <button
+                  onClick={syncTracking}
+                  disabled={syncTrackingLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 disabled:opacity-50"
+                >
+                  {syncTrackingLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  Sync from {detailOrder.deliveryPartner.name}
+                </button>
               )}
 
               {/* Add event */}
