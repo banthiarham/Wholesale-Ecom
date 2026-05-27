@@ -1,13 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentStatus, OrderStatus } from '@prisma/client';
-import { CcavenueService } from './ccavenue.service';
+import { PaymentGatewaysService } from '../payment-gateways/payment-gateways.service';
+import { PaymentGatewayFactory } from '../payment-gateways/gateways/gateway.factory';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     private prisma: PrismaService,
-    private ccavenueService: CcavenueService,
+    private gatewaysService: PaymentGatewaysService,
+    private gatewayFactory: PaymentGatewayFactory,
   ) {}
 
   async create(orderId: string, provider: string, amount: number) {
@@ -35,14 +37,36 @@ export class PaymentsService {
   }
 
   async findByOrderId(orderId: string) {
-    return this.prisma.payment.findUnique({ where: { orderId } });
+    return this.prisma.payment.findUnique({ where: { orderId }, include: { gateway: true } });
+  }
+
+  async findAll(status?: string) {
+    const where: any = {};
+    if (status) where.status = status;
+
+    return this.prisma.payment.findMany({
+      where,
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            totalAmount: true,
+            status: true,
+            createdAt: true,
+            user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          },
+        },
+        gateway: { select: { id: true, provider: true, label: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /**
-   * Initiate CCAvenue payment for an order.
-   * Returns encrypted data and config needed by the frontend to redirect to CCAvenue.
+   * Generic payment initiation for any configured gateway.
    */
-  async initiateCcavenue(orderId: string, returnUrl: string) {
+  async initiatePayment(orderId: string, provider: string, returnUrl?: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -53,127 +77,93 @@ export class PaymentsService {
 
     if (!order) throw new NotFoundException('Order not found');
 
-    const config = this.ccavenueService.getConfig();
-    if (!config.merchantId || !config.accessCode) {
-      throw new BadRequestException('CCAvenue is not configured');
-    }
+    const gatewayConfig = await this.gatewaysService.getGatewayConfig(provider);
+    const gatewayProvider = this.gatewayFactory.getProvider(provider);
 
-    // Create or update payment record
-    const existingPayment = await this.prisma.payment.findUnique({ where: { orderId } });
+    const defaultReturnUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/orders/${orderId}`;
+    const effectiveReturnUrl = returnUrl || defaultReturnUrl;
+
+    let existingPayment = await this.prisma.payment.findUnique({ where: { orderId } });
     if (!existingPayment) {
-      await this.prisma.payment.create({
+      existingPayment = await this.prisma.payment.create({
         data: {
           orderId,
-          provider: 'CCAVENUE',
+          provider,
           amount: Number(order.totalAmount),
           status: PaymentStatus.PENDING,
+          gatewayId: gatewayConfig.gatewayId !== 'env-fallback' ? gatewayConfig.gatewayId : null,
         },
       });
     }
 
-    const itemNames = order.items.map((i) => i.product.title).join(', ').substring(0, 255);
-
-    const requestParams = {
-      merchant_id: config.merchantId,
-      order_id: order.id,
-      currency: 'INR',
-      amount: String(order.totalAmount),
-      redirect_url: returnUrl,
-      cancel_url: returnUrl,
-      language: 'EN',
-      billing_name: `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim() || 'Customer',
-      billing_email: order.user.email || '',
-      billing_tel: order.user.phone || '',
-      delivery_name: `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim() || 'Customer',
-      delivery_email: order.user.email || '',
-      delivery_tel: order.user.phone || '',
-      merchant_param1: order.id,
-      merchant_param2: 'wholesalex-order',
-      ...(itemNames ? { merchant_param3: itemNames } : {}),
-    };
-
-    const plainText = this.ccavenueService.buildRequestPayload(requestParams);
-    const encRequest = this.ccavenueService.encrypt(plainText);
+    const result = await gatewayProvider.initiatePayment({
+      orderId: order.id,
+      amount: Number(order.totalAmount),
+      currency: order.currency || 'INR',
+      customerInfo: {
+        name: `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim() || 'Customer',
+        email: order.user.email || '',
+        phone: order.user.phone || '',
+      },
+      returnUrl: effectiveReturnUrl,
+      credentials: gatewayConfig.credentials,
+      testMode: gatewayConfig.testMode,
+    });
 
     return {
-      accessCode: config.accessCode,
-      encRequest,
-      gatewayUrl: config.gatewayUrl,
+      ...result,
+      gatewayUrl: gatewayConfig.gatewayUrl,
       orderId: order.id,
+      provider,
     };
   }
 
   /**
-   * Handle CCAvenue callback response.
-   * Decrypts the response, updates payment and order status.
+   * Generic callback handler for any gateway.
+   */
+  async handleCallback(provider: string, payload: any) {
+    const gatewayConfig = await this.gatewaysService.getGatewayConfig(provider);
+    const gatewayProvider = this.gatewayFactory.getProvider(provider);
+
+    const result = await gatewayProvider.handleCallback(payload, gatewayConfig.credentials, gatewayConfig.testMode);
+
+    if (result.orderId) {
+      await this.prisma.payment.upsert({
+        where: { orderId: result.orderId },
+        update: {
+          status: result.paymentStatus,
+          providerRef: result.providerRef,
+        },
+        create: {
+          orderId: result.orderId,
+          provider,
+          providerRef: result.providerRef,
+          amount: 0,
+          status: result.paymentStatus,
+          gatewayId: gatewayConfig.gatewayId !== 'env-fallback' ? gatewayConfig.gatewayId : null,
+        },
+      });
+
+      await this.prisma.order.update({
+        where: { id: result.orderId },
+        data: { status: result.orderStatus },
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Initiate CCAvenue payment (backward compatible).
+   */
+  async initiateCcavenue(orderId: string, returnUrl: string) {
+    return this.initiatePayment(orderId, 'CCAVENUE', returnUrl);
+  }
+
+  /**
+   * Handle CCAvenue callback (backward compatible).
    */
   async handleCcavenueCallback(encryptedResponse: string) {
-    if (!encryptedResponse) {
-      throw new BadRequestException('Missing encrypted response');
-    }
-
-    const decrypted = this.ccavenueService.decrypt(encryptedResponse);
-    if (!decrypted) {
-      throw new BadRequestException('Failed to decrypt CCAvenue response');
-    }
-
-    const response = this.ccavenueService.parseResponse(decrypted);
-
-    const orderId = response.merchant_param1 || response.order_id;
-    const trackingId = response.tracking_id;
-    const bankRefNo = response.bank_ref_no;
-    const orderStatus = response.order_status; // Success / Aborted / Failure
-    const failureMessage = response.failure_message;
-    const paymentMode = response.payment_mode;
-    const amount = response.amount;
-
-    if (!orderId) {
-      throw new BadRequestException('Order ID not found in CCAvenue response');
-    }
-
-    let paymentStatus: PaymentStatus;
-    let orderStatusUpdate: OrderStatus;
-
-    if (orderStatus === 'Success') {
-      paymentStatus = PaymentStatus.CAPTURED;
-      orderStatusUpdate = OrderStatus.CONFIRMED;
-    } else if (orderStatus === 'Aborted') {
-      paymentStatus = PaymentStatus.CANCELLED;
-      orderStatusUpdate = OrderStatus.PENDING;
-    } else {
-      paymentStatus = PaymentStatus.FAILED;
-      orderStatusUpdate = OrderStatus.PENDING;
-    }
-
-    await this.prisma.payment.upsert({
-      where: { orderId },
-      update: {
-        status: paymentStatus,
-        providerRef: trackingId || bankRefNo || null,
-        amount: amount ? Number(amount) : undefined,
-      },
-      create: {
-        orderId,
-        provider: 'CCAVENUE',
-        providerRef: trackingId || bankRefNo || null,
-        amount: amount ? Number(amount) : 0,
-        status: paymentStatus,
-      },
-    });
-
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: { status: orderStatusUpdate },
-    });
-
-    return {
-      orderId,
-      status: orderStatus,
-      paymentStatus,
-      trackingId,
-      failureMessage,
-      paymentMode,
-      amount,
-    };
+    return this.handleCallback('CCAVENUE', { encResp: encryptedResponse });
   }
 }

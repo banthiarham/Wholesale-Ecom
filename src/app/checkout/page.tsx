@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap } from "lucide-react"
+import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface CartItem {
@@ -20,7 +20,31 @@ interface LoyaltyData {
   points: number; walletBalance: number; tier: string
 }
 
-type PaymentMethod = "COD" | "CCAVENUE"
+interface EnabledGateway {
+  id: string
+  provider: string
+  label: string
+  description: string | null
+  isDefault: boolean
+  testMode: boolean
+  gatewayUrl?: string | null
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  CCAVENUE: "CCAvenue",
+  RAZORPAY: "Razorpay",
+  STRIPE: "Stripe",
+  PAYU: "PayU",
+}
+
+const PROVIDER_DESCRIPTIONS: Record<string, string> = {
+  CCAVENUE: "Credit/Debit card, UPI, NetBanking, Wallets",
+  RAZORPAY: "Cards, UPI, Wallets, NetBanking",
+  STRIPE: "International cards & Apple/Google Pay",
+  PAYU: "Cards, UPI, NetBanking",
+}
+
+type PaymentMethod = "COD" | "ONLINE"
 
 export default function CheckoutPage() {
   const router = useRouter()
@@ -33,7 +57,9 @@ export default function CheckoutPage() {
   const [couponDiscount, setCouponDiscount] = useState(0)
   const [couponError, setCouponError] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD")
-  const [ccavenueData, setCcavenueData] = useState<{ accessCode: string; encRequest: string; gatewayUrl: string } | null>(null)
+  const [selectedProvider, setSelectedProvider] = useState<string>("")
+  const [gateways, setGateways] = useState<EnabledGateway[]>([])
+  const [redirectData, setRedirectData] = useState<{ url: string; method: string; params: Record<string, string> } | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [loyalty, setLoyalty] = useState<LoyaltyData | null>(null)
   const [useWallet, setUseWallet] = useState(false)
@@ -56,14 +82,26 @@ export default function CheckoutPage() {
         .then((data) => { if (data.points !== undefined) setLoyalty(data) })
         .catch(() => {})
     }
+    // Fetch enabled payment gateways
+    fetch("/api/payment-gateways/enabled")
+      .then((res) => res.json())
+      .then((data) => {
+        const list: EnabledGateway[] = Array.isArray(data) ? data : data.gateways ?? []
+        setGateways(list)
+        if (list.length > 0) {
+          const defaultGw = list.find((g) => g.isDefault)
+          setSelectedProvider(defaultGw?.provider || list[0].provider)
+        }
+      })
+      .catch(() => {})
   }, [])
 
-  // Auto-submit CCAvenue form when data is ready
+  // Auto-submit redirect form when data is ready
   useEffect(() => {
-    if (ccavenueData && formRef.current) {
+    if (redirectData && formRef.current) {
       formRef.current.submit()
     }
-  }, [ccavenueData])
+  }, [redirectData])
 
   const applyCoupon = async () => {
     if (!couponCode || !cart) return
@@ -84,6 +122,39 @@ export default function CheckoutPage() {
     } catch (err) {
       setCouponError("Failed to validate coupon")
     }
+  }
+
+  const openRazorpayCheckout = (data: any) => {
+    const script = document.createElement("script")
+    script.src = "https://checkout.razorpay.com/v1/checkout.js"
+    script.async = true
+    script.onload = () => {
+      const options: any = {
+        key: data.keyId,
+        order_id: data.providerOrderId,
+        name: "WholesaleX",
+        amount: data.extra?.amount,
+        currency: data.extra?.currency || "INR",
+        prefill: {
+          name: data.extra?.customerName || "",
+          email: data.extra?.customerEmail || "",
+          contact: data.extra?.customerPhone || "",
+        },
+        handler: function (response: any) {
+          const orderId = response.razorpay_order_id
+            ? new URLSearchParams(window.location.search).get("orderId") || ""
+            : ""
+          router.push(`/orders/${orderId || ""}?payment=success`)
+        },
+      }
+      const rzp = new (window as any).Razorpay(options)
+      rzp.on("payment.failed", function () {
+        alert("Payment failed. Please try again.")
+        setPlacing(false)
+      })
+      rzp.open()
+    }
+    document.body.appendChild(script)
   }
 
   const placeOrder = async () => {
@@ -109,29 +180,68 @@ export default function CheckoutPage() {
         return
       }
 
-      if (paymentMethod === "CCAVENUE") {
-        // Initiate CCAvenue payment
-        const initRes = await fetch(`/api/payments/ccavenue/initiate/${data.order.id}`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const initData = await initRes.json()
-        if (initRes.ok && initData.encRequest) {
-          setCcavenueData({
-            accessCode: initData.accessCode,
-            encRequest: initData.encRequest,
-            gatewayUrl: initData.gatewayUrl,
-          })
-          // Form will auto-submit via useEffect
-        } else {
-          alert("Failed to initiate online payment. Please try COD or contact support.")
-          setPlacing(false)
-        }
-      } else {
-        // COD - redirect to order page
+      const orderId = data.order.id
+
+      if (paymentMethod === "COD") {
         alert("Order placed successfully!")
-        router.push(`/orders/${data.order.id}`)
+        router.push(`/orders/${orderId}`)
+        return
       }
+
+      // Online payment — use the generic initiate endpoint
+      const returnUrl = `${window.location.origin}/orders/${orderId}`
+      const initRes = await fetch(
+        `/api/payments/initiate/${orderId}?provider=${selectedProvider}&returnUrl=${encodeURIComponent(returnUrl)}`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+      )
+      const initData = await initRes.json()
+
+      if (!initRes.ok) {
+        alert(initData.message || "Failed to initiate payment. Please try COD or contact support.")
+        setPlacing(false)
+        return
+      }
+
+      const provider = selectedProvider
+
+      if (provider === "STRIPE" && initData.redirectUrl) {
+        // Stripe — redirect to Checkout Session
+        window.location.href = initData.redirectUrl
+        return
+      }
+
+      if (provider === "RAZORPAY" && initData.providerOrderId) {
+        // Razorpay — open Checkout.js modal
+        openRazorpayCheckout({ ...initData, orderId })
+        return
+      }
+
+      // CCAVENUE / PAYU / Custom gateways — form POST redirect
+      if (initData.formData || initData.encRequest || initData.accessCode) {
+        const params: Record<string, string> = {}
+        let url = initData.gatewayUrl || ""
+
+        if (initData.formData) {
+          // PAYU or custom form-based gateway
+          if (!url) url = initData.redirectUrl || ""
+          Object.entries(initData.formData).forEach(([k, v]: [string, any]) => {
+            params[k] = String(v)
+          })
+        } else if (initData.encRequest) {
+          // CCAvenue
+          if (!url) url = initData.gatewayUrl || ""
+          params.encRequest = initData.encRequest
+          params.access_code = initData.accessCode
+        }
+
+        if (url) {
+          setRedirectData({ url, method: "post", params })
+          return
+        }
+      }
+
+      alert("Payment initiated but no redirect was received. Please check your order status.")
+      router.push(`/orders/${orderId}`)
     } catch (err) {
       alert("Something went wrong")
       setPlacing(false)
@@ -173,17 +283,20 @@ export default function CheckoutPage() {
     </div>
   )
 
+  const selectedGateway = gateways.find((g) => g.provider === selectedProvider)
+
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Link href="/cart" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to cart</Link>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Checkout</h1>
 
-        {/* Hidden CCAvenue form - auto-submits when ready */}
-        {ccavenueData && (
-          <form ref={formRef} method="post" action={ccavenueData.gatewayUrl} style={{ display: "none" }}>
-            <input type="hidden" name="encRequest" value={ccavenueData.encRequest} />
-            <input type="hidden" name="access_code" value={ccavenueData.accessCode} />
+        {/* Hidden redirect form for CCAvenue/PayU - auto-submits when ready */}
+        {redirectData && (
+          <form ref={formRef} method={redirectData.method} action={redirectData.url} style={{ display: "none" }}>
+            {Object.entries(redirectData.params).map(([key, value]) => (
+              <input key={key} type="hidden" name={key} value={value} />
+            ))}
           </form>
         )}
 
@@ -222,19 +335,46 @@ export default function CheckoutPage() {
                   </div>
                 </label>
 
-                <label
-                  onClick={() => setPaymentMethod("CCAVENUE")}
-                  className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "CCAVENUE" ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
-                >
-                  <input type="radio" name="payment" checked={paymentMethod === "CCAVENUE"} onChange={() => setPaymentMethod("CCAVENUE")} className="accent-primary-600" />
-                  <div className="flex items-center gap-3">
-                    <Smartphone size={20} className="text-gray-600" />
-                    <div>
-                      <p className="font-medium text-gray-900">Pay Online (CCAvenue)</p>
-                      <p className="text-xs text-gray-500">Credit/Debit card, UPI, NetBanking, Wallets</p>
+                {gateways.map((gw) => (
+                  <label
+                    key={gw.id}
+                    onClick={() => { setPaymentMethod("ONLINE"); setSelectedProvider(gw.provider) }}
+                    className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "ONLINE" && selectedProvider === gw.provider ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <input
+                      type="radio"
+                      name="payment"
+                      checked={paymentMethod === "ONLINE" && selectedProvider === gw.provider}
+                      onChange={() => { setPaymentMethod("ONLINE"); setSelectedProvider(gw.provider) }}
+                      className="accent-primary-600"
+                    />
+                    <div className="flex items-center gap-3">
+                      <Smartphone size={20} className="text-gray-600" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">
+                            {gw.label || PROVIDER_LABELS[gw.provider] || gw.provider}
+                          </p>
+                          {gw.isDefault && (
+                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-medium rounded">Default</span>
+                          )}
+                          {gw.testMode && (
+                            <span className="px-1.5 py-0.5 bg-yellow-50 text-yellow-700 text-[10px] font-medium rounded">Test</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          {gw.description || PROVIDER_DESCRIPTIONS[gw.provider] || "Online payment"}
+                        </p>
+                      </div>
                     </div>
+                  </label>
+                ))}
+
+                {gateways.length === 0 && (
+                  <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 text-center">
+                    <p className="text-sm text-gray-500">No online payment gateways available. Please contact support.</p>
                   </div>
-                </label>
+                )}
               </div>
             </div>
           </div>
@@ -335,9 +475,15 @@ export default function CheckoutPage() {
                 <span className="text-lg font-bold">Total</span>
                 <span className="text-xl font-bold text-primary-700">{formatPrice(finalTotal)}</span>
               </div>
-              <button onClick={placeOrder} disabled={placing || ccavenueData !== null} className="w-full mt-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
-                {placing ? (ccavenueData ? "Redirecting to CCAvenue..." : "Placing Order...") : (paymentMethod === "CCAVENUE" ? "Pay Now" : "Place Order")}
+              <button onClick={placeOrder} disabled={placing || redirectData !== null} className="w-full mt-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
+                {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : (paymentMethod === "ONLINE" ? "Pay Now" : "Place Order")}
               </button>
+              {paymentMethod === "ONLINE" && selectedGateway && (
+                <div className="flex items-center justify-center gap-1.5 mt-3 text-xs text-gray-400">
+                  <Shield size={12} />
+                  <span>Secure checkout via {selectedGateway.label || PROVIDER_LABELS[selectedProvider] || selectedProvider}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

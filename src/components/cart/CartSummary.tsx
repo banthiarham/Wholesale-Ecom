@@ -168,7 +168,7 @@ export default function CartSummary({
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
         <div className="flex items-center gap-3 text-sm text-gray-600">
           <ShieldCheck size={16} className="text-green-500 shrink-0" />
-          <span>Secure checkout via CCAvenue</span>
+          <span>Secure checkout</span>
         </div>
         <div className="flex items-center gap-3 text-sm text-gray-600">
           <Truck size={16} className="text-blue-500 shrink-0" />

@@ -27,6 +27,17 @@ export class PaymentsController {
     return { payment };
   }
 
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List all payments' })
+  @ApiResponse({ status: 200, description: 'List of all payments' })
+  @ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'AUTHORIZED', 'CAPTURED', 'FAILED', 'REFUNDED', 'CANCELLED'] })
+  async findAll(@Query('status') status?: string) {
+    const payments = await this.paymentsService.findAll(status);
+    return { payments };
+  }
+
   @Post(':orderId/verify')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -59,7 +70,65 @@ export class PaymentsController {
     return { payment };
   }
 
-  // ─── CCAvenue Online Payments ───
+  // ─── Generic Payment Initiation ───
+
+  @Post('initiate/:orderId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Initiate payment for an order using a configured gateway' })
+  @ApiResponse({ status: 200, description: 'Payment initiation data returned' })
+  @ApiParam({ name: 'orderId', description: 'Order UUID' })
+  @ApiQuery({ name: 'provider', enum: ['RAZORPAY', 'CCAVENUE', 'STRIPE', 'PAYU'] })
+  @ApiQuery({ name: 'returnUrl', required: false })
+  async initiatePayment(
+    @Param('orderId') orderId: string,
+    @Query('provider') provider: string,
+    @Query('returnUrl') returnUrl?: string,
+  ) {
+    const result = await this.paymentsService.initiatePayment(orderId, provider, returnUrl);
+    return result;
+  }
+
+  // ─── Generic Callback Handler ───
+
+  @Post('callback/:provider')
+  @ApiOperation({ summary: 'Payment gateway callback handler (no auth — called by gateway)' })
+  async handleCallback(
+    @Param('provider') provider: string,
+    @Body() body: any,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    try {
+      const result = await this.paymentsService.handleCallback(provider, body);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      const redirectUrl = `${frontendUrl}/orders/${result.orderId}?payment=${result.paymentStatus.toLowerCase()}`;
+      res.redirect(redirectUrl);
+    } catch (err) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      res.redirect(`${frontendUrl}/orders?payment=error`);
+    }
+  }
+
+  @Get('callback/:provider')
+  @ApiOperation({ summary: 'Payment gateway GET callback handler (fallback)' })
+  async handleCallbackGet(
+    @Param('provider') provider: string,
+    @Query() query: any,
+    @Res() res: Response,
+  ) {
+    try {
+      const result = await this.paymentsService.handleCallback(provider, query);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      const redirectUrl = `${frontendUrl}/orders/${result.orderId}?payment=${result.paymentStatus.toLowerCase()}`;
+      res.redirect(redirectUrl);
+    } catch (err) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      res.redirect(`${frontendUrl}/orders?payment=error`);
+    }
+  }
+
+  // ─── CCAvenue (backward compatible) ───
 
   @Post('ccavenue/initiate/:orderId')
   @UseGuards(JwtAuthGuard)
@@ -68,7 +137,7 @@ export class PaymentsController {
   @ApiResponse({ status: 200, description: 'Returns encrypted data for CCAvenue form submission' })
   @ApiResponse({ status: 400, description: 'CCAvenue not configured or order not found' })
   @ApiParam({ name: 'orderId', description: 'Order UUID' })
-  @ApiQuery({ name: 'returnUrl', required: false, description: 'URL to redirect after payment (defaults to frontend order page)' })
+  @ApiQuery({ name: 'returnUrl', required: false, description: 'URL to redirect after payment' })
   async initiateCcavenue(
     @Param('orderId') orderId: string,
     @Query('returnUrl') returnUrl?: string,
@@ -83,7 +152,6 @@ export class PaymentsController {
 
   @Post('ccavenue/callback')
   @ApiOperation({ summary: 'CCAvenue payment callback handler (no auth — called by CCAvenue gateway)' })
-  @ApiResponse({ status: 302, description: 'Redirects to frontend with payment result' })
   @ApiBody({ schema: { type: 'object', properties: { encResp: { type: 'string' } } } })
   async ccavenueCallback(
     @Body('encResp') encResp: string,
@@ -92,7 +160,7 @@ export class PaymentsController {
     try {
       const result = await this.paymentsService.handleCcavenueCallback(encResp);
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-      const redirectUrl = `${frontendUrl}/orders/${result.orderId}?payment=${result.status.toLowerCase()}`;
+      const redirectUrl = `${frontendUrl}/orders/${result.orderId}?payment=${result.paymentStatus.toLowerCase()}`;
       res.redirect(redirectUrl);
     } catch (err) {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';

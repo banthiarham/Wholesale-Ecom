@@ -20,6 +20,7 @@ import {
   Award,
   Bell,
   CreditCard,
+  Server,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -43,6 +44,7 @@ const navItems = [
   { label: "Loyalty", href: "/admin/loyalty", icon: Award },
   { label: "Notifications", href: "/admin/notifications", icon: Bell },
   { label: "Payments", href: "/admin/payments", icon: CreditCard },
+  { label: "Payment Gateways", href: "/admin/payment-gateways", icon: Server },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
