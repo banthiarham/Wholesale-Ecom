@@ -120,8 +120,18 @@ export default function CategoryPage() {
   const meta = getMeta(category.handle)
   const Icon = meta.icon
 
+  const categoryJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: category.name,
+    description: category.description || `Browse wholesale ${category.name} products at bulk prices.`,
+    url: typeof window !== "undefined" ? `${window.location.origin}/categories/${category.handle}` : undefined,
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(categoryJsonLd) }} />
+      <div className="min-h-screen bg-gray-50">
       {/* Category hero banner */}
       <section className={`relative bg-gradient-to-br ${meta.gradient} overflow-hidden`}>
         <div className="absolute inset-0 opacity-10">
@@ -250,5 +260,6 @@ export default function CategoryPage() {
         )}
       </main>
     </div>
+    </>
   )
 }

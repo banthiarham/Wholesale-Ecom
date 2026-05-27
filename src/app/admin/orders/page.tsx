@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Search, ChevronDown, ChevronUp, Eye, Truck, X } from "lucide-react"
+import { Search, ChevronDown, ChevronUp, Eye, Truck, X, ExternalLink } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
 interface Order {
@@ -14,6 +14,16 @@ interface Order {
   createdAt: string
   user: { firstName: string; lastName: string; email: string } | null
   items: { product: { title: string }; quantity: number; unitPrice: number }[]
+  trackingNumber?: string | null
+  carrier?: string | null
+  deliveryPartnerId?: string | null
+  deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null } | null
+}
+
+interface Partner {
+  id: string
+  name: string
+  code: string
 }
 
 const statuses = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]
@@ -30,11 +40,14 @@ export default function AdminOrdersPage() {
   const [showTracking, setShowTracking] = useState(false)
   const [trackingNumber, setTrackingNumber] = useState("")
   const [carrier, setCarrier] = useState("")
+  const [selectedPartnerId, setSelectedPartnerId] = useState("")
+  const [partners, setPartners] = useState<Partner[]>([])
   const [trackingLoading, setTrackingLoading] = useState(false)
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   useEffect(() => {
     loadOrders()
+    fetch("/api/delivery-partners").then((r) => r.json()).then(setPartners).catch(() => {})
   }, [token])
 
   useEffect(() => {
@@ -106,14 +119,20 @@ export default function AdminOrdersPage() {
     if (!detailOrder) return
     setTrackingLoading(true)
     try {
+      const payload: any = {}
+      if (trackingNumber) payload.trackingNumber = trackingNumber
+      if (carrier) payload.carrier = carrier
+      if (selectedPartnerId) payload.deliveryPartnerId = selectedPartnerId
       await fetch(`/api/orders/${detailOrder.id}/tracking`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ trackingNumber: trackingNumber || undefined, carrier: carrier || undefined }),
+        body: JSON.stringify(payload),
       })
       setShowTracking(false)
       setTrackingNumber("")
       setCarrier("")
+      setSelectedPartnerId("")
+      loadOrders()
     } catch (err) {
       console.error(err)
       alert("Failed to update tracking")
@@ -248,6 +267,16 @@ export default function AdminOrdersPage() {
                 </span>
               </div>
 
+              {(detailOrder.deliveryPartner || detailOrder.trackingNumber) && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Delivery</span>
+                  <div className="text-right">
+                    {detailOrder.deliveryPartner && <span className="text-sm font-medium text-gray-900">{detailOrder.deliveryPartner.name}</span>}
+                    {detailOrder.trackingNumber && <p className="text-xs text-gray-500 font-mono">{detailOrder.trackingNumber}</p>}
+                  </div>
+                </div>
+              )}
+
               <div className="border-t border-gray-100 pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-2">Items</h4>
                 <div className="space-y-2">
@@ -296,8 +325,22 @@ export default function AdminOrdersPage() {
                   </button>
                   {showTracking && (
                     <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+                      <select value={selectedPartnerId} onChange={(e) => setSelectedPartnerId(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                        <option value="">Select Delivery Partner (optional)</option>
+                        {partners.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
+                      </select>
                       <input type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Tracking Number" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                      <input type="text" value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier (e.g. FedEx, DHL)" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      {!selectedPartnerId && (
+                        <input type="text" value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier name (auto-filled from partner)" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      )}
+                      {selectedPartnerId && trackingNumber && (() => {
+                        const partner = partners.find((p) => p.id === selectedPartnerId)
+                        if (partner?.trackingUrlTemplate) {
+                          const url = partner.trackingUrlTemplate.replace("{trackingNumber}", trackingNumber)
+                          return <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary-600 hover:underline"><ExternalLink size={12} /> Preview tracking link</a>
+                        }
+                        return null
+                      })()}
                       <button onClick={updateTracking} disabled={trackingLoading} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50">{trackingLoading ? "Updating..." : "Save Tracking"}</button>
                     </div>
                   )}

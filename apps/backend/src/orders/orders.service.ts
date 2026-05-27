@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { EmailService } from '../notifications/email.service';
-import { OrderStatus, PaymentStatus } from '@prisma/client';
+import { OrderStatus, PaymentStatus, DeliveryStatus } from '@prisma/client';
 
 @Injectable()
 export class OrdersService {
@@ -120,6 +120,8 @@ export class OrdersService {
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true } } } },
         payment: true,
+        deliveryPartner: true,
+        deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -132,6 +134,8 @@ export class OrdersService {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true, sku: true } } } },
         payment: true,
         user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        deliveryPartner: true,
+        deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
       },
     });
 
@@ -152,21 +156,42 @@ export class OrdersService {
     });
   }
 
-  async updateTracking(id: string, data: { trackingNumber?: string; carrier?: string; shippingEta?: string }) {
+  async updateTracking(id: string, data: { trackingNumber?: string; carrier?: string; shippingEta?: string; deliveryPartnerId?: string }) {
     const updateData: any = {};
     if (data.trackingNumber !== undefined) updateData.trackingNumber = data.trackingNumber;
-    if (data.carrier !== undefined) updateData.carrier = data.carrier;
     if (data.shippingEta !== undefined) updateData.shippingEta = new Date(data.shippingEta);
 
-    return this.prisma.order.update({
+    if (data.deliveryPartnerId) {
+      const partner = await this.prisma.deliveryPartner.findUnique({ where: { id: data.deliveryPartnerId } });
+      if (partner) {
+        updateData.deliveryPartnerId = data.deliveryPartnerId;
+        updateData.carrier = partner.name;
+      }
+    } else if (data.carrier !== undefined) {
+      updateData.carrier = data.carrier;
+    }
+
+    const order = await this.prisma.order.update({
       where: { id },
       data: updateData,
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true, sku: true } } } },
         payment: true,
         user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        deliveryPartner: true,
+        deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
       },
     });
+
+    if (data.deliveryPartnerId && data.trackingNumber) {
+      await this.prisma.deliveryTracking.upsert({
+        where: { orderId: id },
+        update: {},
+        create: { orderId: id, status: DeliveryStatus.PENDING },
+      });
+    }
+
+    return order;
   }
 
   async cancelOrder(id: string, userId?: string) {
@@ -194,5 +219,78 @@ export class OrdersService {
     }
 
     return updated;
+  }
+
+  async getDeliveryTracking(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        deliveryPartner: true,
+        deliveryTracking: { include: { events: { orderBy: { occurredAt: 'asc' } } } },
+      },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    let trackingUrl: string | null = null;
+    if (order.deliveryPartner?.trackingUrlTemplate && order.trackingNumber) {
+      trackingUrl = order.deliveryPartner.trackingUrlTemplate.replace('{trackingNumber}', order.trackingNumber);
+    }
+
+    return {
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        trackingNumber: order.trackingNumber,
+        carrier: order.carrier,
+        shippingEta: order.shippingEta,
+      },
+      partner: order.deliveryPartner,
+      trackingUrl,
+      tracking: order.deliveryTracking,
+    };
+  }
+
+  async addTrackingEvent(orderId: string, data: { status: DeliveryStatus; location?: string; notes?: string }) {
+    let tracking = await this.prisma.deliveryTracking.findUnique({ where: { orderId } });
+
+    if (!tracking) {
+      tracking = await this.prisma.deliveryTracking.create({
+        data: { orderId, status: data.status },
+      });
+    }
+
+    const event = await this.prisma.deliveryTrackingEvent.create({
+      data: {
+        trackingId: tracking.id,
+        status: data.status,
+        location: data.location,
+        notes: data.notes,
+      },
+    });
+
+    await this.prisma.deliveryTracking.update({
+      where: { id: tracking.id },
+      data: {
+        status: data.status,
+        currentLocation: data.location || tracking.currentLocation,
+      },
+    });
+
+    if (data.status === DeliveryStatus.DELIVERED) {
+      await this.prisma.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.DELIVERED },
+      });
+    } else if (data.status === DeliveryStatus.PICKED_UP) {
+      const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+      if (order && order.status === OrderStatus.PROCESSING) {
+        await this.prisma.order.update({
+          where: { id: orderId },
+          data: { status: OrderStatus.SHIPPED },
+        });
+      }
+    }
+
+    return this.getDeliveryTracking(orderId);
   }
 }

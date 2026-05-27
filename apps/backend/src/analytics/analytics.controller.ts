@@ -64,4 +64,13 @@ export class AnalyticsController {
   getRecentActivity(@Query('limit') limit?: string) {
     return this.analyticsService.getRecentActivity(limit ? parseInt(limit, 10) : 20);
   }
+
+  @Get('delivery-stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delivery tracking stats (Admin)' })
+  getDeliveryStats() {
+    return this.analyticsService.getDeliveryStats();
+  }
 }
