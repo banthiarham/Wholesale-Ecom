@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
+import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { getCartSessionId } from "@/lib/utils"
 
 export default function Header() {
@@ -40,6 +41,8 @@ export default function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const { locale, setLocale, t } = useTranslation()
   const pathname = usePathname()
+  const siteName = useSetting("siteName", "WholesaleX Pro")
+  const logoUrl = useSetting("logoUrl", "")
 
   const fetchUser = () => {
     const token = localStorage.getItem("token")
@@ -184,12 +187,19 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-              <Package size={18} className="text-white" />
-            </div>
-            <span className="text-xl font-bold text-gray-900">
-              Wholesale<span className="text-primary-600">X</span>
-            </span>
+            {logoUrl ? (
+              <img src={logoUrl} alt={siteName} className="h-8 w-auto object-contain" />
+            ) : (
+              <>
+                <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+                  <Package size={18} className="text-white" />
+                </div>
+                <span className="text-xl font-bold text-gray-900">
+                  {siteName.replace(/(.)(.*)$/, (_, first, rest) => `${first}${rest.slice(0, -1)}`)}
+                  <span className="text-primary-600">{siteName.slice(-1)}</span>
+                </span>
+              </>
+            )}
           </Link>
 
           {/* Desktop nav */}

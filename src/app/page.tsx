@@ -5,6 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import CategoryNav from "@/components/categories/CategoryNav"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
+import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
 import {
@@ -45,6 +46,11 @@ interface Product {
 
 export default function Home() {
   const { t } = useTranslation()
+  const siteName = useSetting("siteName", "WholesaleX Pro")
+  const heroHeadline = useSetting("heroHeadline", "Bulk Orders. Best Prices. Delivered.")
+  const heroSubtext = useSetting("heroSubtext", "Connect with top vendors, get tier pricing, request quotes, and manage your wholesale procurement — all in one platform.")
+  const heroCtaText = useSetting("heroCtaText", "Browse Products")
+  const heroBannerUrl = useSetting("heroBannerUrl", "")
   const [products, setProducts] = useState<Product[]>([])
   const [stats, setStats] = useState({ products: 0, categories: 0, vendors: 0 })
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
@@ -79,7 +85,7 @@ export default function Home() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "WholesaleX Pro",
+    name: siteName,
     url: typeof window !== "undefined" ? window.location.origin : "https://wholesalex.com",
     description: "India's trusted B2B wholesale marketplace. Buy bulk products at the best prices with tier pricing, contract deals, and fast shipping across India.",
     contactPoint: { "@type": "ContactPoint", contactType: "customer service", availableLanguage: "English" },
@@ -91,7 +97,10 @@ export default function Home() {
       <div className="min-h-screen bg-gray-50">
       {/* ── Hero ── */}
       <section className="relative bg-gradient-to-br from-primary-700 via-primary-600 to-blue-500 overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
+        {heroBannerUrl && (
+          <img src={heroBannerUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        <div className={`absolute inset-0 ${heroBannerUrl ? "bg-black/50" : "opacity-10"}`}>
           <div className="absolute top-10 left-10 w-72 h-72 bg-white rounded-full blur-3xl" />
           <div className="absolute bottom-10 right-10 w-96 h-96 bg-blue-300 rounded-full blur-3xl" />
         </div>
@@ -101,19 +110,22 @@ export default function Home() {
               B2B Wholesale Platform
             </span>
             <h1 className="text-4xl lg:text-6xl font-extrabold text-white leading-tight mb-6">
-              Bulk Orders.<br />
-              Best Prices.<br />
-              <span className="text-blue-200">Delivered.</span>
+              {heroHeadline.split(".").map((line, i, arr) => (
+                <span key={i}>
+                  {line.trim()}{i < arr.length - 1 ? "." : ""}
+                  {i < arr.length - 1 && <br />}
+                </span>
+              ))}
             </h1>
             <p className="text-lg text-blue-100 mb-10 max-w-lg">
-              Connect with top vendors, get tier pricing, request quotes, and manage your wholesale procurement — all in one platform.
+              {heroSubtext}
             </p>
             <div className="flex flex-wrap gap-4">
               <Link
                 href="/products"
                 className="px-8 py-3.5 bg-white text-primary-700 font-semibold rounded-lg hover:bg-blue-50 transition shadow-lg"
               >
-                Browse Products
+                {heroCtaText}
               </Link>
               <Link
                 href="/rfqs/new"
@@ -151,7 +163,7 @@ export default function Home() {
       <section className="bg-white py-16 lg:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-14">
-            <h2 className="text-3xl font-bold text-gray-900 mb-3">How WholesaleX Pro Works</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">How {siteName} Works</h2>
             <p className="text-gray-500 max-w-xl mx-auto">Three simple steps to streamline your bulk procurement</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -339,7 +351,7 @@ export default function Home() {
       <section className="bg-gray-900 py-16 lg:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-14">
-            <h2 className="text-3xl font-bold text-white mb-3">Why Businesses Choose WholesaleX Pro</h2>
+            <h2 className="text-3xl font-bold text-white mb-3">Why Businesses Choose {siteName}</h2>
             <p className="text-gray-400 max-w-xl mx-auto">Built for serious bulk buyers and trusted vendors</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

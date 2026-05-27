@@ -23,6 +23,9 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Settings,
+  Truck,
+  PackageCheck,
 } from "lucide-react"
 
 const navItems = [
@@ -43,6 +46,9 @@ const navItems = [
   { label: "Loyalty", href: "/admin/loyalty", icon: Award },
   { label: "Notifications", href: "/admin/notifications", icon: Bell },
   { label: "Payments", href: "/admin/payments", icon: CreditCard },
+  { label: "Site Settings", href: "/admin/settings", icon: Settings },
+  { label: "Delivery Partners", href: "/admin/delivery-partners", icon: Truck },
+  { label: "Shipment Tracking", href: "/admin/delivery-tracking", icon: PackageCheck },
 ]
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {

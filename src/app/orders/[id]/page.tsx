@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
-import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation } from "lucide-react"
+import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation, ExternalLink, Circle, Clock } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface OrderDetail {
@@ -30,6 +30,8 @@ interface OrderDetail {
   }[]
   payment: { provider: string; status: string; amount: number; providerRef: string | null } | null
   user: { firstName: string; lastName: string; email: string; phone: string | null }
+  deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null; logo: string | null } | null
+  deliveryTracking?: { status: string; currentLocation: string | null; estimatedDelivery: string | null; events: { status: string; location: string | null; notes: string | null; occurredAt: string }[] } | null
 }
 
 export default function OrderDetailPage() {
@@ -202,17 +204,56 @@ export default function OrderDetailPage() {
           )}
 
           {/* Tracking Info */}
-          {(order.trackingNumber || order.carrier || order.shippingEta) && (
+          {(order.trackingNumber || order.carrier || order.shippingEta || order.deliveryPartner || order.deliveryTracking) && (
             <div className="mb-6 bg-blue-50 border border-blue-100 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Navigation size={16} className="text-blue-600" />
                 <span className="text-sm font-semibold text-blue-800">Shipment Tracking</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                {order.carrier && <div><span className="text-blue-600">Carrier:</span> <span className="font-medium text-blue-900">{order.carrier}</span></div>}
+                {(order.deliveryPartner?.name || order.carrier) && <div><span className="text-blue-600">Carrier:</span> <span className="font-medium text-blue-900">{order.deliveryPartner?.name || order.carrier}</span></div>}
                 {order.trackingNumber && <div><span className="text-blue-600">Tracking #:</span> <span className="font-mono font-medium text-blue-900">{order.trackingNumber}</span></div>}
-                {order.shippingEta && <div><span className="text-blue-600">Est. Delivery:</span> <span className="font-medium text-blue-900">{new Date(order.shippingEta).toLocaleDateString()}</span></div>}
+                {(order.deliveryTracking?.estimatedDelivery || order.shippingEta) && <div><span className="text-blue-600">Est. Delivery:</span> <span className="font-medium text-blue-900">{new Date(order.deliveryTracking?.estimatedDelivery || order.shippingEta!).toLocaleDateString()}</span></div>}
               </div>
+              {order.deliveryPartner?.trackingUrlTemplate && order.trackingNumber && (
+                <a
+                  href={order.deliveryPartner.trackingUrlTemplate.replace("{trackingNumber}", order.trackingNumber)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+                >
+                  <ExternalLink size={12} /> Track on {order.deliveryPartner.name}
+                </a>
+              )}
+              {order.deliveryTracking?.currentLocation && (
+                <div className="mt-2 text-xs text-blue-600 flex items-center gap-1"><MapPin size={12} /> {order.deliveryTracking.currentLocation}</div>
+              )}
+              {order.deliveryTracking?.events && order.deliveryTracking.events.length > 0 && (
+                <div className="mt-4 space-y-0">
+                  {order.deliveryTracking.events.slice().reverse().map((event, i) => {
+                    const labels: Record<string, string> = {
+                      PENDING: "Pending", PICKED_UP: "Picked Up", IN_TRANSIT: "In Transit",
+                      OUT_FOR_DELIVERY: "Out for Delivery", DELIVERED: "Delivered",
+                      FAILED: "Failed", RETURNED: "Returned",
+                    }
+                    const isLatest = i === 0
+                    return (
+                      <div key={i} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <Circle size={14} className={isLatest ? "text-blue-600 fill-blue-600" : "text-gray-300"} />
+                          {i < order.deliveryTracking!.events.length - 1 && <div className="w-0.5 h-6 bg-gray-200" />}
+                        </div>
+                        <div className="pb-3">
+                          <p className={`text-xs font-medium ${isLatest ? "text-blue-900" : "text-gray-500"}`}>{labels[event.status] || event.status}</p>
+                          {event.location && <p className="text-xs text-gray-400">{event.location}</p>}
+                          {event.notes && <p className="text-xs text-gray-400">{event.notes}</p>}
+                          <p className="text-xs text-gray-400">{new Date(event.occurredAt).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
