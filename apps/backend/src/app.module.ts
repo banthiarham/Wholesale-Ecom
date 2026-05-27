@@ -25,6 +25,7 @@ import { AddressesModule } from './addresses/addresses.module';
 import { PaymentGatewaysModule } from './payment-gateways/payment-gateways.module';
 import { SettingsModule } from './settings/settings.module';
 import { DeliveryPartnersModule } from './delivery-partners/delivery-partners.module';
+import { RulesModule } from './rules/rules.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { DeliveryPartnersModule } from './delivery-partners/delivery-partners.mo
     PaymentGatewaysModule,
     SettingsModule,
     DeliveryPartnersModule,
+    RulesModule,
   ],
   controllers: [AppController],
 })

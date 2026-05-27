@@ -780,3 +780,41 @@ model SiteSetting {
   @@index([key])
   @@index([group])
 }
+
+enum DynamicRuleType {
+  PRODUCT_DISCOUNT
+  CART_DISCOUNT
+  PAYMENT_METHOD_DISCOUNT
+  REQUIRED_QTY_FOR_PAYMENT_METHOD
+  BOGO
+  SHIPPING_RULE
+  MINIMUM_ORDER_QUANTITY
+  TAX_RULE
+  CHECKOUT_RESTRICTION
+  QUANTITY_BASED_DISCOUNT
+  EXTRA_CHARGE
+  BUY_X_AND_Y_FREE
+  MAXIMUM_ORDER_QUANTITY
+  RESTRICT_PRODUCT_VISIBILITY
+  HIDDEN_PRICE
+  NON_PURCHASABLE
+}
+
+model DynamicRule {
+  id          String          @id @default(uuid())
+  name        String
+  type        DynamicRuleType
+  description String?
+  priority    Int             @default(0)
+  isActive    Boolean         @default(true)
+  conditions  Json
+  actions     Json
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+  @@index([priority])
+}
