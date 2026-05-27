@@ -83,4 +83,54 @@ export class AnalyticsService {
     }
     return filter;
   }
+
+  async getDeliveryStats() {
+    const [totalShipments, trackingRecords, recentEvents] = await Promise.all([
+      this.prisma.order.count({ where: { deliveryPartnerId: { not: null } } }),
+      this.prisma.deliveryTracking.findMany({
+        include: { _count: { select: { events: true } } },
+      }),
+      this.prisma.deliveryTrackingEvent.findMany({
+        take: 10,
+        orderBy: { occurredAt: 'desc' },
+        include: { tracking: { include: { order: { select: { orderNumber: true } } } } },
+      }),
+    ]);
+
+    const byStatus: Record<string, number> = {};
+    for (const t of trackingRecords) {
+      byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+    }
+
+    const byPartner = await this.prisma.order.groupBy({
+      by: ['deliveryPartnerId'],
+      where: { deliveryPartnerId: { not: null } },
+      _count: { id: true },
+    });
+
+    const partnerIds = byPartner.map((b) => b.deliveryPartnerId!).filter(Boolean);
+    const partners = await this.prisma.deliveryPartner.findMany({
+      where: { id: { in: partnerIds } },
+      select: { id: true, name: true },
+    });
+    const partnerMap = Object.fromEntries(partners.map((p) => [p.id, p.name]));
+
+    return {
+      totalShipments,
+      byStatus,
+      byPartner: byPartner.map((b) => ({
+        partnerId: b.deliveryPartnerId,
+        partnerName: partnerMap[b.deliveryPartnerId!] || 'Unknown',
+        count: b._count.id,
+      })),
+      recentEvents: recentEvents.map((e) => ({
+        id: e.id,
+        status: e.status,
+        location: e.location,
+        notes: e.notes,
+        occurredAt: e.occurredAt,
+        orderNumber: e.tracking?.order?.orderNumber,
+      })),
+    };
+  }
 }
