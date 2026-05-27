@@ -22,6 +22,7 @@ import { RecommendationsModule } from './recommendations/recommendations.module'
 import { WishlistModule } from './wishlist/wishlist.module';
 import { ReturnsModule } from './returns/returns.module';
 import { AddressesModule } from './addresses/addresses.module';
+import { PaymentGatewaysModule } from './payment-gateways/payment-gateways.module';
 import { SettingsModule } from './settings/settings.module';
 import { DeliveryPartnersModule } from './delivery-partners/delivery-partners.module';
 
@@ -52,6 +53,7 @@ import { DeliveryPartnersModule } from './delivery-partners/delivery-partners.mo
     WishlistModule,
     ReturnsModule,
     AddressesModule,
+    PaymentGatewaysModule,
     SettingsModule,
     DeliveryPartnersModule,
   ],
