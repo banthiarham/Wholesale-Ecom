@@ -82,6 +82,16 @@ enum CatalogStatus {
   ARCHIVED
 }
 
+enum DeliveryStatus {
+  PENDING
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -367,12 +377,16 @@ model Order {
   carrier         String?
   shippingEta     DateTime?
 
+  deliveryPartnerId String?
+  deliveryPartner   DeliveryPartner? @relation(fields: [deliveryPartnerId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   items   OrderItem[]
   payment Payment?
   returnRequests ReturnRequest[]
+  deliveryTracking  DeliveryTracking?
 
   @@index([userId])
   @@index([status])
@@ -680,4 +694,64 @@ model ReturnItem {
   reason         String?
 
   @@index([returnRequestId])
+}
+
+model DeliveryPartner {
+  id                  String   @id @default(uuid())
+  name                String
+  code                String   @unique
+  trackingUrlTemplate String?
+  contactEmail        String?
+  contactPhone        String?
+  logo                String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  orders              Order[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model DeliveryTracking {
+  id                String         @id @default(uuid())
+  orderId           String         @unique
+  order             Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status            DeliveryStatus @default(PENDING)
+  currentLocation   String?
+  estimatedDelivery DateTime?
+  updatedAt         DateTime       @updatedAt
+
+  events            DeliveryTrackingEvent[]
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model DeliveryTrackingEvent {
+  id          String          @id @default(uuid())
+  trackingId  String
+  tracking    DeliveryTracking @relation(fields: [trackingId], references: [id], onDelete: Cascade)
+  status      DeliveryStatus
+  location    String?
+  notes       String?
+  occurredAt  DateTime        @default(now())
+
+  @@index([trackingId])
+  @@index([occurredAt])
+}
+
+model SiteSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  group     String   @default("general")
+  label     String
+  type      String   @default("text")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([group])
 }

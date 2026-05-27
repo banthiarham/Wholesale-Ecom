@@ -19,7 +19,9 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { UserRole, OrderStatus } from '@prisma/client';
+import { UserRole, OrderStatus, DeliveryStatus } from '@prisma/client';
+import { UpdateTrackingDto } from './dto/update-tracking.dto';
+import { CreateTrackingEventDto } from './dto/create-tracking-event.dto';
 
 @ApiTags('Orders')
 @Controller('orders')
@@ -136,10 +138,28 @@ export class OrdersController {
   @ApiResponse({ status: 200, description: 'Tracking info updated' })
   async updateTracking(
     @Param('id') id: string,
-    @Body() body: { trackingNumber?: string; carrier?: string; shippingEta?: string },
+    @Body() body: UpdateTrackingDto,
   ) {
     const order = await this.ordersService.updateTracking(id, body);
     return { order };
+  }
+
+  @Get(':id/delivery-tracking')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get delivery tracking for an order (Admin)' })
+  async getDeliveryTracking(@Param('id') id: string) {
+    return this.ordersService.getDeliveryTracking(id);
+  }
+
+  @Post(':id/delivery-tracking/events')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add delivery tracking event (Admin / Vendor)' })
+  async addTrackingEvent(@Param('id') id: string, @Body() body: CreateTrackingEventDto) {
+    return this.ordersService.addTrackingEvent(id, body);
   }
 
   @Put(':id/cancel')
