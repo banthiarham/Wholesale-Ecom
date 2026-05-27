@@ -131,6 +131,7 @@ model User {
   notifications   Notification[]
   wishlistItems   WishlistItem[]
   returnRequests  ReturnRequest[]
+  wallet          Wallet?
 
   @@index([email])
   @@index([role])
@@ -817,4 +818,35 @@ model DynamicRule {
   @@index([type])
   @@index([isActive])
   @@index([priority])
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions WalletTransaction[]
+
+  @@index([userId])
+}
+
+model WalletTransaction {
+  id          String   @id @default(uuid())
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type        String
+  amount      Decimal  @db.Decimal(12, 2)
+  balance     Decimal  @db.Decimal(12, 2)
+  description String?
+  referenceId String?
+  createdBy   String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([walletId])
+  @@index([type])
+  @@index([createdAt])
 }

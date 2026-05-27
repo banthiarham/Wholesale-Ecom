@@ -28,6 +28,7 @@ import {
   Truck,
   PackageCheck,
   Shield,
+  Sparkles,
 } from "lucide-react"
 
 const navItems = [
@@ -53,6 +54,7 @@ const navItems = [
   { label: "Delivery Partners", href: "/admin/delivery-partners", icon: Truck },
   { label: "Shipment Tracking", href: "/admin/delivery-tracking", icon: PackageCheck },
   { label: "Dynamic Rules", href: "/admin/rules", icon: Shield },
+  { label: "Addons", href: "/admin/addons", icon: Sparkles },
 ]
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {

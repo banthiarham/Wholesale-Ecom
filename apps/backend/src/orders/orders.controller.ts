@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, 
 import { OrdersService } from './orders.service';
 import { CsvOrderParserService } from './csv-order-parser.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateBulkOrderDto } from './dto/create-bulk-order.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -53,6 +54,20 @@ export class OrdersController {
       },
     );
     return { order };
+  }
+
+  @Post('bulk')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a bulk order (Admin only)' })
+  @ApiResponse({ status: 201, description: 'Bulk order created' })
+  async createBulk(@Body() body: CreateBulkOrderDto) {
+    const result = await this.ordersService.createFromBulk(body.userId, body.items, {
+      shippingAddress: body.shippingAddress,
+      notes: body.notes,
+    });
+    return result;
   }
 
   @Post('bulk-csv')

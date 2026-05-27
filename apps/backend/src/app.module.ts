@@ -26,6 +26,7 @@ import { PaymentGatewaysModule } from './payment-gateways/payment-gateways.modul
 import { SettingsModule } from './settings/settings.module';
 import { DeliveryPartnersModule } from './delivery-partners/delivery-partners.module';
 import { RulesModule } from './rules/rules.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { RulesModule } from './rules/rules.module';
     SettingsModule,
     DeliveryPartnersModule,
     RulesModule,
+    WalletModule,
   ],
   controllers: [AppController],
 })
