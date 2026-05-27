@@ -61,13 +61,13 @@ export default function AdminDeliveryTrackingPage() {
   useEffect(() => {
     Promise.all([
       fetch("/api/orders", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
-      fetch("/api/delivery-partners").then((r) => r.json()),
+      fetch("/api/delivery-partners/all", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
       fetch("/api/analytics/delivery-stats", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()).catch(() => null),
     ]).then(([oData, pData, sData]) => {
       const allOrders: ShipmentOrder[] = oData.orders || []
       const withDelivery = allOrders.filter((o: ShipmentOrder) => o.deliveryPartner || o.trackingNumber)
       setShipments(withDelivery.length > 0 ? withDelivery : allOrders.filter((o: ShipmentOrder) => o.status === "SHIPPED" || o.status === "PROCESSING" || o.status === "DELIVERED"))
-      setPartners(pData || [])
+      setPartners(Array.isArray(pData) ? pData : [])
       if (sData) setStats(sData)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
@@ -90,6 +90,7 @@ export default function AdminDeliveryTrackingPage() {
       })
       const data = await res.json()
       setDetailOrder((prev) => prev ? { ...prev, deliveryTracking: data.tracking } : prev)
+      setShipments((prev) => prev.map((s) => s.id === detailOrder.id ? { ...s, deliveryTracking: data.tracking } : s))
       setShowEventForm(false)
       setEventForm({ status: "PICKED_UP", location: "", notes: "" })
     } catch {

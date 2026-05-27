@@ -80,7 +80,11 @@ export default function AdminDeliveryPartnersPage() {
       headers: { Authorization: `Bearer ${token}` },
     })
     const updated = await res.json()
-    setPartners((prev) => prev.map((p) => (p.id === id ? { ...p, isActive: updated.isActive ?? false } : p)))
+    if (updated.isActive === false) {
+      setPartners((prev) => prev.map((p) => (p.id === id ? { ...p, isActive: false } : p)))
+    } else {
+      setPartners((prev) => prev.filter((p) => p.id !== id))
+    }
   }
 
   const toggleActive = async (partner: DeliveryPartner) => {

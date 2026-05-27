@@ -122,6 +122,7 @@ export class OrdersService {
         payment: true,
         deliveryPartner: true,
         deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -183,10 +184,10 @@ export class OrdersService {
       },
     });
 
-    if (data.deliveryPartnerId && data.trackingNumber) {
+    if (data.deliveryPartnerId || data.trackingNumber) {
       await this.prisma.deliveryTracking.upsert({
         where: { orderId: id },
-        update: {},
+        update: { status: DeliveryStatus.PENDING },
         create: { orderId: id, status: DeliveryStatus.PENDING },
       });
     }

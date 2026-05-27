@@ -14,7 +14,10 @@ export class DeliveryPartnersService {
   }
 
   async findById(id: string) {
-    const partner = await this.prisma.deliveryPartner.findUnique({ where: { id } });
+    const partner = await this.prisma.deliveryPartner.findUnique({
+      where: { id },
+      include: { _count: { select: { orders: true } } },
+    });
     if (!partner) throw new NotFoundException('Delivery partner not found');
     return partner;
   }
@@ -28,7 +31,7 @@ export class DeliveryPartnersService {
     logo?: string;
     isActive?: boolean;
   }) {
-    return this.prisma.deliveryPartner.create({ data });
+    return this.prisma.deliveryPartner.create({ data, include: { _count: { select: { orders: true } } } });
   }
 
   async update(id: string, data: {
@@ -41,7 +44,7 @@ export class DeliveryPartnersService {
     isActive?: boolean;
   }) {
     await this.findById(id);
-    return this.prisma.deliveryPartner.update({ where: { id }, data });
+    return this.prisma.deliveryPartner.update({ where: { id }, data, include: { _count: { select: { orders: true } } } });
   }
 
   async remove(id: string) {
@@ -51,6 +54,7 @@ export class DeliveryPartnersService {
       return this.prisma.deliveryPartner.update({
         where: { id },
         data: { isActive: false },
+        include: { _count: { select: { orders: true } } },
       });
     }
     return this.prisma.deliveryPartner.delete({ where: { id } });
