@@ -28,6 +28,8 @@ import { DeliveryPartnersModule } from './delivery-partners/delivery-partners.mo
 import { RolesModule } from './roles/roles.module';
 import { RolePricesModule } from './role-prices/role-prices.module';
 import { RoleRequestsModule } from './role-requests/role-requests.module';
+import { RulesModule } from './rules/rules.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -62,6 +64,8 @@ import { RoleRequestsModule } from './role-requests/role-requests.module';
     RolesModule,
     RolePricesModule,
     RoleRequestsModule,
+    RulesModule,
+    WalletModule,
   ],
   controllers: [AppController],
 })

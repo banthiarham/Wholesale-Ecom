@@ -110,6 +110,68 @@ export class OrdersService {
     return order;
   }
 
+  async createFromBulk(userId: string, items: { productId: string; quantity: number }[], data: { shippingAddress?: any; notes?: string }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+
+    const orderItemsData: { productId: string; quantity: number; unitPrice: number; totalPrice: number }[] = [];
+    let totalAmount = 0;
+    const errors: string[] = [];
+
+    for (const item of items) {
+      const product = await this.prisma.product.findUnique({ where: { id: item.productId } });
+      if (!product) { errors.push(`Product ${item.productId} not found`); continue; }
+      if (product.status !== 'PUBLISHED') { errors.push(`Product "${product.title}" is not available`); continue; }
+      if (product.moq > item.quantity) { errors.push(`Product "${product.title}" requires minimum order quantity of ${product.moq}`); continue; }
+      if (product.manageInventory && product.inventoryQuantity < item.quantity) {
+        errors.push(`Product "${product.title}" has only ${product.inventoryQuantity} in stock`);
+        continue;
+      }
+
+      const unitPrice = Number(product.unitPrice);
+      const totalPrice = unitPrice * item.quantity;
+      totalAmount += totalPrice;
+      orderItemsData.push({ productId: item.productId, quantity: item.quantity, unitPrice, totalPrice });
+    }
+
+    if (orderItemsData.length === 0) {
+      throw new BadRequestException(`No valid items to order. Errors: ${errors.join('; ')}`);
+    }
+
+    const order = await this.prisma.order.create({
+      data: {
+        userId,
+        totalAmount,
+        currency: 'INR',
+        shippingAddress: data.shippingAddress || null,
+        notes: data.notes || (errors.length > 0 ? `Bulk order. Skipped items: ${errors.join('; ')}` : 'Bulk order'),
+        items: { create: orderItemsData },
+      },
+      include: {
+        items: { include: { product: { select: { id: true, title: true, thumbnail: true } } } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    });
+
+    for (const item of order.items) {
+      try {
+        await this.inventoryService.reserveStock(item.productId, item.quantity, order.id, userId);
+      } catch (err) {
+        console.error(`Failed to reserve stock for product ${item.productId}:`, err.message);
+      }
+    }
+
+    if (order.user?.email && this.emailService.isConfigured()) {
+      try {
+        await this.emailService.sendOrderConfirmation(order.user.email, order.orderNumber.slice(0, 8), Number(order.totalAmount));
+      } catch (err) {
+        console.error('Failed to send order confirmation email:', err.message);
+      }
+    }
+
+    return { order, errors: errors.length > 0 ? errors : undefined };
+  }
+
   async findAll(userId?: string, status?: OrderStatus) {
     const where: any = {};
     if (userId) where.userId = userId;
@@ -122,6 +184,7 @@ export class OrdersService {
         payment: true,
         deliveryPartner: true,
         deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -183,10 +246,10 @@ export class OrdersService {
       },
     });
 
-    if (data.deliveryPartnerId && data.trackingNumber) {
+    if (data.deliveryPartnerId || data.trackingNumber) {
       await this.prisma.deliveryTracking.upsert({
         where: { orderId: id },
-        update: {},
+        update: { status: DeliveryStatus.PENDING },
         create: { orderId: id, status: DeliveryStatus.PENDING },
       });
     }

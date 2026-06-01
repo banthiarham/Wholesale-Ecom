@@ -26,6 +26,7 @@ interface Partner {
   code: string
   apiEnabled: boolean
   testMode: boolean
+  trackingUrlTemplate?: string | null
 }
 
 const statuses = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]

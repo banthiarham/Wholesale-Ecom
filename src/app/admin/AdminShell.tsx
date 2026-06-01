@@ -30,6 +30,8 @@ import {
   Shield,
   DollarSign,
   ClipboardList,
+  Sparkles,
+  Wallet,
 } from "lucide-react"
 
 const navItems = [
@@ -57,6 +59,10 @@ const navItems = [
   { label: "Site Settings", href: "/admin/settings", icon: Settings },
   { label: "Delivery Partners", href: "/admin/delivery-partners", icon: Truck },
   { label: "Shipment Tracking", href: "/admin/delivery-tracking", icon: PackageCheck },
+  { label: "Dynamic Rules", href: "/admin/rules", icon: Shield },
+  { label: "Addons", href: "/admin/addons", icon: Sparkles },
+  { label: "Bulk Orders", href: "/admin/bulk-orders", icon: ShoppingBag },
+  { label: "Wallet", href: "/admin/wallet", icon: Wallet },
 ]
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {

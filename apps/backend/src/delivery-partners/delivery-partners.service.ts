@@ -80,7 +80,7 @@ export class DeliveryPartnersService {
       createData.credentials = this.encryptCredentials(data.credentials);
     }
 
-    return this.prisma.deliveryPartner.create({ data: createData });
+    return this.prisma.deliveryPartner.create({ data: createData, include: { _count: { select: { orders: true } } } });
   }
 
   async update(id: string, data: {
@@ -127,7 +127,7 @@ export class DeliveryPartnersService {
       updateData.apiEnabled = true;
     }
 
-    return this.prisma.deliveryPartner.update({ where: { id }, data: updateData });
+    return this.prisma.deliveryPartner.update({ where: { id }, data: updateData, include: { _count: { select: { orders: true } } } });
   }
 
   async remove(id: string) {
@@ -135,7 +135,11 @@ export class DeliveryPartnersService {
     if (!partner) throw new NotFoundException('Delivery partner not found');
     const orderCount = await this.prisma.order.count({ where: { deliveryPartnerId: id } });
     if (orderCount > 0) {
-      return this.prisma.deliveryPartner.update({ where: { id }, data: { isActive: false } });
+      return this.prisma.deliveryPartner.update({
+        where: { id },
+        data: { isActive: false },
+        include: { _count: { select: { orders: true } } },
+      });
     }
     return this.prisma.deliveryPartner.delete({ where: { id } });
   }
