@@ -63,14 +63,18 @@ export class UsersService {
     return { users: users.map((u) => this.excludePassword(u)), total };
   }
 
-  async findOne(id: string): Promise<Omit<User, 'password'>> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+  async findOne(id: string): Promise<any> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: { roleRel: true },
+    });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    return this.excludePassword(user);
+    const { password: _, ...userWithoutPassword } = user;
+    return userWithoutPassword;
   }
 
   async findByEmail(email: string): Promise<Omit<User, 'password'> | null> {
@@ -124,6 +128,23 @@ export class UsersService {
     const user = await this.prisma.user.update({
       where: { id },
       data: { role },
+    });
+    return this.excludePassword(user);
+  }
+
+  async assignRole(id: string, roleId: string): Promise<Omit<User, 'password'>> {
+    // Verify the role exists
+    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!role) throw new NotFoundException('Role not found');
+
+    // Update both roleId (dynamic) and role (enum) for dual-read compatibility
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        roleId,
+        role: role.name as UserRole, // Keep enum in sync during migration
+      },
+      include: { roleRel: true },
     });
     return this.excludePassword(user);
   }

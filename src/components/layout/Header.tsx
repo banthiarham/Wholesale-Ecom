@@ -24,6 +24,7 @@ import {
   RotateCcw,
   GitCompare,
   Star,
+  Shield,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
@@ -165,6 +166,7 @@ export default function Header() {
           : []),
         { href: "/orders", label: t("nav.orders"), icon: ShoppingBag },
         { href: "/wishlist", label: "Wishlist", icon: Heart },
+        { href: "/account/role-request", label: "Role & Access", icon: Shield },
         { href: "/account/addresses", label: "Addresses", icon: MapPin },
         { href: "/account/returns", label: "Returns", icon: RotateCcw },
         { href: "/account/reviews", label: "My Reviews", icon: Star },
@@ -288,8 +290,8 @@ export default function Header() {
                     <div className="px-4 py-2 border-b border-gray-100">
                       <p className="text-sm font-medium text-gray-900">{user.firstName} {user.lastName}</p>
                       <p className="text-xs text-gray-400">{user.email}</p>
-                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold uppercase bg-primary-50 text-primary-600 rounded">
-                        {user.role}
+                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold uppercase rounded text-white" style={{ backgroundColor: user.roleRel?.color || '#6B7280' }}>
+                        {user.roleRel?.label || user.role}
                       </span>
                     </div>
                     {[...userLinks, { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 }].map((link) => (

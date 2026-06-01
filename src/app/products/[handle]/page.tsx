@@ -282,8 +282,11 @@ export default function ProductDetailPage() {
             )}
 
             {/* Contract / Seasonal Pricing Info */}
-            {pricing && (pricing.contractPrice !== null || pricing.seasonalDiscount > 0) && (
+            {pricing && (pricing.rolePrice !== null || pricing.contractPrice !== null || pricing.seasonalDiscount > 0) && (
               <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 space-y-1">
+                {pricing.rolePrice !== null && pricing.rolePrice < pricing.basePrice && (
+                  <p className="text-sm text-purple-700 font-medium">Your Role Price ({pricing.appliedRoleName}): {formatPrice(pricing.rolePrice)}/unit <span className="font-normal text-purple-500">(saved {formatPrice(pricing.basePrice - pricing.rolePrice)}/unit)</span></p>
+                )}
                 {pricing.contractPrice !== null && pricing.contractPrice < pricing.basePrice && (
                   <p className="text-sm text-blue-700 font-medium">Your Contract Price: {formatPrice(pricing.contractPrice)}/unit <span className="font-normal text-blue-500">(saved {formatPrice(pricing.basePrice - pricing.contractPrice)}/unit)</span></p>
                 )}

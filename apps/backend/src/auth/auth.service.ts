@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
-import { User, UserStatus, AccountType } from '@prisma/client';
+import { User, UserRole, UserStatus, AccountType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { RegisterDto } from './dto/register.dto';
@@ -22,6 +22,7 @@ export interface TokenPayload {
   sub: string;
   email: string;
   role: string;
+  roleId?: string;
 }
 
 export interface AuthResponse {
@@ -49,6 +50,35 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
+    // Determine role: roleId takes precedence, fall back to enum role → BUYER default
+    let roleEnum: UserRole = registerDto.role || UserRole.BUYER;
+    let roleId: string | null = registerDto.roleId || null;
+
+    // If roleId provided, look up the enum value; otherwise resolve from enum role
+    if (roleId) {
+      const roleRecord = await this.prisma.role.findUnique({ where: { id: roleId } });
+      if (roleRecord) {
+        roleEnum = roleRecord.name as UserRole;
+      } else {
+        roleId = null; // Invalid roleId, ignore it
+      }
+    } else {
+      // Backfill roleId from enum role
+      try {
+        const roleRecord = await this.prisma.role.findUnique({ where: { name: roleEnum } });
+        if (roleRecord) {
+          roleId = roleRecord.id;
+        }
+      } catch {
+        // Role table may not be seeded yet; skip
+      }
+    }
+
+    // For security: always start with BUYER role, create a role request for non-BUYER selections
+    const buyerRole = await this.prisma.role.findUnique({ where: { name: 'BUYER' } });
+    const actualRoleId = buyerRole?.id || roleId;
+    const actualRoleEnum = (buyerRole?.name as UserRole) || UserRole.BUYER;
+
     const user = await this.prisma.user.create({
       data: {
         email: registerDto.email,
@@ -56,11 +86,25 @@ export class AuthService {
         firstName: registerDto.firstName,
         lastName: registerDto.lastName,
         phone: registerDto.phone,
-        role: registerDto.role,
+        role: actualRoleEnum,
+        roleId: actualRoleId,
         status: UserStatus.PENDING_VERIFICATION,
         accountType: AccountType.LOCAL,
       },
+      include: { roleRel: true },
     });
+
+    // If user selected a non-BUYER role, create a role change request for admin approval
+    if (roleId && roleId !== actualRoleId) {
+      await this.prisma.roleChangeRequest.create({
+        data: {
+          userId: user.id,
+          roleId: roleId,
+          status: 'PENDING',
+          reason: 'Requested during registration',
+        },
+      });
+    }
 
     await this.generateAndSaveOtp(user.id, 'EMAIL_VERIFICATION');
 
@@ -248,10 +292,15 @@ export class AuthService {
     return isValid ? user : null;
   }
 
-  async validateToken(payload: TokenPayload): Promise<User | null> {
-    return this.prisma.user.findUnique({
+  async validateToken(payload: TokenPayload): Promise<any> {
+    const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
+      include: { roleRel: true },
     });
+    if (!user) return null;
+    // Add effective role name for guard checks (dynamic role takes precedence)
+    (user as any).effectiveRole = user.roleRel?.name || user.role;
+    return user;
   }
 
   buildAuthResponse(user: User): AuthResponse {
@@ -260,11 +309,12 @@ export class AuthService {
     return { accessToken, user: userWithoutPassword };
   }
 
-  private generateToken(user: User): string {
+  private generateToken(user: any): string {
     const payload: TokenPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
+      roleId: user.roleId || undefined,
     };
 
     return this.jwtService.sign(payload, {

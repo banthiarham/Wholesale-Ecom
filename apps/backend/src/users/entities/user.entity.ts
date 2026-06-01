@@ -9,6 +9,7 @@ export class UserEntity implements PrismaUser {
   lastName: string;
   phone: string | null;
   role: UserRole;
+  roleId: string | null;
   status: UserStatus;
   accountType: AccountType;
   googleId: string | null;

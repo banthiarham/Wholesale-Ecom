@@ -29,8 +29,15 @@ export class RegisterDto {
   @IsOptional()
   phone?: string;
 
+  /** Legacy enum role — still accepted for backward compatibility */
   @ApiPropertyOptional({ enum: UserRole, default: UserRole.BUYER })
   @IsEnum(UserRole)
   @IsOptional()
   role?: UserRole;
+
+  /** Dynamic role ID — takes precedence over enum role when provided */
+  @ApiPropertyOptional({ example: 'uuid-of-role' })
+  @IsString()
+  @IsOptional()
+  roleId?: string;
 }

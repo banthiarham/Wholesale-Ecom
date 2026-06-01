@@ -3,12 +3,23 @@
 import { useEffect, useState } from "react"
 import { Search, ChevronDown, ChevronUp, Shield, User, Ban, Trash2, X } from "lucide-react"
 
+interface RoleData {
+  id: string
+  name: string
+  label: string
+  color: string | null
+  icon: string | null
+  isSystem: boolean
+}
+
 interface UserData {
   id: string
   email: string
   firstName: string
   lastName: string
   role: string
+  roleId?: string | null
+  roleRel?: { id: string; name: string; label: string; color: string | null; icon: string | null } | null
   status: string
   createdAt: string
   phone?: string | null
@@ -16,6 +27,7 @@ interface UserData {
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserData[]>([])
+  const [roles, setRoles] = useState<RoleData[]>([])
   const [filtered, setFiltered] = useState<UserData[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -23,10 +35,12 @@ export default function AdminUsersPage() {
   const [sortDesc, setSortDesc] = useState(true)
   const [modalUser, setModalUser] = useState<UserData | null>(null)
   const [modalAction, setModalAction] = useState<"role" | "status" | "delete" | null>(null)
+  const [updatingRole, setUpdatingRole] = useState(false)
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   useEffect(() => {
     loadUsers()
+    loadRoles()
   }, [token])
 
   useEffect(() => {
@@ -36,7 +50,7 @@ export default function AdminUsersPage() {
         u.email.toLowerCase().includes(q) ||
         u.firstName.toLowerCase().includes(q) ||
         u.lastName.toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q)
+        (u.roleRel?.label || u.role).toLowerCase().includes(q)
     )
     result.sort((a, b) => {
       const av = a[sortKey] ?? ""
@@ -59,17 +73,30 @@ export default function AdminUsersPage() {
     }
   }
 
-  const updateRole = async (userId: string, role: string) => {
+  const loadRoles = async () => {
     try {
-      await fetch(`/api/users/${userId}/role`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ role }),
-      })
-      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
+      const res = await fetch("/api/roles", { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      setRoles(data.roles || [])
     } catch (err) {
       console.error(err)
     }
+  }
+
+  const updateRole = async (userId: string, roleId: string) => {
+    setUpdatingRole(true)
+    try {
+      await fetch(`/api/users/${userId}/assign-role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ roleId }),
+      })
+      // Refresh users to get updated role info
+      await loadUsers()
+    } catch (err) {
+      console.error(err)
+    }
+    setUpdatingRole(false)
     setModalAction(null)
   }
 
@@ -103,6 +130,20 @@ export default function AdminUsersPage() {
   const SortIcon = ({ col }: { col: keyof UserData }) => {
     if (sortKey !== col) return <ChevronDown size={14} className="text-gray-300" />
     return sortDesc ? <ChevronDown size={14} className="text-primary-600" /> : <ChevronUp size={14} className="text-primary-600" />
+  }
+
+  const getRoleBadgeColor = (user: UserData) => {
+    if (user.roleRel?.color) return user.roleRel.color
+    switch (user.role) {
+      case "ADMIN": return "#EF4444"
+      case "VENDOR": return "#8B5CF6"
+      case "DISTRIBUTOR": return "#F59E0B"
+      default: return "#3B82F6"
+    }
+  }
+
+  const getRoleLabel = (user: UserData) => {
+    return user.roleRel?.label || user.role
   }
 
   return (
@@ -165,11 +206,12 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">{u.email}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium uppercase ${
-                        u.role === "ADMIN" ? "bg-red-50 text-red-700" : u.role === "VENDOR" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"
-                      }`}>
-                        {u.role === "ADMIN" && <Shield size={12} />}
-                        {u.role}
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                        style={{ backgroundColor: getRoleBadgeColor(u) }}
+                      >
+                        <Shield size={12} />
+                        {getRoleLabel(u)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -217,7 +259,7 @@ export default function AdminUsersPage() {
       {/* Modals */}
       {modalAction && modalUser && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-80">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-80 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">
                 {modalAction === "role" && "Change Role"}
@@ -231,17 +273,25 @@ export default function AdminUsersPage() {
             </p>
             {modalAction === "role" && (
               <div className="space-y-2">
-                {["BUYER", "VENDOR", "ADMIN"].map((r) => (
+                {roles.map((r) => (
                   <button
-                    key={r}
-                    onClick={() => updateRole(modalUser.id, r)}
-                    className={`w-full py-2 rounded-lg border text-sm transition ${
-                      modalUser.role === r
+                    key={r.id}
+                    onClick={() => updateRole(modalUser.id, r.id)}
+                    disabled={updatingRole}
+                    className={`w-full py-2 rounded-lg border text-sm transition flex items-center gap-2 ${
+                      modalUser.roleId === r.id || modalUser.role === r.name
                         ? "bg-primary-50 border-primary-600 text-primary-700 font-medium"
                         : "border-gray-200 hover:bg-gray-50"
-                    }`}
+                    } ${updatingRole ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    {r}
+                    <span
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                      style={{ backgroundColor: r.color || "#6B7280" }}
+                    >
+                      <Shield size={10} />
+                    </span>
+                    {r.label}
+                    {r.isSystem && <span className="text-xs text-gray-400 ml-1">(System)</span>}
                   </button>
                 ))}
               </div>

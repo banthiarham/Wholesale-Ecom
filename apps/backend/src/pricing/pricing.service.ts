@@ -12,6 +12,8 @@ export class PricingService {
   ): Promise<{
     basePrice: number;
     tierPrice: number;
+    rolePrice: number | null;
+    appliedRoleName: string | null;
     contractPrice: number | null;
     seasonalDiscount: number;
     finalPrice: number;
@@ -37,7 +39,26 @@ export class PricingService {
     );
     const tierPrice = tier ? Number(tier.price) : basePrice;
 
-    // 2. Contract price
+    // 2. Role-based price
+    let rolePrice: number | null = null;
+    let appliedRoleName: string | null = null;
+    if (userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { roleRel: true },
+      });
+      if (user?.roleId) {
+        const rolePriceRecord = await this.prisma.rolePrice.findUnique({
+          where: { productId_roleId: { productId, roleId: user.roleId } },
+        });
+        if (rolePriceRecord && rolePriceRecord.isActive && quantity >= rolePriceRecord.minQty) {
+          rolePrice = Number(rolePriceRecord.price);
+          appliedRoleName = user.roleRel?.label || user.roleRel?.name || null;
+        }
+      }
+    }
+
+    // 3. Contract price
     let contractPrice: number | null = null;
     if (userId) {
       const contract = await this.prisma.contractPrice.findFirst({
@@ -53,12 +74,13 @@ export class PricingService {
       if (contract) contractPrice = Number(contract.price);
     }
 
-    // Start with best price among base/tier/contract
-    let currentPrice = contractPrice !== null
-      ? Math.min(tierPrice, contractPrice)
-      : tierPrice;
+    // Start with best price among tier/role/contract — lowest wins
+    const candidates = [tierPrice];
+    if (rolePrice !== null) candidates.push(rolePrice);
+    if (contractPrice !== null) candidates.push(contractPrice);
+    const currentPrice = Math.min(...candidates);
 
-    // 3. Seasonal discount
+    // 4. Seasonal discount
     let seasonalDiscount = 0;
     const now = new Date();
     const seasonal = await this.prisma.seasonalDiscount.findFirst({
@@ -77,6 +99,14 @@ export class PricingService {
 
     const appliedDiscounts: string[] = [];
 
+    // Track which pricing tier was actually applied
+    if (rolePrice !== null && rolePrice < tierPrice) {
+      appliedDiscounts.push(`Role (${appliedRoleName}): ₹${rolePrice.toLocaleString('en-IN')}`);
+    }
+    if (contractPrice !== null && contractPrice < tierPrice) {
+      appliedDiscounts.push(`Contract: ₹${contractPrice.toLocaleString('en-IN')}`);
+    }
+
     if (seasonal) {
       if (seasonal.type === 'PERCENTAGE') {
         seasonalDiscount = currentPrice * (Number(seasonal.value) / 100);
@@ -93,12 +123,108 @@ export class PricingService {
     return {
       basePrice,
       tierPrice,
+      rolePrice,
+      appliedRoleName,
       contractPrice,
       seasonalDiscount,
       finalPrice,
       discountAmount,
       discountPercent,
       appliedDiscounts,
+    };
+  }
+
+  /**
+   * Calculate effective price for a specific role (admin preview).
+   * Similar to calculateEffectivePrice but uses roleId directly instead of userId.
+   */
+  async calculatePriceForRole(
+    productId: string,
+    quantity: number,
+    roleId: string,
+  ): Promise<{
+    basePrice: number;
+    tierPrice: number;
+    rolePrice: number | null;
+    appliedRoleName: string | null;
+    seasonalDiscount: number;
+    finalPrice: number;
+    discountAmount: number;
+    discountPercent: number;
+  }> {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        tierPrices: { orderBy: { minQty: 'asc' } },
+        category: true,
+      },
+    });
+
+    if (!product) throw new Error('Product not found');
+
+    const basePrice = Number(product.unitPrice);
+
+    // Tier price
+    const tier = product.tierPrices.find(
+      (tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty),
+    );
+    const tierPrice = tier ? Number(tier.price) : basePrice;
+
+    // Role price
+    let rolePrice: number | null = null;
+    let appliedRoleName: string | null = null;
+    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
+    const rolePriceRecord = await this.prisma.rolePrice.findUnique({
+      where: { productId_roleId: { productId, roleId } },
+    });
+    if (rolePriceRecord && rolePriceRecord.isActive && quantity >= rolePriceRecord.minQty) {
+      rolePrice = Number(rolePriceRecord.price);
+      appliedRoleName = role?.label || role?.name || null;
+    }
+
+    // Best price
+    const candidates = [tierPrice];
+    if (rolePrice !== null) candidates.push(rolePrice);
+    const currentPrice = Math.min(...candidates);
+
+    // Seasonal discount
+    let seasonalDiscount = 0;
+    const now = new Date();
+    const seasonal = await this.prisma.seasonalDiscount.findFirst({
+      where: {
+        isActive: true,
+        startDate: { lte: now },
+        endDate: { gte: now },
+        minQty: { lte: quantity },
+        OR: [
+          { productId },
+          { categoryId: product.categoryId || undefined },
+        ],
+      },
+      orderBy: { value: 'desc' },
+    });
+
+    if (seasonal) {
+      if (seasonal.type === 'PERCENTAGE') {
+        seasonalDiscount = currentPrice * (Number(seasonal.value) / 100);
+      } else {
+        seasonalDiscount = Number(seasonal.value);
+      }
+    }
+
+    const finalPrice = Math.max(0, currentPrice - seasonalDiscount);
+    const discountAmount = basePrice - finalPrice;
+    const discountPercent = basePrice > 0 ? (discountAmount / basePrice) * 100 : 0;
+
+    return {
+      basePrice,
+      tierPrice,
+      rolePrice,
+      appliedRoleName,
+      seasonalDiscount,
+      finalPrice,
+      discountAmount,
+      discountPercent,
     };
   }
 

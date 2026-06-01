@@ -3,6 +3,8 @@
 export interface PricingBreakdown {
   basePrice: number
   tierPrice: number
+  rolePrice: number | null
+  appliedRoleName: string | null
   contractPrice: number | null
   seasonalDiscount: number
   finalPrice: number

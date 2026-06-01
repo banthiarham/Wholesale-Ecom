@@ -84,14 +84,26 @@ export class UsersController {
 
   @Patch(':id/role')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles('ADMIN')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update user role (Admin only)' })
+  @ApiOperation({ summary: 'Update user role (Admin only) — legacy enum-based' })
   updateRole(
     @Param('id') id: string,
     @Body('role', new ParseEnumPipe(UserRole)) role: UserRole,
   ): Promise<UserResponseDto> {
     return this.usersService.updateRole(id, role);
+  }
+
+  @Patch(':id/assign-role')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Assign dynamic role to user (Admin only)' })
+  assignRole(
+    @Param('id') id: string,
+    @Body('roleId') roleId: string,
+  ): Promise<UserResponseDto> {
+    return this.usersService.assignRole(id, roleId);
   }
 
   @Patch(':id/status')

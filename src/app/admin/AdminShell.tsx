@@ -27,6 +27,9 @@ import {
   Settings,
   Truck,
   PackageCheck,
+  Shield,
+  DollarSign,
+  ClipboardList,
 } from "lucide-react"
 
 const navItems = [
@@ -42,6 +45,9 @@ const navItems = [
   { label: "Coupons", href: "/admin/coupons", icon: Ticket },
   { label: "Discounts", href: "/admin/discounts", icon: Percent },
   { label: "Contract Prices", href: "/admin/contract-prices", icon: FileText },
+  { label: "Roles", href: "/admin/roles", icon: Shield },
+  { label: "Role Pricing", href: "/admin/role-prices", icon: DollarSign },
+  { label: "Role Requests", href: "/admin/role-requests", icon: ClipboardList },
   { label: "Reviews", href: "/admin/reviews", icon: Star },
   { label: "Returns", href: "/admin/returns", icon: RotateCcw },
   { label: "Loyalty", href: "/admin/loyalty", icon: Award },
