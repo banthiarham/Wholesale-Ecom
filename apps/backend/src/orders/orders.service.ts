@@ -1,15 +1,19 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { EmailService } from '../notifications/email.service';
+import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { OrderStatus, PaymentStatus, DeliveryStatus } from '@prisma/client';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private prisma: PrismaService,
     private inventoryService: InventoryService,
     private emailService: EmailService,
+    private loyaltyEarningService: LoyaltyEarningService,
   ) {}
 
   async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string; couponCode?: string }) {
@@ -209,14 +213,46 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, status: OrderStatus) {
-    return this.prisma.order.update({
+    const order = await this.prisma.order.update({
       where: { id },
       data: { status },
       include: {
-        items: { include: { product: { select: { id: true, title: true } } } },
+        items: { include: { product: { select: { id: true, title: true, categoryId: true } } } },
         payment: true,
+        user: { select: { id: true, role: true, referredBy: true } },
       },
     });
+
+    // Award loyalty points on delivery
+    if (status === 'DELIVERED') {
+      try {
+        const orderItems = order.items.map((item) => ({
+          productId: item.productId,
+          categoryId: item.product?.categoryId || null,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+        }));
+
+        // Check if this is the user's first delivered order
+        const deliveredCount = await this.prisma.order.count({
+          where: { userId: order.userId, status: { in: ['DELIVERED', 'CONFIRMED'] } },
+        });
+        const isFirstOrder = deliveredCount <= 1;
+
+        await this.loyaltyEarningService.evaluateAndAward(order.userId, 'ORDER_COMPLETED', {
+          orderId: order.id,
+          orderAmount: Number(order.totalAmount),
+          orderItems,
+          isFirstOrder,
+          userRole: order.user?.role,
+          referredBy: order.user?.referredBy || undefined,
+        });
+      } catch (err) {
+        this.logger.error(`Failed to award loyalty points for order ${order.id}: ${err.message}`);
+      }
+    }
+
+    return order;
   }
 
   async updateTracking(id: string, data: { trackingNumber?: string; carrier?: string; shippingEta?: string; deliveryPartnerId?: string }) {

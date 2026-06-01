@@ -79,6 +79,9 @@ export class AuthService {
     const actualRoleId = buyerRole?.id || roleId;
     const actualRoleEnum = (buyerRole?.name as UserRole) || UserRole.BUYER;
 
+    // Generate referral code
+    const referralCode = `${registerDto.firstName?.substring(0, 3).toUpperCase() || 'USR'}${Date.now().toString(36).toUpperCase()}`;
+
     const user = await this.prisma.user.create({
       data: {
         email: registerDto.email,
@@ -90,6 +93,8 @@ export class AuthService {
         roleId: actualRoleId,
         status: UserStatus.PENDING_VERIFICATION,
         accountType: AccountType.LOCAL,
+        referralCode,
+        referredBy: registerDto.referralCode || null,
       },
       include: { roleRel: true },
     });

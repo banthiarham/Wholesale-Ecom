@@ -21,4 +21,6 @@ export class UserEntity implements PrismaUser {
   createdAt: Date;
   updatedAt: Date;
   lastLoginAt: Date | null;
+  referralCode: string | null;
+  referredBy: string | null;
 }

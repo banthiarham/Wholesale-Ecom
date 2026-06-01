@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Award, Plus, X } from "lucide-react"
+import { Award, Plus, X, Zap, ExternalLink } from "lucide-react"
 
 interface LoyaltyAccount {
   id: string
@@ -11,6 +11,15 @@ interface LoyaltyAccount {
   lifetimePoints: number
   walletBalance: number
   user?: { id: string; firstName: string; lastName: string; email: string }
+}
+
+interface EarningRule {
+  id: string
+  name: string
+  type: string
+  description: string | null
+  actions: Record<string, any>
+  conditions: Record<string, any>
 }
 
 export default function AdminLoyaltyPage() {
@@ -23,10 +32,33 @@ export default function AdminLoyaltyPage() {
   const [form, setForm] = useState({ userId: "", points: "", description: "" })
   const [cbForm, setCbForm] = useState({ userId: "", amount: "", description: "" })
   const [search, setSearch] = useState("")
+  const [earningRules, setEarningRules] = useState<EarningRule[]>([])
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
-  useEffect(() => { loadLeaderboard(); loadUsers() }, [token])
+  useEffect(() => { loadLeaderboard(); loadUsers(); loadEarningRules() }, [token])
+
+  const loadEarningRules = async () => {
+    try {
+      const loyaltyTypes = "LOYALTY_ORDER_EARN,LOYALTY_CATEGORY_BONUS,LOYALTY_FIRST_ORDER_BONUS,LOYALTY_REVIEW_BONUS,LOYALTY_REFERRAL_BONUS"
+      const res = await fetch(`/api/rules?isActive=true`, { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      const allRules = data.rules ?? []
+      setEarningRules(allRules.filter((r: any) => r.type.startsWith("LOYALTY_")))
+    } catch (e) { console.error(e) }
+  }
+
+  const formatRuleAction = (rule: EarningRule) => {
+    const a = rule.actions || {}
+    switch (rule.type) {
+      case "LOYALTY_ORDER_EARN": return `${a.pointsPerUnit || "?"} pts per ₹${a.unitAmount || "?"}`
+      case "LOYALTY_CATEGORY_BONUS": return `${a.bonusPoints || "?"} bonus pts`
+      case "LOYALTY_FIRST_ORDER_BONUS": return `${a.bonusPoints || "?"} bonus pts`
+      case "LOYALTY_REVIEW_BONUS": return `${a.bonusPoints || "?"} bonus pts`
+      case "LOYALTY_REFERRAL_BONUS": return `${a.referrerPoints || "?"} pts (referrer)`
+      default: return ""
+    }
+  }
 
   const loadLeaderboard = async () => {
     setLoading(true)
@@ -64,6 +96,30 @@ export default function AdminLoyaltyPage() {
       <div className="flex items-center justify-between"><h1 className="text-xl font-semibold text-gray-900">Loyalty Program</h1><div className="flex gap-3"><button onClick={() => setShowEarn(true)} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition"><Plus size={16} /> Add Points</button><button onClick={() => setShowCashback(true)} className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition"><Plus size={16} /> Add Cashback</button></div></div>
 
       <div className="relative"><input type="text" placeholder="Search by user name or email..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
+
+      {/* Earning Rules */}
+      {earningRules.length > 0 && (
+        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Zap size={20} className="text-primary-600" />
+              <h2 className="text-lg font-semibold">Active Earning Rules</h2>
+            </div>
+            <a href="/admin/rules" className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700">
+              Manage Rules <ExternalLink size={14} />
+            </a>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {earningRules.map((rule) => (
+              <div key={rule.id} className="p-4 rounded-lg border border-gray-100 bg-gray-50">
+                <div className="font-medium text-gray-900 text-sm">{rule.name}</div>
+                <div className="text-xs text-gray-500 mt-1">{formatRuleAction(rule)}</div>
+                {rule.description && <div className="text-xs text-gray-400 mt-1">{rule.description}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Add Points Modal */}
       {showEarn && (

@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 
 @Injectable()
 export class ReviewsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(ReviewsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private loyaltyEarningService: LoyaltyEarningService,
+  ) {}
 
   async findAll(productId?: string, userId?: string) {
     const where: any = {};
@@ -59,6 +65,16 @@ export class ReviewsService {
     });
 
     await this.updateProductRating(dto.productId);
+
+    // Award loyalty points for review
+    try {
+      await this.loyaltyEarningService.evaluateAndAward(userId, 'REVIEW_SUBMITTED', {
+        productId: dto.productId,
+        rating: dto.rating,
+      });
+    } catch (err) {
+      this.logger.error(`Failed to award loyalty review bonus for user ${userId}: ${err.message}`);
+    }
 
     return review;
   }

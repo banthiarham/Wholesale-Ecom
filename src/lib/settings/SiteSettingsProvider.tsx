@@ -84,7 +84,7 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
 
     const headingFont = settings.headingFont || DEFAULTS.headingFont
     const bodyFont = settings.bodyFont || DEFAULTS.bodyFont
-    const fonts = [...new Set([headingFont, bodyFont])].filter((f) => f !== "Inter")
+    const fonts = Array.from(new Set([headingFont, bodyFont])).filter((f) => f !== "Inter")
     if (fonts.length > 0) {
       loadGoogleFonts(fonts)
     }

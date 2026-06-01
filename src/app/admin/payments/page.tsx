@@ -139,7 +139,7 @@ export default function AdminPaymentsPage() {
   }
 
   // Get unique providers for filter dropdown
-  const providers = [...new Set(payments.map((p) => p.provider))].sort()
+  const providers = Array.from(new Set(payments.map((p) => p.provider))).sort()
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div></div>
 

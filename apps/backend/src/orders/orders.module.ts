@@ -6,9 +6,10 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DeliveryPartnersModule } from '../delivery-partners/delivery-partners.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
 
 @Module({
-  imports: [InventoryModule, PricingModule, NotificationsModule, DeliveryPartnersModule],
+  imports: [InventoryModule, PricingModule, NotificationsModule, DeliveryPartnersModule, LoyaltyModule],
   controllers: [OrdersController],
   providers: [OrdersService, CsvOrderParserService],
   exports: [OrdersService],

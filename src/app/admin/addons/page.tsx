@@ -55,8 +55,8 @@ export default function AdminAddonsPage() {
         ))}
       </div>
 
-      {activeTab === "bulk-orders" && <BulkOrdersTab token={token} />}
-      {activeTab === "wallet" && <WalletTab token={token} />}
+      {activeTab === "bulk-orders" && <BulkOrdersTab token={token!} />}
+      {activeTab === "wallet" && <WalletTab token={token!} />}
     </div>
   )
 }

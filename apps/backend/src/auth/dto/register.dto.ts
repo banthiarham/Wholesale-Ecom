@@ -40,4 +40,10 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   roleId?: string;
+
+  /** Referral code from another user (optional) */
+  @ApiPropertyOptional({ example: 'JOHabc123' })
+  @IsString()
+  @IsOptional()
+  referralCode?: string;
 }

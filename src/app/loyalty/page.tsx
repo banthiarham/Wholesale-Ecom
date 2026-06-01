@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Award, TrendingUp, Wallet, Gift, ArrowLeft, Crown, Star, Medal, Zap } from "lucide-react"
+import { Award, TrendingUp, Wallet, Gift, ArrowLeft, Crown, Star, Medal, Zap, Copy, Check, Users } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
 interface Transaction {
@@ -28,6 +28,11 @@ export default function LoyaltyPage() {
   const [redeemDesc, setRedeemDesc] = useState("")
   const [redeeming, setRedeeming] = useState(false)
   const [redeemMsg, setRedeemMsg] = useState("")
+  const [earningRules, setEarningRules] = useState<any[]>([])
+  const [referralCode, setReferralCode] = useState("")
+  const [copied, setCopied] = useState(false)
+  const [referralInput, setReferralInput] = useState("")
+  const [referralMsg, setReferralMsg] = useState("")
 
   const loadAccount = () => {
     const token = localStorage.getItem("token")
@@ -39,6 +44,73 @@ export default function LoyaltyPage() {
   }
 
   useEffect(() => { loadAccount() }, [])
+
+  useEffect(() => {
+    const token = localStorage.getItem("token")
+    if (!token) return
+    // Fetch earning rules
+    fetch("/api/loyalty/rules", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => setEarningRules(data.rules || []))
+      .catch(() => {})
+    // Fetch referral code
+    fetch("/api/loyalty/referral-code", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => setReferralCode(data.referralCode || ""))
+      .catch(() => {})
+  }, [])
+
+  const handleApplyReferral = async () => {
+    if (!referralInput.trim()) return
+    setReferralMsg("")
+    const token = localStorage.getItem("token")!
+    try {
+      const res = await fetch("/api/loyalty/apply-referral", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ code: referralInput.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setReferralMsg("Referral code applied successfully!")
+        setReferralInput("")
+      } else {
+        setReferralMsg(data.message || "Failed to apply referral code")
+      }
+    } catch { setReferralMsg("Failed to apply referral code") }
+  }
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(referralCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const ruleTypeIcons: Record<string, string> = {
+    LOYALTY_ORDER_EARN: "🛒",
+    LOYALTY_CATEGORY_BONUS: "📦",
+    LOYALTY_FIRST_ORDER_BONUS: "🎉",
+    LOYALTY_REVIEW_BONUS: "⭐",
+    LOYALTY_REFERRAL_BONUS: "👥",
+  }
+
+  const formatRuleDescription = (rule: any) => {
+    const actions = rule.actions || {}
+    switch (rule.type) {
+      case "LOYALTY_ORDER_EARN":
+        return `Earn ${actions.pointsPerUnit || "?"} points for every ₹${actions.unitAmount || "?"} spent`
+      case "LOYALTY_CATEGORY_BONUS":
+        return `Earn ${actions.bonusPoints || "?"} bonus points`
+      case "LOYALTY_FIRST_ORDER_BONUS":
+        return `Earn ${actions.bonusPoints || "?"} bonus points on your first order`
+      case "LOYALTY_REVIEW_BONUS":
+        return `Earn ${actions.bonusPoints || "?"} points for writing a review`
+      case "LOYALTY_REFERRAL_BONUS":
+        return `Earn ${actions.referrerPoints || "?"} points for referring a friend`
+      default:
+        return rule.description || ""
+    }
+  }
 
   const handleRedeem = async () => {
     const points = Number(redeemPoints)
@@ -136,6 +208,58 @@ export default function LoyaltyPage() {
                   <div className="bg-primary-600 h-3 rounded-full transition-all" style={{ width: `${Math.min(progressPercent, 100)}%` }} />
                 </div>
                 <p className="text-xs text-gray-500 mt-2">Earn {nextTier.minPoints - account.lifetimePoints} more lifetime points to reach {nextTier.name}</p>
+              </div>
+            )}
+
+            {/* How to Earn Points */}
+            {earningRules.length > 0 && (
+              <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap size={20} className="text-primary-600" />
+                  <h2 className="text-xl font-semibold">How to Earn Points</h2>
+                </div>
+                <div className="space-y-3">
+                  {earningRules.map((rule) => (
+                    <div key={rule.id} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
+                      <span className="text-xl">{ruleTypeIcons[rule.type] || "🎯"}</span>
+                      <div>
+                        <p className="font-medium text-gray-900">{rule.name}</p>
+                        <p className="text-sm text-gray-600">{formatRuleDescription(rule)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Referral Code */}
+            {account && referralCode && (
+              <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Users size={20} className="text-primary-600" />
+                  <h2 className="text-xl font-semibold">Refer a Friend</h2>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">Share your referral code with friends. When they make their first order, you both earn bonus points!</p>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-mono text-lg tracking-wider text-primary-700">
+                    {referralCode}
+                  </div>
+                  <button onClick={handleCopyCode} className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">
+                    {copied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy</>}
+                  </button>
+                </div>
+                {true && (
+                  <div className="border-t border-gray-100 pt-4 mt-4">
+                    <p className="text-sm text-gray-600 mb-2">Have a referral code? Enter it below:</p>
+                    <div className="flex gap-2">
+                      <input type="text" value={referralInput} onChange={(e) => setReferralInput(e.target.value)} placeholder="Enter referral code" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <button onClick={handleApplyReferral} disabled={!referralInput.trim()} className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium">Apply</button>
+                    </div>
+                    {referralMsg && (
+                      <p className={`text-sm mt-2 ${referralMsg.includes("success") ? "text-green-600" : "text-red-600"}`}>{referralMsg}</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

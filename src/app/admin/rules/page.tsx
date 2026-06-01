@@ -37,6 +37,11 @@ const RULE_TYPES = [
   { value: "RESTRICT_PRODUCT_VISIBILITY", label: "Restrict Product Visibility" },
   { value: "HIDDEN_PRICE", label: "Hidden Price" },
   { value: "NON_PURCHASABLE", label: "Non-Purchasable" },
+  { value: "LOYALTY_ORDER_EARN", label: "Loyalty: Points per Order" },
+  { value: "LOYALTY_CATEGORY_BONUS", label: "Loyalty: Category Bonus" },
+  { value: "LOYALTY_FIRST_ORDER_BONUS", label: "Loyalty: First Order Bonus" },
+  { value: "LOYALTY_REVIEW_BONUS", label: "Loyalty: Review Bonus" },
+  { value: "LOYALTY_REFERRAL_BONUS", label: "Loyalty: Referral Bonus" },
 ] as const
 
 const TYPE_COLORS: Record<string, string> = {
@@ -56,6 +61,11 @@ const TYPE_COLORS: Record<string, string> = {
   RESTRICT_PRODUCT_VISIBILITY: "bg-slate-50 text-slate-700",
   HIDDEN_PRICE: "bg-gray-50 text-gray-700",
   NON_PURCHASABLE: "bg-neutral-50 text-neutral-700",
+  LOYALTY_ORDER_EARN: "bg-emerald-50 text-emerald-700",
+  LOYALTY_CATEGORY_BONUS: "bg-teal-50 text-teal-700",
+  LOYALTY_FIRST_ORDER_BONUS: "bg-lime-50 text-lime-700",
+  LOYALTY_REVIEW_BONUS: "bg-sky-50 text-sky-700",
+  LOYALTY_REFERRAL_BONUS: "bg-violet-50 text-violet-700",
 }
 
 type RuleForm = {
@@ -393,6 +403,90 @@ function ConditionsActionsFields({ form, setForm, products, categories }: { form
             <label className="block text-sm font-medium text-gray-700 mb-1">Message (optional)</label>
             <textarea value={a.message || ""} onChange={(e) => updateA("message", e.target.value || undefined)} placeholder="Message shown when trying to purchase" rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
+        </>
+      )
+
+    case "LOYALTY_ORDER_EARN":
+      return (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Min Order Amount (₹)</label>
+            <input type="number" step="0.01" value={c.minOrderAmount || ""} onChange={(e) => updateC("minOrderAmount", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 0 (no minimum)" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          {roleSelect("Apply to Role (optional)", c.roleIds?.[0] || "", (v) => updateC("roleIds", v ? [v] : []))}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Points per Unit</label>
+            <input type="number" value={a.pointsPerUnit ?? ""} onChange={(e) => updateA("pointsPerUnit", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 10" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Unit Amount (₹)</label>
+            <input type="number" step="0.01" value={a.unitAmount ?? ""} onChange={(e) => updateA("unitAmount", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 1000" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <p className="col-span-full text-xs text-gray-500">Users earn {a.pointsPerUnit || "?"} points for every ₹{a.unitAmount || "?"} spent on an order</p>
+        </>
+      )
+
+    case "LOYALTY_CATEGORY_BONUS":
+      return (
+        <>
+          {categorySelect("Category", c.categoryIds?.[0] || "", (v) => updateC("categoryIds", v ? [v] : []))}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Min Order Amount (₹, optional)</label>
+            <input type="number" step="0.01" value={c.minOrderAmount || ""} onChange={(e) => updateC("minOrderAmount", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 500" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bonus Points</label>
+            <input type="number" value={a.bonusPoints ?? ""} onChange={(e) => updateA("bonusPoints", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 50" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <p className="col-span-full text-xs text-gray-500">Users earn {a.bonusPoints || "?"} bonus points when purchasing from the selected category</p>
+        </>
+      )
+
+    case "LOYALTY_FIRST_ORDER_BONUS":
+      return (
+        <>
+          {roleSelect("Apply to Role (optional)", c.roleIds?.[0] || "", (v) => updateC("roleIds", v ? [v] : []))}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bonus Points</label>
+            <input type="number" value={a.bonusPoints ?? ""} onChange={(e) => updateA("bonusPoints", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 100" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <p className="col-span-full text-xs text-gray-500">Users earn {a.bonusPoints || "?"} bonus points on their first order</p>
+        </>
+      )
+
+    case "LOYALTY_REVIEW_BONUS":
+      return (
+        <>
+          {roleSelect("Apply to Role (optional)", c.roleIds?.[0] || "", (v) => updateC("roleIds", v ? [v] : []))}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Min Rating (1-5, optional)</label>
+            <input type="number" min="1" max="5" value={c.minRating || ""} onChange={(e) => updateC("minRating", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 3" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bonus Points</label>
+            <input type="number" value={a.bonusPoints ?? ""} onChange={(e) => updateA("bonusPoints", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 25" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <p className="col-span-full text-xs text-gray-500">Users earn {a.bonusPoints || "?"} points for writing a review{c.minRating ? ` with rating ≥ ${c.minRating}` : ""}</p>
+        </>
+      )
+
+    case "LOYALTY_REFERRAL_BONUS":
+      return (
+        <>
+          {roleSelect("Apply to Role (optional)", c.roleIds?.[0] || "", (v) => updateC("roleIds", v ? [v] : []))}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Min Order Amount for Referred User (₹, optional)</label>
+            <input type="number" step="0.01" value={c.minOrderAmount || ""} onChange={(e) => updateC("minOrderAmount", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 500" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Referrer Points</label>
+            <input type="number" value={a.referrerPoints ?? ""} onChange={(e) => updateA("referrerPoints", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 200" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Referred User Points (optional)</label>
+            <input type="number" value={a.referredPoints ?? ""} onChange={(e) => updateA("referredPoints", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 50" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <p className="col-span-full text-xs text-gray-500">Referrer earns {a.referrerPoints || "?"} pts{a.referredPoints ? `, referred user earns ${a.referredPoints} pts` : ""} when referred user completes first order</p>
         </>
       )
 
