@@ -17,6 +17,8 @@ export default function AuthCallbackInner() {
           .then((res) => res.json())
           .then((userData) => {
             const userId = userData.id || userData.user?.id
+            // Dispatch auth-change so AuthProvider picks up the new user
+            window.dispatchEvent(new CustomEvent("auth-change", { detail: userData.user || userData }))
             if (userId) {
               fetch("/api/cart/merge", {
                 method: "POST",
@@ -28,6 +30,9 @@ export default function AuthCallbackInner() {
             }
           })
           .catch(() => {})
+      } else {
+        // No cart to merge, but still dispatch auth-change
+        window.dispatchEvent(new CustomEvent("auth-change", { detail: null }))
       }
       router.push("/")
     } else {

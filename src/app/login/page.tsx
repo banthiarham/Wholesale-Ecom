@@ -48,8 +48,9 @@ export default function LoginPage() {
           }
         }
         window.dispatchEvent(new CustomEvent("auth-change", { detail: data.user }))
-        const role = data.user?.role
-        const redirectTo = role === "ADMIN" ? "/admin" : role === "VENDOR" ? "/vendor/dashboard" : "/"
+        // Use dynamic role for redirect — effectiveRole from roleRel takes precedence
+        const effectiveRole = data.user?.effectiveRole || data.user?.roleRel?.name || data.user?.role
+        const redirectTo = effectiveRole === "ADMIN" ? "/admin" : effectiveRole === "VENDOR" ? "/vendor/dashboard" : "/"
         router.push(redirectTo)
       }
     } catch (err) {

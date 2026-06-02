@@ -212,6 +212,7 @@ model Category {
 
   products          Product[]
   seasonalDiscounts SeasonalDiscount[]
+  homeSections      HomeSection[]
 
   @@index([handle])
   @@index([isActive])
@@ -993,4 +994,43 @@ model WalletTransaction {
   @@index([walletId])
   @@index([type])
   @@index([createdAt])
+}
+
+// ==========================================
+// Homepage Content Models
+// ==========================================
+
+model Banner {
+  id          String    @id @default(uuid())
+  title       String
+  subtitle    String?
+  imageUrl    String
+  linkUrl     String?
+  buttonText  String?
+  rank        Int       @default(0)
+  isActive    Boolean   @default(true)
+  section     String     @default("hero")
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([section, isActive, rank])
+  @@index([isActive])
+}
+
+model HomeSection {
+  id          String    @id @default(uuid())
+  type        String
+  title       String?
+  subtitle    String?
+  config      Json?
+  rank        Int       @default(0)
+  isActive    Boolean   @default(true)
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([type, isActive, rank])
 }

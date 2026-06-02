@@ -1,14 +1,15 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield } from "lucide-react"
+import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { useStorefrontRules } from "@/lib/rules"
 
 interface CartItem {
   id: string; quantity: number; unitPrice: number;
-  product: { id: string; title: string; handle: string; thumbnail: string | null; sku: string | null; moq: number }
+  product: { id: string; title: string; handle: string; thumbnail: string | null; sku: string | null; moq: number; unitPrice: string; compareAtPrice: string | null; tierPrices: { minQty: number; maxQty: number | null; price: string }[]; category?: { id: string; name: string; handle: string } }
 }
 
 interface CartData {
@@ -48,7 +49,6 @@ type PaymentMethod = "COD" | "ONLINE"
 
 export default function CheckoutPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [cart, setCart] = useState<CartData | null>(null)
   const [loading, setLoading] = useState(true)
   const [placing, setPlacing] = useState(false)
@@ -68,6 +68,39 @@ export default function CheckoutPage() {
   const [pointsToRedeem, setPointsToRedeem] = useState(0)
   const [pointsRedeeming, setPointsRedeeming] = useState(false)
 
+  // Evaluate dynamic rules for checkout
+  const cartItemsForRules = useMemo(
+    () => (cart?.cart.items ?? []).map((item) => ({
+      id: item.product.id,
+      categoryId: item.product.category?.id,
+      unitPrice: Number(item.product.unitPrice),
+    })),
+    [cart?.cart.items]
+  )
+  const {
+    productDiscounts, cartDiscount, paymentMethodDiscount, bogo,
+    shipping, taxes, minimumOrderQuantities, maximumOrderQuantities,
+    checkoutRestrictions, quantityDiscounts, extraCharges,
+    availablePaymentMethods,
+  } = useStorefrontRules(cartItemsForRules, undefined, {
+    paymentMethod: paymentMethod === "COD" ? "COD" : selectedProvider || undefined,
+  })
+
+  // Build lookup maps
+  const ruleProductDiscountMap = useMemo(() => {
+    const m = new Map<string, { discountAmount: number; discountPercent: number; ruleName: string }>()
+    for (const d of productDiscounts) m.set(d.productId, d)
+    return m
+  }, [productDiscounts])
+
+  const qtyDiscountMap = useMemo(() => {
+    const m = new Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>()
+    for (const qd of quantityDiscounts) {
+      if (qd.productId) m.set(qd.productId, qd)
+    }
+    return m
+  }, [quantityDiscounts])
+
   useEffect(() => {
     fetch("/api/cart", { cache: "no-store", headers: { "x-session-id": getCartSessionId() } })
       .then((res) => res.json())
@@ -75,6 +108,7 @@ export default function CheckoutPage() {
         if (data.cart?.items?.length > 0) setCart(data)
         setLoading(false)
       })
+      .catch(() => { setLoading(false) })
     const token = localStorage.getItem("token")
     if (token) {
       fetch("/api/loyalty/me", { headers: { Authorization: `Bearer ${token}` } })
@@ -82,7 +116,6 @@ export default function CheckoutPage() {
         .then((data) => { if (data.points !== undefined) setLoyalty(data) })
         .catch(() => {})
     }
-    // Fetch enabled payment gateways
     fetch("/api/payment-gateways/enabled")
       .then((res) => res.json())
       .then((data) => {
@@ -96,7 +129,6 @@ export default function CheckoutPage() {
       .catch(() => {})
   }, [])
 
-  // Auto-submit redirect form when data is ready
   useEffect(() => {
     if (redirectData && formRef.current) {
       formRef.current.submit()
@@ -141,17 +173,12 @@ export default function CheckoutPage() {
           contact: data.extra?.customerPhone || "",
         },
         handler: function (response: any) {
-          const orderId = response.razorpay_order_id
-            ? new URLSearchParams(window.location.search).get("orderId") || ""
-            : ""
-          router.push(`/orders/${orderId || ""}?payment=success`)
+          const orderId = response.razorpay_order_id ? new URLSearchParams(window.location.search).get("orderId") || "" : ""
+          router.push(`/orders/${orderId}?payment=success`)
         },
       }
       const rzp = new (window as any).Razorpay(options)
-      rzp.on("payment.failed", function () {
-        alert("Payment failed. Please try again.")
-        setPlacing(false)
-      })
+      rzp.on("payment.failed", function () { alert("Payment failed. Please try again."); setPlacing(false) })
       rzp.open()
     }
     document.body.appendChild(script)
@@ -188,7 +215,6 @@ export default function CheckoutPage() {
         return
       }
 
-      // Online payment — use the generic initiate endpoint
       const returnUrl = `${window.location.origin}/orders/${orderId}`
       const initRes = await fetch(
         `/api/payments/initiate/${orderId}?provider=${selectedProvider}&returnUrl=${encodeURIComponent(returnUrl)}`,
@@ -202,42 +228,28 @@ export default function CheckoutPage() {
         return
       }
 
-      const provider = selectedProvider
-
-      if (provider === "STRIPE" && initData.redirectUrl) {
-        // Stripe — redirect to Checkout Session
+      if (selectedProvider === "STRIPE" && initData.redirectUrl) {
         window.location.href = initData.redirectUrl
         return
       }
 
-      if (provider === "RAZORPAY" && initData.providerOrderId) {
-        // Razorpay — open Checkout.js modal
+      if (selectedProvider === "RAZORPAY" && initData.providerOrderId) {
         openRazorpayCheckout({ ...initData, orderId })
         return
       }
 
-      // CCAVENUE / PAYU / Custom gateways — form POST redirect
       if (initData.formData || initData.encRequest || initData.accessCode) {
         const params: Record<string, string> = {}
         let url = initData.gatewayUrl || ""
-
         if (initData.formData) {
-          // PAYU or custom form-based gateway
           if (!url) url = initData.redirectUrl || ""
-          Object.entries(initData.formData).forEach(([k, v]: [string, any]) => {
-            params[k] = String(v)
-          })
+          Object.entries(initData.formData).forEach(([k, v]: [string, any]) => { params[k] = String(v) })
         } else if (initData.encRequest) {
-          // CCAvenue
           if (!url) url = initData.gatewayUrl || ""
           params.encRequest = initData.encRequest
           params.access_code = initData.accessCode
         }
-
-        if (url) {
-          setRedirectData({ url, method: "post", params })
-          return
-        }
+        if (url) { setRedirectData({ url, method: "post", params }); return }
       }
 
       alert("Payment initiated but no redirect was received. Please check your order status.")
@@ -248,10 +260,56 @@ export default function CheckoutPage() {
     }
   }
 
+  // Rule-based calculations
   const totals = cart?.totals ?? { subtotal: 0, itemCount: 0, tax: 0, shipping: 0, total: 0 }
+  const ruleProductSavings = (cart?.cart.items ?? []).reduce((sum, item) => {
+    const disc = ruleProductDiscountMap.get(item.product.id)
+    if (!disc) return sum
+    return sum + disc.discountAmount * item.quantity
+  }, 0)
+  const ruleCartSavings = cartDiscount?.discountAmount ?? 0
+  const paymentSavings = paymentMethodDiscount?.discountAmount ?? 0
+  const qtyDiscountSavings = (cart?.cart.items ?? []).reduce((sum, item) => {
+    const qd = qtyDiscountMap.get(item.product.id)
+    if (!qd) return sum
+    const applicableTier = [...qd.tiers].sort((a, b) => b.minQty - a.minQty).find(t => item.quantity >= t.minQty)
+    if (!applicableTier) return sum
+    if (applicableTier.discountType === 'PERCENTAGE') return sum + (Number(item.unitPrice) * item.quantity * applicableTier.discountValue) / 100
+    return sum + applicableTier.discountValue * item.quantity
+  }, 0)
+  const extraChargesTotal = extraCharges.reduce((sum, ec) => sum + ec.chargeAmount, 0)
+  const ruleTaxTotal = taxes.reduce((sum, tax) => sum + (totals.subtotal * tax.taxRate) / 100, 0)
+  const effectiveShipping = shipping ? shipping.cost : totals.shipping
   const walletDeduction = useWallet ? Math.min(walletAmount, Number(loyalty?.walletBalance || 0), totals.total - couponDiscount) : 0
   const pointsValue = usePoints ? pointsToRedeem : 0
-  const finalTotal = Math.max(0, totals.total - couponDiscount - walletDeduction - pointsValue)
+  const finalTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount - walletDeduction - pointsValue + extraChargesTotal + ruleTaxTotal + effectiveShipping)
+
+  // Payment method filtering based on rules
+  const totalCartQty = cart?.cart.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0
+  const isPaymentAllowed = (method: string): boolean => {
+    if (availablePaymentMethods.length === 0) return true
+    const rule = availablePaymentMethods.find(r => r.method === method)
+    if (!rule) return false
+    if (rule.minQty === null) return true
+    return totalCartQty >= rule.minQty
+  }
+
+  // Checkout restriction enforcement
+  const hasCheckoutRestriction = checkoutRestrictions.some(cr => cr.restricted)
+  const isCheckoutBlocked = hasCheckoutRestriction
+    || minimumOrderQuantities.some(m => {
+      const item = cart?.cart.items.find(ci => ci.product.id === m.productId)
+      return item && item.quantity < m.minQty
+    })
+    || maximumOrderQuantities.some(m => {
+      const item = cart?.cart.items.find(ci => ci.product.id === m.productId)
+      return item && item.quantity > m.maxQty
+    })
+
+  // Rule discount labels
+  const ruleDiscountLabels: string[] = []
+  for (const d of productDiscounts) { if (d.ruleName && !ruleDiscountLabels.includes(d.ruleName)) ruleDiscountLabels.push(d.ruleName) }
+  if (cartDiscount?.ruleName && !ruleDiscountLabels.includes(cartDiscount.ruleName)) ruleDiscountLabels.push(cartDiscount.ruleName)
 
   const handleRedeemPoints = async () => {
     if (!pointsToRedeem || pointsToRedeem <= 0) return
@@ -291,13 +349,23 @@ export default function CheckoutPage() {
         <Link href="/cart" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to cart</Link>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Checkout</h1>
 
-        {/* Hidden redirect form for CCAvenue/PayU - auto-submits when ready */}
         {redirectData && (
           <form ref={formRef} method={redirectData.method} action={redirectData.url} style={{ display: "none" }}>
             {Object.entries(redirectData.params).map(([key, value]) => (
               <input key={key} type="hidden" name={key} value={value} />
             ))}
           </form>
+        )}
+
+        {/* Checkout restriction warnings */}
+        {hasCheckoutRestriction && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+            {checkoutRestrictions.filter(cr => cr.restricted).map((cr, i) => (
+              <p key={i} className="text-sm text-red-700 font-medium flex items-center gap-2">
+                <AlertTriangle size={16} /> {cr.message}
+              </p>
+            ))}
+          </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -321,21 +389,23 @@ export default function CheckoutPage() {
                 <h2 className="font-semibold">Payment Method</h2>
               </div>
               <div className="space-y-3">
-                <label
-                  onClick={() => setPaymentMethod("COD")}
-                  className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "COD" ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
-                >
-                  <input type="radio" name="payment" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} className="accent-primary-600" />
-                  <div className="flex items-center gap-3">
-                    <Banknote size={20} className="text-gray-600" />
-                    <div>
-                      <p className="font-medium text-gray-900">Cash on Delivery (COD)</p>
-                      <p className="text-xs text-gray-500">Pay when your order arrives</p>
+                {isPaymentAllowed("COD") && (
+                  <label
+                    onClick={() => setPaymentMethod("COD")}
+                    className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "COD" ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <input type="radio" name="payment" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} className="accent-primary-600" />
+                    <div className="flex items-center gap-3">
+                      <Banknote size={20} className="text-gray-600" />
+                      <div>
+                        <p className="font-medium text-gray-900">Cash on Delivery (COD)</p>
+                        <p className="text-xs text-gray-500">Pay when your order arrives</p>
+                      </div>
                     </div>
-                  </div>
-                </label>
+                  </label>
+                )}
 
-                {gateways.map((gw) => (
+                {gateways.filter(gw => isPaymentAllowed(gw.provider) || isPaymentAllowed("ONLINE")).map((gw) => (
                   <label
                     key={gw.id}
                     onClick={() => { setPaymentMethod("ONLINE"); setSelectedProvider(gw.provider) }}
@@ -352,30 +422,38 @@ export default function CheckoutPage() {
                       <Smartphone size={20} className="text-gray-600" />
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="font-medium text-gray-900">
-                            {gw.label || PROVIDER_LABELS[gw.provider] || gw.provider}
-                          </p>
-                          {gw.isDefault && (
-                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-medium rounded">Default</span>
-                          )}
-                          {gw.testMode && (
-                            <span className="px-1.5 py-0.5 bg-yellow-50 text-yellow-700 text-[10px] font-medium rounded">Test</span>
-                          )}
+                          <p className="font-medium text-gray-900">{gw.label || PROVIDER_LABELS[gw.provider] || gw.provider}</p>
+                          {gw.isDefault && <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-medium rounded">Default</span>}
+                          {gw.testMode && <span className="px-1.5 py-0.5 bg-yellow-50 text-yellow-700 text-[10px] font-medium rounded">Test</span>}
                         </div>
-                        <p className="text-xs text-gray-500">
-                          {gw.description || PROVIDER_DESCRIPTIONS[gw.provider] || "Online payment"}
-                        </p>
+                        <p className="text-xs text-gray-500">{gw.description || PROVIDER_DESCRIPTIONS[gw.provider] || "Online payment"}</p>
                       </div>
                     </div>
                   </label>
                 ))}
 
-                {gateways.length === 0 && (
+                {!isPaymentAllowed("COD") && gateways.filter(gw => isPaymentAllowed(gw.provider) || isPaymentAllowed("ONLINE")).length === 0 && (
                   <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 text-center">
-                    <p className="text-sm text-gray-500">No online payment gateways available. Please contact support.</p>
+                    <p className="text-sm text-gray-500">No payment methods available for your order. Please check order requirements.</p>
                   </div>
                 )}
               </div>
+
+              {/* Min/Max quantity warnings */}
+              {(minimumOrderQuantities.length > 0 || maximumOrderQuantities.length > 0) && (
+                <div className="mt-3 space-y-1">
+                  {minimumOrderQuantities.map((m, i) => {
+                    const item = cart?.cart.items.find(ci => ci.product.id === m.productId)
+                    if (!item || item.quantity >= m.minQty) return null
+                    return <p key={`min-${i}`} className="text-xs text-amber-700 flex items-center gap-1"><AlertTriangle size={12} /> Min. {m.minQty} units required for {item.product.title} ({m.ruleName})</p>
+                  })}
+                  {maximumOrderQuantities.map((m, i) => {
+                    const item = cart?.cart.items.find(ci => ci.product.id === m.productId)
+                    if (!item || item.quantity <= m.maxQty) return null
+                    return <p key={`max-${i}`} className="text-xs text-red-700 flex items-center gap-1"><AlertTriangle size={12} /> Max. {m.maxQty} units allowed for {item.product.title} ({m.ruleName})</p>
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -383,27 +461,61 @@ export default function CheckoutPage() {
             <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
               <h2 className="font-semibold mb-4">Order Summary</h2>
               <div className="space-y-2 text-sm mb-4">
-                {cart.cart.items.map((item) => (
-                  <div key={item.id} className="flex justify-between">
-                    <span className="text-gray-600">{item.product.title} x{item.quantity}</span>
-                    <span className="font-medium">{formatPrice(Number(item.unitPrice) * item.quantity)}</span>
-                  </div>
-                ))}
+                {cart.cart.items.map((item) => {
+                  const disc = ruleProductDiscountMap.get(item.product.id)
+                  const unitPrice = disc ? Number(item.unitPrice) - disc.discountAmount : Number(item.unitPrice)
+                  return (
+                    <div key={item.id} className="flex justify-between">
+                      <span className="text-gray-600">{item.product.title} x{item.quantity}</span>
+                      <span className="font-medium">{formatPrice(unitPrice * item.quantity)}</span>
+                    </div>
+                  )
+                })}
               </div>
+
+              {/* BOGO free items */}
+              {bogo.length > 0 && (
+                <div className="mb-2 space-y-1">
+                  {bogo.map((b, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className="text-pink-600 font-medium flex items-center gap-1"><Gift size={12} /> FREE x{b.freeQuantity} ({b.ruleName})</span>
+                      <span className="text-pink-600 font-medium">{formatPrice(0)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <hr className="my-4" />
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
                   <span className="font-medium">{formatPrice(totals.subtotal)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Tax (18% GST)</span>
-                  <span className="font-medium">{formatPrice(totals.tax)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Shipping</span>
-                  <span className="font-medium">{totals.shipping > 0 ? formatPrice(totals.shipping) : <span className="text-green-600">Free</span>}</span>
-                </div>
+
+                {ruleProductSavings > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 flex items-center gap-1"><Percent size={14} className="text-green-500" /> {ruleDiscountLabels.length > 0 ? `Discount (${ruleDiscountLabels.join(", ")})` : "Rule Discount"}</span>
+                    <span className="font-medium text-green-600">-{formatPrice(ruleProductSavings)}</span>
+                  </div>
+                )}
+                {ruleCartSavings > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Cart Discount</span>
+                    <span className="font-medium text-green-600">-{formatPrice(ruleCartSavings)}</span>
+                  </div>
+                )}
+                {paymentSavings > 0 && paymentMethodDiscount && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">{paymentMethodDiscount.ruleName}</span>
+                    <span className="font-medium text-green-600">-{formatPrice(paymentSavings)}</span>
+                  </div>
+                )}
+                {qtyDiscountSavings > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 flex items-center gap-1"><Layers size={14} className="text-cyan-500" /> Bulk Discount</span>
+                    <span className="font-medium text-green-600">-{formatPrice(qtyDiscountSavings)}</span>
+                  </div>
+                )}
                 {couponDiscount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Coupon ({couponCode.toUpperCase()})</span>
@@ -416,27 +528,50 @@ export default function CheckoutPage() {
                     <span className="font-medium text-green-600">-{formatPrice(walletDeduction)}</span>
                   </div>
                 )}
+                {extraCharges.length > 0 && extraCharges.map((ec, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-gray-600">{ec.chargeLabel}</span>
+                    <span className="font-medium">{formatPrice(ec.chargeAmount)}</span>
+                  </div>
+                ))}
+                {taxes.length > 0 ? taxes.map((tax, i) => {
+                  const taxAmount = (totals.subtotal * tax.taxRate) / 100
+                  return (
+                    <div key={i} className="flex justify-between">
+                      <span className="text-gray-600">{tax.taxLabel} ({tax.taxRate}%)</span>
+                      <span className="font-medium">{formatPrice(taxAmount)}</span>
+                    </div>
+                  )
+                }) : ruleTaxTotal === 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tax (18% GST)</span>
+                    <span className="font-medium">{formatPrice(totals.tax)}</span>
+                  </div>
+                )}
+                {shipping ? (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 flex items-center gap-1"><Truck size={14} /> {shipping.ruleName}</span>
+                    <span className="font-medium">{shipping.cost > 0 ? formatPrice(shipping.cost) : <span className="text-green-600">Free</span>}</span>
+                  </div>
+                ) : totals.shipping > 0 ? (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Shipping</span>
+                    <span className="font-medium">{formatPrice(totals.shipping)}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Shipping</span>
+                    <span className="font-medium text-green-600">Free</span>
+                  </div>
+                )}
               </div>
 
               <div className="mt-4 flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Coupon code"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-                <button
-                  onClick={applyCoupon}
-                  disabled={!couponCode}
-                  className="px-3 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 transition disabled:opacity-50"
-                >
-                  <Tag size={16} />
-                </button>
+                <input type="text" placeholder="Coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                <button onClick={applyCoupon} disabled={!couponCode} className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 transition disabled:opacity-50"><Tag size={16} /></button>
               </div>
               {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
 
-              {/* Wallet & Loyalty */}
               {loyalty && (Number(loyalty.walletBalance) > 0 || loyalty.points > 0) && (
                 <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
                   {Number(loyalty.walletBalance) > 0 && (
@@ -456,10 +591,7 @@ export default function CheckoutPage() {
                   )}
                   {loyalty.points > 0 && !usePoints && (
                     <div className="p-3 bg-primary-50 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Zap size={14} className="text-primary-600" />
-                        <span className="text-sm font-medium text-primary-800">Redeem points for credit</span>
-                      </div>
+                      <div className="flex items-center gap-2 mb-2"><Zap size={14} className="text-primary-600" /><span className="text-sm font-medium text-primary-800">Redeem points for credit</span></div>
                       <p className="text-xs text-primary-600 mb-2">{loyalty.points} points available (1 point = ₹1)</p>
                       <div className="flex gap-2">
                         <input type="number" min={1} max={loyalty.points} placeholder="Points to redeem" value={pointsToRedeem || ""} onChange={(e) => setPointsToRedeem(Number(e.target.value))} className="flex-1 px-2 py-1 border border-primary-200 rounded text-sm" />
@@ -475,8 +607,12 @@ export default function CheckoutPage() {
                 <span className="text-lg font-bold">Total</span>
                 <span className="text-xl font-bold text-primary-700">{formatPrice(finalTotal)}</span>
               </div>
-              <button onClick={placeOrder} disabled={placing || redirectData !== null} className="w-full mt-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
-                {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : (paymentMethod === "ONLINE" ? "Pay Now" : "Place Order")}
+              <button
+                onClick={placeOrder}
+                disabled={placing || redirectData !== null || isCheckoutBlocked}
+                className={`w-full mt-6 py-3 rounded-lg transition disabled:opacity-50 ${isCheckoutBlocked ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-primary-600 text-white hover:bg-primary-700"}`}
+              >
+                {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : isCheckoutBlocked ? "Checkout Restricted" : (paymentMethod === "ONLINE" ? "Pay Now" : "Place Order")}
               </button>
               {paymentMethod === "ONLINE" && selectedGateway && (
                 <div className="flex items-center justify-center gap-1.5 mt-3 text-xs text-gray-400">

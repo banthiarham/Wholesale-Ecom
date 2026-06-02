@@ -74,6 +74,12 @@ export class SettingsService {
       contactPhone: '',
       socialLinks: '{"facebook":"","twitter":"","instagram":"","linkedin":""}',
       copyrightText: 'WholesaleX Pro. All rights reserved.',
+      announcementBarEnabled: 'false',
+      announcementBarText: '',
+      announcementBarColor: '#ffffff',
+      announcementBarBgColor: '#ef4444',
+      heroCarouselSpeed: '5000',
+      heroCarouselAutoplay: 'true',
     };
   }
 
@@ -98,6 +104,12 @@ export class SettingsService {
       { key: 'contactPhone', value: '', label: 'Contact Phone', type: 'text', group: 'header_footer' },
       { key: 'socialLinks', value: '{"facebook":"","twitter":"","instagram":"","linkedin":""}', label: 'Social Links', type: 'json', group: 'header_footer' },
       { key: 'copyrightText', value: '', label: 'Copyright Text', type: 'text', group: 'header_footer' },
+      { key: 'announcementBarEnabled', value: 'false', label: 'Enable Announcement Bar', type: 'text', group: 'homepage' },
+      { key: 'announcementBarText', value: '', label: 'Announcement Bar Text', type: 'text', group: 'homepage' },
+      { key: 'announcementBarColor', value: '#ffffff', label: 'Announcement Text Color', type: 'color', group: 'homepage' },
+      { key: 'announcementBarBgColor', value: '#ef4444', label: 'Announcement Background Color', type: 'color', group: 'homepage' },
+      { key: 'heroCarouselSpeed', value: '5000', label: 'Carousel Speed (ms)', type: 'number', group: 'homepage' },
+      { key: 'heroCarouselAutoplay', value: 'true', label: 'Auto-rotate Carousel', type: 'text', group: 'homepage' },
     ];
   }
 

@@ -107,7 +107,7 @@ export class RulesController {
   async evaluate(
     @Body() context: Record<string, any>,
     @CurrentUser('id') userId?: string,
-    @CurrentUser('role') userRole?: string,
+    @CurrentUser('effectiveRole') userRole?: string,
   ) {
     const ruleContext = {
       ...context,

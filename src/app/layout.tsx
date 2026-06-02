@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider"
 import { SiteSettingsProvider } from "@/lib/settings/SiteSettingsProvider"
+import { AuthProvider } from "@/lib/auth"
 import Header from "@/components/layout/Header"
 import Footer from "@/components/layout/Footer"
 import { Analytics } from "@/lib/analytics"
@@ -77,9 +78,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <SiteSettingsProvider>
           <LanguageProvider>
-            <Header />
-            {children}
-            <Footer />
+            <AuthProvider>
+              <Header />
+              {children}
+              <Footer />
+            </AuthProvider>
           </LanguageProvider>
           <Analytics />
         </SiteSettingsProvider>

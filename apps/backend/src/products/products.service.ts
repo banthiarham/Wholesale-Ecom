@@ -31,6 +31,31 @@ export class ProductsService {
     if (filters?.inStock) where.inventoryQuantity = { gt: 0 };
     if (filters?.tags?.length) where.tags = { hasSome: filters.tags };
 
+    // If specific IDs are requested, fetch only those (preserving order)
+    if (filters?.ids?.length) {
+      where.id = { in: filters.ids };
+      const products = await this.prisma.product.findMany({
+        where,
+        include: {
+          category: { select: { id: true, name: true, handle: true } },
+          tierPrices: { orderBy: { minQty: 'asc' } },
+          _count: { select: { reviews: true } },
+        },
+      });
+      // Preserve the requested order
+      const orderMap = new Map(filters.ids.map((id: string, i: number) => [id, i]));
+      return products.sort((a: any, b: any) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+    }
+
+    // Sort order
+    let orderBy: any = { createdAt: 'desc' };
+    if (filters?.sort === 'popularity') orderBy = { rating: 'desc' };
+    else if (filters?.sort === 'newest') orderBy = { createdAt: 'desc' };
+    else if (filters?.sort === 'price_asc') orderBy = { unitPrice: 'asc' };
+    else if (filters?.sort === 'price_desc') orderBy = { unitPrice: 'desc' };
+
+    const take = filters?.limit || 100;
+
     return this.prisma.product.findMany({
       where,
       include: {
@@ -38,8 +63,8 @@ export class ProductsService {
         tierPrices: { orderBy: { minQty: 'asc' } },
         _count: { select: { reviews: true } },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+      orderBy,
+      take,
     });
   }
 

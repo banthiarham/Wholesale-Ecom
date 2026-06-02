@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, CheckCircle, XCircle, Send, FileText } from "lucide-react"
+import { useAuth } from "@/lib/auth"
 
 interface Quote {
   id: string
@@ -27,17 +28,15 @@ interface RfqDetail {
 export default function RfqDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const { user, role } = useAuth()
   const [rfq, setRfq] = useState<RfqDetail | null>(null)
   const [loading, setLoading] = useState(true)
-  const [userRole, setUserRole] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
+  const effectiveRole = user?.effectiveRole || role?.name || user?.role || ""
 
   useEffect(() => {
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
-    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.json())
-      .then((u) => { if (u.user) setUserRole(u.user.role) })
     fetch(`/api/rfqs/${params.id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => { setRfq(data); setLoading(false) })
@@ -141,7 +140,7 @@ export default function RfqDetailPage() {
                       <span key={i} className="mr-3">₹{Number(it.unitPrice)} x {it.quantity} = ₹{Number(it.totalPrice)}{it.leadTimeDays ? ` (${it.leadTimeDays}d)` : ""}</span>
                     ))}
                   </div>
-                  {quote.status === "PENDING" && userRole === "BUYER" && (
+                  {quote.status === "PENDING" && effectiveRole === "BUYER" && (
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => acceptQuote(quote.id)} disabled={actionLoading} className="px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition disabled:opacity-50">
                         <CheckCircle size={14} className="inline mr-1" /> Accept

@@ -144,9 +144,9 @@ export class RulesEngineService {
   }
 
   private matchesRole(c: Record<string, any>, context: RuleContext): boolean {
-    const roleIds: string[] = c.roleIds || [];
-    if (roleIds.length === 0) return true;
-    return !!context.userRole && roleIds.includes(context.userRole);
+    const roleNames: string[] = c.roleIds || [];
+    if (roleNames.length === 0) return true;
+    return !!context.userRole && roleNames.includes(context.userRole);
   }
 
   private evaluateProductDiscount(
@@ -354,8 +354,13 @@ export class RulesEngineService {
     context: RuleContext, result: RuleEvaluationResult,
   ) {
     if (!this.matchesRole(c, context)) return;
-    const productIds: string[] = c.productIds || [];
-    result.hiddenProducts.push(...productIds);
+    // Resolve productIds directly from conditions
+    const directProductIds: string[] = c.productIds || [];
+    // Also resolve products that match via categoryIds from the cart context
+    const matchingItems = this.matchesProducts(c, context);
+    const categoryProductIds = matchingItems.map((item) => item.productId);
+    const allProductIds = [...new Set([...directProductIds, ...categoryProductIds])];
+    result.hiddenProducts.push(...allProductIds);
   }
 
   private evaluateHiddenPrice(
@@ -363,16 +368,27 @@ export class RulesEngineService {
     context: RuleContext, result: RuleEvaluationResult,
   ) {
     if (!this.matchesRole(c, context)) return;
-    const productIds: string[] = c.productIds || [];
-    result.hiddenPrices.push(...productIds);
+    // Resolve productIds directly from conditions
+    const directProductIds: string[] = c.productIds || [];
+    // Also resolve products that match via categoryIds from the cart context
+    const matchingItems = this.matchesProducts(c, context);
+    const categoryProductIds = matchingItems.map((item) => item.productId);
+    const allProductIds = [...new Set([...directProductIds, ...categoryProductIds])];
+    result.hiddenPrices.push(...allProductIds);
   }
 
   private evaluateNonPurchasable(
     _id: string, name: string, c: Record<string, any>, a: Record<string, any>,
-    _context: RuleContext, result: RuleEvaluationResult,
+    context: RuleContext, result: RuleEvaluationResult,
   ) {
-    const productIds: string[] = c.productIds || [];
-    for (const pid of productIds) {
+    if (!this.matchesRole(c, context)) return;
+    // Resolve productIds directly from conditions
+    const directProductIds: string[] = c.productIds || [];
+    // Also resolve products that match via categoryIds from the cart context
+    const matchingItems = this.matchesProducts(c, context);
+    const categoryProductIds = matchingItems.map((item) => item.productId);
+    const allProductIds = [...new Set([...directProductIds, ...categoryProductIds])];
+    for (const pid of allProductIds) {
       result.nonPurchasable.push({ productId: pid, message: a.message });
     }
   }

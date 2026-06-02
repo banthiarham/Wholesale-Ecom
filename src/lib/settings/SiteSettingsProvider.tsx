@@ -23,6 +23,12 @@ const DEFAULTS: Record<string, string> = {
   contactPhone: "",
   socialLinks: '{"facebook":"","twitter":"","instagram":"","linkedin":""}',
   copyrightText: "WholesaleX Pro. All rights reserved.",
+  announcementBarEnabled: "false",
+  announcementBarText: "",
+  announcementBarColor: "#ffffff",
+  announcementBarBgColor: "#ef4444",
+  heroCarouselSpeed: "5000",
+  heroCarouselAutoplay: "true",
 }
 
 interface SiteSettingsContextType {

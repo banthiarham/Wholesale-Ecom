@@ -32,7 +32,10 @@ import {
   ClipboardList,
   Sparkles,
   Wallet,
+  Image,
+  LayoutDashboard as LayoutIcon,
 } from "lucide-react"
+import { useAuth, usePermissions } from "@/lib/auth"
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -57,6 +60,8 @@ const navItems = [
   { label: "Payments", href: "/admin/payments", icon: CreditCard },
   { label: "Payment Gateways", href: "/admin/payment-gateways", icon: Server },
   { label: "Site Settings", href: "/admin/settings", icon: Settings },
+  { label: "Banners", href: "/admin/banners", icon: Image },
+  { label: "Homepage", href: "/admin/home-sections", icon: LayoutIcon },
   { label: "Delivery Partners", href: "/admin/delivery-partners", icon: Truck },
   { label: "Shipment Tracking", href: "/admin/delivery-tracking", icon: PackageCheck },
   { label: "Dynamic Rules", href: "/admin/rules", icon: Shield },
@@ -68,42 +73,27 @@ const navItems = [
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<any>(null)
-  const [checking, setChecking] = useState(true)
+  const { user, role, loading: authLoading, logout: authLogout } = useAuth()
+  const { can } = usePermissions()
   const [collapsed, setCollapsed] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem("token")
-    if (!token) {
+    if (authLoading) return
+    if (!user) {
       router.push("/login")
       return
     }
-    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => {
-        if (!res.ok) throw new Error("Unauthorized")
-        return res.json()
-      })
-      .then((data) => {
-        const user = data.user || data
-        if (user?.role !== "ADMIN") {
-          router.push("/")
-          return
-        }
-        setUser(user)
-        setChecking(false)
-      })
-      .catch(() => {
-        localStorage.removeItem("token")
-        router.push("/login")
-      })
-  }, [router])
+    if (!can("admin", "access")) {
+      router.push("/")
+      return
+    }
+  }, [authLoading, user, can, router])
 
   const logout = () => {
-    localStorage.removeItem("token")
-    router.push("/login")
+    authLogout()
   }
 
-  if (checking) {
+  if (authLoading || !user || !can("admin", "access")) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -176,8 +166,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           </h1>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-600">{user?.firstName} {user?.lastName}</span>
-            <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs rounded-full font-medium uppercase">
-              {user?.role}
+            <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs rounded-full font-medium uppercase" style={role?.color ? { backgroundColor: role.color + '20', color: role.color } : undefined}>
+              {role?.label || user?.role}
             </span>
           </div>
         </header>
