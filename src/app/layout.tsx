@@ -6,6 +6,7 @@ import { SiteSettingsProvider } from "@/lib/settings/SiteSettingsProvider"
 import Header from "@/components/layout/Header"
 import Footer from "@/components/layout/Footer"
 import { Analytics } from "@/lib/analytics"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -73,16 +74,18 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <SiteSettingsProvider>
-          <LanguageProvider>
-            <Header />
-            {children}
-            <Footer />
-          </LanguageProvider>
-          <Analytics />
-        </SiteSettingsProvider>
+        <ErrorBoundary>
+          <SiteSettingsProvider>
+            <LanguageProvider>
+              <Header />
+              {children}
+              <Footer />
+            </LanguageProvider>
+            <Analytics />
+          </SiteSettingsProvider>
+        </ErrorBoundary>
       </body>
     </html>
   )

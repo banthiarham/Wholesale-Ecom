@@ -5,38 +5,40 @@ import Link from "next/link"
 import { BarChart3, TrendingUp, Package, ShoppingBag, IndianRupee, Activity, ChevronRight } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
+const statusColor: Record<string, string> = {
+  PENDING: "bg-yellow-100 text-yellow-700",
+  CONFIRMED: "bg-blue-100 text-blue-700",
+  PROCESSING: "bg-purple-100 text-purple-700",
+  SHIPPED: "bg-indigo-100 text-indigo-700",
+  DELIVERED: "bg-green-100 text-green-700",
+  CANCELLED: "bg-red-100 text-red-700",
+  REFUNDED: "bg-orange-100 text-orange-700",
+}
+
 export default function AdminAnalyticsPage() {
   const [sales, setSales] = useState<any>(null)
   const [ordersByStatus, setOrdersByStatus] = useState<any>(null)
   const [topProducts, setTopProducts] = useState<any[]>([])
   const [activity, setActivity] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
 
-  const statusColor: Record<string, string> = {
-    PENDING: "bg-yellow-100 text-yellow-700",
-    CONFIRMED: "bg-blue-100 text-blue-700",
-    PROCESSING: "bg-purple-100 text-purple-700",
-    SHIPPED: "bg-indigo-100 text-indigo-700",
-    DELIVERED: "bg-green-100 text-green-700",
-    CANCELLED: "bg-red-100 text-red-700",
-    REFUNDED: "bg-orange-100 text-orange-700",
-  }
-
   useEffect(() => {
     const token = localStorage.getItem("token")
-    if (!token) return
+    if (!token) { setLoading(false); return }
+    setError("")
     const params = new URLSearchParams()
     if (dateFrom) params.set("startDate", dateFrom)
     if (dateTo) params.set("endDate", dateTo)
     const qs = params.toString() ? `?${params.toString()}` : ""
 
     Promise.all([
-      fetch(`/api/analytics/sales${qs}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
-      fetch(`/api/analytics/orders-by-status${qs}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
-      fetch(`/api/analytics/top-products?limit=10`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
-      fetch("/api/analytics/activity?limit=20", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch(`/api/analytics/sales${qs}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : Promise.reject(`Sales: ${r.status}`)),
+      fetch(`/api/analytics/orders-by-status${qs}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : Promise.reject(`Orders by status: ${r.status}`)),
+      fetch(`/api/analytics/top-products?limit=10`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : Promise.reject(`Top products: ${r.status}`)),
+      fetch("/api/analytics/activity?limit=20", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : Promise.reject(`Activity: ${r.status}`)),
     ])
       .then(([s, obs, tp, act]) => {
         setSales(s)
@@ -44,7 +46,10 @@ export default function AdminAnalyticsPage() {
         setTopProducts(Array.isArray(tp) ? tp : tp.products ?? [])
         setActivity(act.activities ?? act.recentOrders ?? [])
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Analytics fetch error:", err)
+        setError(typeof err === "string" ? err : "Failed to load analytics data")
+      })
       .finally(() => setLoading(false))
   }, [dateFrom, dateTo])
 
@@ -52,9 +57,22 @@ export default function AdminAnalyticsPage() {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div></div>
   }
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-xl font-semibold text-gray-900">Analytics</h1>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <p className="text-red-600 font-medium">Error loading analytics</p>
+          <p className="text-red-500 text-sm mt-1">{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition">Retry</button>
+        </div>
+      </div>
+    )
+  }
+
   const totalOrders = sales?.totalOrders ?? 0
-  const totalRevenue = sales?.totalRevenue ?? 0
-  const totalProductsSold = sales?.totalProductsSold ?? sales?.totalItems ?? 0
+  const totalRevenue = Number(sales?.totalRevenue ?? 0)
+  const totalProductsSold = Number(sales?.totalProductsSold ?? sales?.totalItems ?? 0)
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
 
   return (
@@ -121,11 +139,11 @@ export default function AdminAnalyticsPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {topProducts.map((item: any, i: number) => (
-                <tr key={i} className="hover:bg-gray-50 transition">
+                <tr key={item.productId || i} className="hover:bg-gray-50 transition">
                   <td className="px-6 py-3"><span className="w-6 h-6 rounded-full bg-primary-50 text-primary-600 text-xs font-bold flex items-center justify-center">{i + 1}</span></td>
-                  <td className="px-6 py-3 font-medium text-gray-900">{item.product?.title || item.productId}</td>
+                  <td className="px-6 py-3 font-medium text-gray-900">{item.product?.title || item.productId?.slice(0, 8) || "Unknown"}</td>
                   <td className="px-6 py-3 text-right text-gray-700">{item._sum?.quantity ?? item.quantity ?? 0}</td>
-                  <td className="px-6 py-3 text-right font-semibold text-gray-900">{formatPrice(item._sum?.totalPrice ?? item.revenue ?? 0)}</td>
+                  <td className="px-6 py-3 text-right font-semibold text-gray-900">{formatPrice(Number(item._sum?.totalPrice ?? item.revenue ?? 0))}</td>
                 </tr>
               ))}
             </tbody>
@@ -140,15 +158,20 @@ export default function AdminAnalyticsPage() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Recent Activity</h2>
           <div className="space-y-3">
-            {activity.map((a: any, i: number) => (
-              <div key={a.id || i} className="flex items-start gap-3 pb-3 border-b border-gray-50 last:border-0">
-                <Activity size={16} className="text-gray-400 mt-0.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-gray-800">{a.action || a.title || "Activity"}</p>
-                  <p className="text-xs text-gray-500">{a.user || a.buyer || ""} {a.createdAt ? `· ${new Date(a.createdAt).toLocaleString()}` : ""}</p>
+            {activity.map((a: any, i: number) => {
+              const typeIcon = a.type === "order" ? "🛒" : a.type === "review" ? "⭐" : a.type === "rfq" ? "📋" : "📌"
+              return (
+                <div key={a.id || i} className="flex items-start gap-3 pb-3 border-b border-gray-50 last:border-0">
+                  <span className="text-lg shrink-0">{typeIcon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800 truncate">{a.action || a.title || "Activity"}</p>
+                    <p className="text-xs text-gray-500">
+                      {a.user || a.buyer || ""}{a.createdAt ? ` · ${new Date(a.createdAt).toLocaleString()}` : ""}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

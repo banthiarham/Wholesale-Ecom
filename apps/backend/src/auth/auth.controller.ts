@@ -12,11 +12,15 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user account' })
@@ -32,11 +36,17 @@ export class AuthController {
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  login(
+  async login(
     @Body() _loginDto: LoginDto,
     @Req() req: Request,
-  ): AuthResponse {
-    return this.authService.buildAuthResponse(req.user as User);
+  ): Promise<AuthResponse> {
+    const user = req.user as User;
+    // Update lastLoginAt — login() method in service was never called from here
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+    return this.authService.buildAuthResponse(user);
   }
 
   @Get('google')

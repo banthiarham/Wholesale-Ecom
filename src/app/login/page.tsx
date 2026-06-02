@@ -29,9 +29,15 @@ export default function LoginPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.message || t("login.submit"))
+        // NestJS validation errors return an array in data.message
+        const message = Array.isArray(data.message) ? data.message.join(", ") : data.message
+        setError(message || "Invalid email or password")
       } else {
         const token = data.accessToken || data.access_token
+        if (!token) {
+          setError("Login failed — no token received. Please try again.")
+          return
+        }
         localStorage.setItem("token", token)
         const sessionId = localStorage.getItem("cart_session")
         const userId = data.user?.id
@@ -48,12 +54,12 @@ export default function LoginPage() {
           }
         }
         window.dispatchEvent(new CustomEvent("auth-change", { detail: data.user }))
-        const role = data.user?.role
+        const role = data.user?.role || data.user?.effectiveRole
         const redirectTo = role === "ADMIN" ? "/admin" : role === "VENDOR" ? "/vendor/dashboard" : "/"
         router.push(redirectTo)
       }
     } catch (err) {
-      setError("Something went wrong")
+      setError("Something went wrong. Please check your network connection and try again.")
     } finally {
       setLoading(false)
     }

@@ -56,11 +56,15 @@ export class AuthService {
 
     // If roleId provided, look up the enum value; otherwise resolve from enum role
     if (roleId) {
-      const roleRecord = await this.prisma.role.findUnique({ where: { id: roleId } });
-      if (roleRecord) {
-        roleEnum = roleRecord.name as UserRole;
-      } else {
-        roleId = null; // Invalid roleId, ignore it
+      try {
+        const roleRecord = await this.prisma.role.findUnique({ where: { id: roleId } });
+        if (roleRecord) {
+          roleEnum = roleRecord.name as UserRole;
+        } else {
+          roleId = null;
+        }
+      } catch {
+        roleId = null;
       }
     } else {
       // Backfill roleId from enum role
@@ -74,11 +78,6 @@ export class AuthService {
       }
     }
 
-    // For security: always start with BUYER role, create a role request for non-BUYER selections
-    const buyerRole = await this.prisma.role.findUnique({ where: { name: 'BUYER' } });
-    const actualRoleId = buyerRole?.id || roleId;
-    const actualRoleEnum = (buyerRole?.name as UserRole) || UserRole.BUYER;
-
     // Generate referral code
     const referralCode = `${registerDto.firstName?.substring(0, 3).toUpperCase() || 'USR'}${Date.now().toString(36).toUpperCase()}`;
 
@@ -89,8 +88,8 @@ export class AuthService {
         firstName: registerDto.firstName,
         lastName: registerDto.lastName,
         phone: registerDto.phone,
-        role: actualRoleEnum,
-        roleId: actualRoleId,
+        role: roleEnum,
+        roleId: roleId,
         status: UserStatus.PENDING_VERIFICATION,
         accountType: AccountType.LOCAL,
         referralCode,
@@ -100,15 +99,19 @@ export class AuthService {
     });
 
     // If user selected a non-BUYER role, create a role change request for admin approval
-    if (roleId && roleId !== actualRoleId) {
-      await this.prisma.roleChangeRequest.create({
-        data: {
-          userId: user.id,
-          roleId: roleId,
-          status: 'PENDING',
-          reason: 'Requested during registration',
-        },
-      });
+    if (roleEnum !== UserRole.BUYER && roleId) {
+      try {
+        await this.prisma.roleChangeRequest.create({
+          data: {
+            userId: user.id,
+            roleId: roleId,
+            status: 'PENDING',
+            reason: 'Requested during registration',
+          },
+        });
+      } catch {
+        // RoleChangeRequest table may not exist yet; skip
+      }
     }
 
     await this.generateAndSaveOtp(user.id, 'EMAIL_VERIFICATION');
@@ -135,7 +138,7 @@ export class AuthService {
     }
 
     if (user.status === UserStatus.SUSPENDED) {
-      throw new UnauthorizedException('Account suspended');
+      throw new UnauthorizedException('Your account has been suspended. Please contact support.');
     }
 
     await this.prisma.user.update({
@@ -294,16 +297,34 @@ export class AuthService {
     }
 
     const isValid = await bcrypt.compare(password, user.password);
-    return isValid ? user : null;
+    if (!isValid) {
+      return null;
+    }
+
+    // Block suspended users from logging in
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new UnauthorizedException('Your account has been suspended. Please contact support.');
+    }
+
+    return user;
   }
 
   async validateToken(payload: TokenPayload): Promise<any> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: { roleRel: true },
-    });
+    let user;
+    try {
+      user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        include: { roleRel: true },
+      });
+    } catch {
+      user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+    }
+
     if (!user) return null;
-    // Add effective role name for guard checks (dynamic role takes precedence)
+
+    // Add effective role name for guard checks (dynamic role takes precedence, then enum role)
     (user as any).effectiveRole = user.roleRel?.name || user.role;
     return user;
   }

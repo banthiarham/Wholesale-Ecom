@@ -37,7 +37,7 @@ export default function RfqDetailPage() {
     if (!token) { router.push("/login"); return }
     fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
-      .then((u) => { if (u.user) setUserRole(u.user.role) })
+      .then((u) => { const role = u.effectiveRole || u.roleRel?.name || u.role; if (u.id) setUserRole(role) })
     fetch(`/api/rfqs/${params.id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => { setRfq(data); setLoading(false) })

@@ -38,6 +38,12 @@ const SiteSettingsContext = createContext<SiteSettingsContextType>({
 export function SiteSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Record<string, string>>(DEFAULTS)
   const [loaded, setLoaded] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Track client-side mount to avoid hydration mismatches
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     fetch("/api/settings")
@@ -52,7 +58,7 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!loaded) return
+    if (!mounted || !loaded) return
     const root = document.documentElement
 
     const primary = settings.primaryColor || DEFAULTS.primaryColor
@@ -90,7 +96,7 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
     }
     root.style.setProperty("--font-heading", headingFont === "Inter" ? "Inter, sans-serif" : `'${headingFont}', sans-serif`)
     root.style.setProperty("--font-body", bodyFont === "Inter" ? "Inter, sans-serif" : `'${bodyFont}', sans-serif`)
-  }, [settings, loaded])
+  }, [settings, loaded, mounted])
 
   return (
     <SiteSettingsContext.Provider value={{ settings, loaded }}>

@@ -49,9 +49,19 @@ export default function Header() {
     const token = localStorage.getItem("token")
     if (!token) { setUser(null); return }
     fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          // Token is invalid or expired — clear it
+          localStorage.removeItem("token")
+          setUser(null)
+          return null
+        }
+        return res.json()
+      })
       .then((data) => {
-        if (data.user) setUser(data.user)
+        if (!data) return // already handled above
+        // /auth/me returns user directly (not wrapped in { user: ... })
+        if (data.id) setUser(data)
         else setUser(null)
       })
       .catch(() => { setUser(null); localStorage.removeItem("token") })
@@ -161,7 +171,7 @@ export default function Header() {
 
   const userLinks = user
     ? [
-        ...(user.role === "ADMIN"
+        ...((user.effectiveRole || user.roleRel?.name || user.role) === "ADMIN"
           ? [{ href: "/admin", label: "Admin", icon: Settings }]
           : []),
         { href: "/orders", label: t("nav.orders"), icon: ShoppingBag },

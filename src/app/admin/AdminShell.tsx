@@ -85,7 +85,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       })
       .then((data) => {
         const user = data.user || data
-        if (user?.role !== "ADMIN") {
+        const role = user?.effectiveRole || user?.roleRel?.name || user?.role
+        if (role !== "ADMIN") {
           router.push("/")
           return
         }
