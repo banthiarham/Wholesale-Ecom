@@ -30,6 +30,8 @@ import { RolePricesModule } from './role-prices/role-prices.module';
 import { RoleRequestsModule } from './role-requests/role-requests.module';
 import { RulesModule } from './rules/rules.module';
 import { WalletModule } from './wallet/wallet.module';
+import { BannersModule } from './banners/banners.module';
+import { HomeSectionsModule } from './home-sections/home-sections.module';
 
 @Module({
   imports: [
@@ -66,6 +68,8 @@ import { WalletModule } from './wallet/wallet.module';
     RoleRequestsModule,
     RulesModule,
     WalletModule,
+    BannersModule,
+    HomeSectionsModule,
   ],
   controllers: [AppController],
 })

@@ -1,11 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight, MessageSquare, Flame } from "lucide-react"
+import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Percent } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, getPaymentOfferLabel } from "@/lib/pricing"
+import { useAuth } from "@/lib/auth"
+import { useStorefrontRules } from "@/lib/rules"
+import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 
 interface TierPrice { id: string; minQty: number; maxQty: number | null; price: number }
 
@@ -43,6 +46,36 @@ export default function ProductDetailPage() {
   const [pricing, setPricing] = useState<PricingBreakdown | null>(null)
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
+  const { user, role } = useAuth()
+
+  // Evaluate dynamic rules for this product
+  const rulesProducts = useMemo(
+    () => product ? [{ id: product.id, categoryId: product.categoryId || product.category?.id, unitPrice: product.unitPrice }] : [],
+    [product?.id, product?.categoryId, product?.category?.id, product?.unitPrice]
+  )
+  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts, extraCharges, shipping, taxes, minimumOrderQuantities, maximumOrderQuantities } = useStorefrontRules(rulesProducts, quantity)
+
+  // Rule discount for this product
+  const ruleDiscount = productDiscounts?.find((d) => d.productId === product?.id) ?? null
+
+  // BOGO offers for this product
+  const productBogo = bogo.filter((b) => b.buyProductId === product?.id)
+
+  // Quantity discount for this product
+  const productQtyDiscount = quantityDiscounts.find((qd) => qd.productId === product?.id)
+
+  // Extra charges for this product (all extra charges apply globally)
+  const productExtraCharges = extraCharges
+
+  // Shipping rule (applies globally or to this product)
+  const productShipping = shipping
+
+  // Tax rules for this product
+  const productTaxes = taxes
+
+  // Min/Max order quantities for this product
+  const minQtyRule = minimumOrderQuantities.find((m) => m.productId === product?.id)
+  const maxQtyRule = maximumOrderQuantities.find((m) => m.productId === product?.id)
 
   useEffect(() => {
     if (!params.handle) return
@@ -62,7 +95,6 @@ export default function ProductDetailPage() {
         setLoading(false)
       })
     fetchSeasonalDiscounts().then(setDiscounts)
-    // Payment offers will be fetched after product loads
   }, [params.handle])
 
   const loadPricing = (p: Product) => {
@@ -100,7 +132,10 @@ export default function ProductDetailPage() {
     if (!product) return
     setAdding(true)
     try {
-      await fetch("/api/cart", { method: "POST", headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() }, body: JSON.stringify({ productId: product.id, quantity }) })
+      const token = localStorage.getItem("token")
+      const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+      await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId: product.id, quantity }) })
       window.dispatchEvent(new CustomEvent("cart-updated"))
     } catch (err) { console.error(err) } finally { setAdding(false) }
   }
@@ -201,6 +236,31 @@ export default function ProductDetailPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
   if (!product) return <div className="min-h-screen flex flex-col items-center justify-center"><h1 className="text-2xl font-bold">Product not found</h1><Link href="/products" className="mt-4 text-primary-600">Back to products</Link></div>
 
+  // Rule-based visibility
+  const isProductHidden = hiddenProductIds.has(product.id)
+  const isPriceHidden = hiddenPriceProductIds.has(product.id)
+  const isNonPurchasable = nonPurchasableProducts.has(product.id)
+  const nonPurchasableMsg = nonPurchasableProducts.get(product.id) || ""
+
+  if (isProductHidden) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <Package size={48} className="text-gray-300 mb-4" />
+        <h1 className="text-2xl font-bold text-gray-900">Product Not Available</h1>
+        <p className="text-gray-500 mt-2">This product is not available for your account.</p>
+        <Link href="/products" className="mt-4 text-primary-600 hover:underline">Browse other products</Link>
+      </div>
+    )
+  }
+
+  // Determine primary display price: role price > final price > tier price > unit price
+  const displayPrice = pricing?.rolePrice && pricing.rolePrice < effectivePrice
+    ? pricing.rolePrice
+    : pricing?.finalPrice || effectivePrice
+  const priceLabel = pricing?.rolePrice && pricing.rolePrice < effectivePrice
+    ? pricing.appliedRoleName
+    : null
+
   const productJsonLd = product ? {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -269,18 +329,52 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold text-primary-700">{formatPrice(Number(effectivePrice))}</span>
-              {product.compareAtPrice && effectivePrice < Number(product.compareAtPrice) && (
+              {isPriceHidden ? (
+                <span className="text-xl text-gray-500 italic">Contact us for pricing</span>
+              ) : (
                 <>
-                  <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>
-                  <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded font-semibold">{discountPercent}% off</span>
+                  <span className="text-3xl font-bold text-primary-700">{formatPrice(Number(ruleDiscount ? product.unitPrice - ruleDiscount.discountAmount : displayPrice))}</span>
+                  {priceLabel && (
+                    <span className="text-sm font-medium px-2 py-0.5 rounded text-white" style={{ backgroundColor: role?.color || '#7c3aed' }}>
+                      {priceLabel} Price
+                    </span>
+                  )}
+                  {ruleDiscount && Number(product.unitPrice) > (Number(product.unitPrice) - ruleDiscount.discountAmount) && (
+                    <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
+                  )}
+                  {!ruleDiscount && Number(product.unitPrice) > Number(displayPrice) && (
+                    <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
+                  )}
+                  {ruleDiscount && (
+                    <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded font-semibold">
+                      {ruleDiscount.discountPercent}% off — {ruleDiscount.ruleName}
+                    </span>
+                  )}
+                  {!ruleDiscount && product.compareAtPrice && Number(displayPrice) < Number(product.compareAtPrice) && (
+                    <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded font-semibold">
+                      {Math.round(((Number(product.compareAtPrice) - Number(displayPrice)) / Number(product.compareAtPrice)) * 100)}% off
+                    </span>
+                  )}
                 </>
               )}
             </div>
 
-            {savingsPerUnit > 0 && (
+            {ruleDiscount && !isPriceHidden && (
+              <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
+                <span className="text-sm text-green-700 font-medium">
+                  {ruleDiscount.ruleName}: {ruleDiscount.discountPercent}% off — you save {formatPrice(ruleDiscount.discountAmount)}/unit
+                </span>
+              </div>
+            )}
+
+            {savingsPerUnit > 0 && !isPriceHidden && (
               <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
                 <span className="text-sm text-green-700 font-medium">Bulk savings: {formatPrice(savingsPerUnit)}/unit off - you save {formatPrice(totalSavings)} total</span>
+              </div>
+            )}
+            {!isPriceHidden && isNonPurchasable && (
+              <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3">
+                <span className="text-sm text-red-700 font-medium">{nonPurchasableMsg || "This product is not available for purchase"}</span>
               </div>
             )}
 
@@ -330,6 +424,70 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+            {/* BOGO Offers */}
+            {productBogo.length > 0 && (
+              <div className="bg-pink-50 border border-pink-100 rounded-lg px-4 py-3 space-y-2">
+                <p className="text-sm text-pink-700 font-semibold flex items-center gap-1"><Gift size={16} /> Buy One Get One Offers</p>
+                {productBogo.map((b, i) => (
+                  <p key={i} className="text-sm text-pink-700">Buy {b.buyQuantity}, Get {b.freeQuantity} Free — <span className="font-medium">{b.ruleName}</span></p>
+                ))}
+              </div>
+            )}
+
+            {/* Quantity-Based Discount Tiers */}
+            {productQtyDiscount && (
+              <div className="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3">
+                <p className="text-sm text-cyan-700 font-semibold flex items-center gap-1 mb-2"><Layers size={16} /> {productQtyDiscount.ruleName}</p>
+                <div className="space-y-1">
+                  {[...productQtyDiscount.tiers].sort((a, b) => a.minQty - b.minQty).map((tier, i) => (
+                    <p key={i} className="text-sm text-cyan-700">
+                      {tier.minQty}+ units: {tier.discountType === 'PERCENTAGE' ? `${tier.discountValue}% off` : `${formatPrice(tier.discountValue)} off`}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Extra Charges */}
+            {productExtraCharges.length > 0 && (
+              <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 space-y-1">
+                <p className="text-sm text-amber-700 font-semibold flex items-center gap-1"><PlusCircle size={16} /> Additional Charges</p>
+                {productExtraCharges.map((ec, i) => (
+                  <p key={i} className="text-sm text-amber-700">{ec.chargeLabel}: {formatPrice(ec.chargeAmount)} <span className="text-amber-500">({ec.ruleName})</span></p>
+                ))}
+              </div>
+            )}
+
+            {/* Shipping Rule */}
+            {productShipping && (
+              <div className="bg-orange-50 border border-orange-100 rounded-lg px-4 py-3">
+                <p className="text-sm text-orange-700 font-semibold flex items-center gap-1"><Truck size={16} /> {productShipping.ruleName}</p>
+                <p className="text-sm text-orange-700">Shipping: {productShipping.cost > 0 ? formatPrice(productShipping.cost) : <span className="font-bold text-green-600">Free</span>}</p>
+              </div>
+            )}
+
+            {/* Tax Rules */}
+            {productTaxes.length > 0 && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 space-y-1">
+                <p className="text-sm text-gray-700 font-semibold">Applicable Taxes</p>
+                {productTaxes.map((tax, i) => (
+                  <p key={i} className="text-sm text-gray-600">{tax.taxLabel}: {tax.taxRate}% <span className="text-gray-400">({tax.ruleName})</span></p>
+                ))}
+              </div>
+            )}
+
+            {/* Min/Max Order Quantity Warnings */}
+            {(minQtyRule || maxQtyRule) && (
+              <div className="space-y-1">
+                {minQtyRule && (
+                  <p className="text-sm text-amber-700 flex items-center gap-1"><AlertTriangle size={14} /> Minimum order quantity: {minQtyRule.minQty} units ({minQtyRule.ruleName})</p>
+                )}
+                {maxQtyRule && (
+                  <p className="text-sm text-red-700 flex items-center gap-1"><AlertTriangle size={14} /> Maximum order quantity: {maxQtyRule.maxQty} units ({maxQtyRule.ruleName})</p>
+                )}
+              </div>
+            )}
+
             {product.sku && <p className="text-sm text-gray-500">SKU: {product.sku}</p>}
             {product.vendorName && <p className="text-sm text-gray-500">Vendor: {product.vendorName}</p>}
             <div className="flex items-center gap-2 text-sm text-gray-600"><Package size={16} /><span>MOQ: {product.moq} units</span></div>
@@ -337,16 +495,23 @@ export default function ProductDetailPage() {
             <div className="flex items-center gap-2 text-sm text-gray-600"><ShieldCheck size={16} /><span>Secure checkout via CCAvenue</span></div>
 
             {/* Quantity + Actions */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center border border-gray-200 rounded-lg">
-                <button onClick={() => setQuantity(Math.max(product.moq, quantity - 1))} className="px-3 py-2 hover:bg-gray-50">-</button>
-                <input type="number" min={product.moq} max={product.inventoryQuantity} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="w-16 text-center border-x border-gray-200 py-2" />
-                <button onClick={() => setQuantity(Math.min(product.inventoryQuantity, quantity + 1))} className="px-3 py-2 hover:bg-gray-50">+</button>
-              </div>
-              <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < product.moq} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-medium">
-                <ShoppingCart size={18} /> {adding ? "Adding..." : "Add to Cart"}
-              </button>
-            </div>
+            {(() => {
+              const effectiveMinQty = minQtyRule ? Math.max(product.moq, minQtyRule.minQty) : product.moq
+              const effectiveMaxQty = maxQtyRule ? Math.min(product.inventoryQuantity, maxQtyRule.maxQty) : product.inventoryQuantity
+              const isQtyBlocked = (minQtyRule && quantity < minQtyRule.minQty) || (maxQtyRule && quantity > maxQtyRule.maxQty)
+              return (
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center border border-gray-200 rounded-lg">
+                    <button onClick={() => setQuantity(Math.max(effectiveMinQty, quantity - 1))} className="px-3 py-2 hover:bg-gray-50">-</button>
+                    <input type="number" min={effectiveMinQty} max={effectiveMaxQty} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="w-16 text-center border-x border-gray-200 py-2" />
+                    <button onClick={() => setQuantity(Math.min(effectiveMaxQty, quantity + 1))} className="px-3 py-2 hover:bg-gray-50">+</button>
+                  </div>
+                  <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < effectiveMinQty || quantity > effectiveMaxQty || isNonPurchasable} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-medium">
+                    <ShoppingCart size={18} /> {isNonPurchasable ? (nonPurchasableMsg || "Not Available") : adding ? "Adding..." : isQtyBlocked ? "Adjust Quantity" : "Add to Cart"}
+                  </button>
+                </div>
+              )
+            })()}
 
             <div className="flex gap-3">
               <button onClick={toggleWishlist} disabled={wishlistLoading} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition text-sm font-medium ${inWishlist ? "border-red-200 text-red-600 bg-red-50 hover:bg-red-100" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
@@ -397,12 +562,12 @@ export default function ProductDetailPage() {
               </div>
               <div className="bg-primary-50 rounded-lg p-4">
                 <p className="text-sm text-primary-600 mb-1">Effective Price</p>
-                <p className="text-2xl font-bold text-primary-700">{formatPrice(pricing?.finalPrice || Number(effectivePrice))}<span className="text-sm font-normal">/unit</span></p>
+                <p className="text-2xl font-bold text-primary-700">{formatPrice(Number(displayPrice))}<span className="text-sm font-normal">/unit</span></p>
                 {pricing && pricing.discountPercent > 0 && <p className="text-xs text-primary-500 mt-1">incl. all discounts</p>}
               </div>
               <div className="bg-green-50 rounded-lg p-4">
                 <p className="text-sm text-green-600 mb-1">Total Cost</p>
-                <p className="text-2xl font-bold text-green-700">{formatPrice((pricing?.finalPrice || Number(effectivePrice)) * quantity)}</p>
+                <p className="text-2xl font-bold text-green-700">{formatPrice(Number(displayPrice) * quantity)}</p>
                 {totalSavings > 0 && <p className="text-xs text-green-600 mt-1">Save {formatPrice(totalSavings)}</p>}
               </div>
             </div>

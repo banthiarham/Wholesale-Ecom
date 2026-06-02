@@ -1,11 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { Search, SlidersHorizontal, X, GitCompare, Heart, Flame } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 import { SeasonalDiscount, PaymentOffer, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
+import { useAuth } from "@/lib/auth"
+import { useStorefrontRules } from "@/lib/rules"
+import { useRolePricing } from "@/lib/pricing/useRolePricing"
+import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 
 interface Product {
   id: string
@@ -43,6 +47,42 @@ export default function ProductsPage() {
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
   const { t } = useTranslation()
+  const { user } = useAuth()
+
+  // Evaluate dynamic rules for storefront visibility, pricing, and purchasability
+  const rulesProducts = useMemo(() => products.map((p) => ({ id: p.id, categoryId: p.categoryId || p.category?.id, unitPrice: p.unitPrice })), [products])
+  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts, extraCharges, shipping, loading: rulesLoading } = useStorefrontRules(rulesProducts)
+
+  // Build a map of productId → rule discount for quick lookup
+  const ruleDiscountMap = useMemo(() => {
+    const m = new Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>()
+    for (const d of productDiscounts) m.set(d.productId, d)
+    return m
+  }, [productDiscounts])
+
+  // Build BOGO map: buyProductId → offers
+  const bogoMap = useMemo(() => {
+    const m = new Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>()
+    for (const b of bogo) {
+      const arr = m.get(b.buyProductId) || []
+      arr.push(b)
+      m.set(b.buyProductId, arr)
+    }
+    return m
+  }, [bogo])
+
+  // Build quantity discount map
+  const qtyDiscountMap = useMemo(() => {
+    const m = new Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>()
+    for (const qd of quantityDiscounts) {
+      if (qd.productId) m.set(qd.productId, qd)
+    }
+    return m
+  }, [quantityDiscounts])
+
+  // Fetch role-based pricing for authenticated users
+  const rolePricingProducts = useMemo(() => products.map((p) => ({ id: p.id, unitPrice: p.unitPrice })), [products])
+  const { pricing: rolePricingMap } = useRolePricing(rolePricingProducts)
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -94,11 +134,15 @@ export default function ProductsPage() {
   const handleAddToCart = async (productId: string, qty: number) => {
     setAddingId(productId)
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+      const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
+      if (token) headers["Authorization"] = `Bearer ${token}`
       await fetch("/api/cart", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
+        headers,
         body: JSON.stringify({ productId, quantity: qty }),
       })
+      window.dispatchEvent(new CustomEvent("cart-updated"))
       alert(t("products.addToCart"))
     } catch (err) {
       console.error(err)
@@ -210,7 +254,18 @@ export default function ProductsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((product) => (
+            {products
+              .filter((p) => !hiddenProductIds.has(p.id))
+              .map((product) => {
+                const isPriceHidden = hiddenPriceProductIds.has(product.id)
+                const isNonPurchasable = nonPurchasableProducts.has(product.id)
+                const nonPurchasableMsg = nonPurchasableProducts.get(product.id) || ""
+                const rp = rolePricingMap[product.id]
+                const ruleDisc = ruleDiscountMap.get(product.id)
+                const productBogo = bogoMap.get(product.id)
+                const productQtyDisc = qtyDiscountMap.get(product.id)
+
+                return (
               <div key={product.id} className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition group">
                 <Link href={`/products/${product.handle}`}>
                   <div className="h-48 bg-gray-100 relative">
@@ -249,7 +304,21 @@ export default function ProductsPage() {
                   {product.sku && <p className="text-xs text-gray-500 mt-1">{t("product.sku")}: {product.sku}</p>}
                   <p className="text-xs text-gray-500">{t("product.moq")}: {product.moq}</p>
                   <div className="flex items-center gap-2 mt-2">
-                    {product.tierPrices && product.tierPrices.length > 0 ? (
+                    {isPriceHidden ? (
+                      <span className="text-sm text-gray-500 italic">Login for pricing</span>
+                    ) : rp ? (
+                      <>
+                        <span className="font-bold text-primary-700">{formatPrice(rp.rolePrice)}</span>
+                        <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
+                        <span className="text-xs text-green-600 font-semibold">Save {rp.savingsPercent}%</span>
+                      </>
+                    ) : ruleDisc ? (
+                      <>
+                        <span className="font-bold text-primary-700">{formatPrice(Number(product.unitPrice) - ruleDisc.discountAmount)}</span>
+                        <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
+                        <span className="text-xs text-green-600 font-semibold">{ruleDisc.discountPercent}% off</span>
+                      </>
+                    ) : product.tierPrices && product.tierPrices.length > 0 ? (
                       <>
                         <span className="text-xs text-green-600 font-semibold">From </span>
                         <span className="font-bold text-primary-700">{formatPrice(Number(product.tierPrices[product.tierPrices.length - 1].price))}</span>
@@ -262,20 +331,39 @@ export default function ProductsPage() {
                       </>
                     )}
                   </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    {ruleDisc && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                        {ruleDisc.ruleName}
+                      </span>
+                    )}
+                    <ProductRuleBadge
+                      priceHidden={isPriceHidden}
+                      nonPurchasable={isNonPurchasable}
+                      nonPurchasableMessage={nonPurchasableMsg}
+                      hasRolePrice={!!rp}
+                      roleLabel={rp?.appliedRoleName || undefined}
+                      bogoLabel={productBogo ? `Buy ${productBogo[0].buyQuantity} Get ${productBogo[0].freeQuantity} Free` : undefined}
+                      quantityDiscountLabel={productQtyDisc ? productQtyDisc.ruleName : undefined}
+                      discountLabel={ruleDisc?.ruleName}
+                      discountPercent={ruleDisc?.discountPercent}
+                    />
+                  </div>
                   <div className="flex items-center gap-1 mt-2">
                     <span className="text-yellow-500 text-sm">{"★".repeat(Math.round(product.rating))}</span>
                     <span className="text-xs text-gray-500">({product.rating})</span>
                   </div>
                   <button
                     onClick={() => handleAddToCart(product.id, product.moq)}
-                    disabled={addingId === product.id || product.inventoryQuantity <= 0}
+                    disabled={addingId === product.id || product.inventoryQuantity <= 0 || isNonPurchasable}
                     className="mt-4 w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
                   >
-                    {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? t("product.outOfStock") : t("product.addToCart")}
+                    {isNonPurchasable ? (nonPurchasableMsg || "Not Available") : addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? t("product.outOfStock") : t("product.addToCart")}
                   </button>
                 </div>
               </div>
-            ))}
+            )
+            })}
           </div>
         )}
       </main>

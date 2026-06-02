@@ -42,6 +42,9 @@ export class ProductsController {
   @ApiQuery({ name: 'in_stock', required: false, description: 'Filter in-stock items only', type: Boolean })
   @ApiQuery({ name: 'tags', required: false, description: 'Comma-separated tags' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status (PUBLISHED, DRAFT, ARCHIVED). Leave empty for published only.' })
+  @ApiQuery({ name: 'sort', required: false, description: 'Sort order: popularity, newest, price_asc, price_desc' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Max products to return (default 100, max 200)', type: Number })
+  @ApiQuery({ name: 'ids', required: false, description: 'Comma-separated product IDs to fetch specific products' })
   async findAll(
     @Query('q') search?: string,
     @Query('category') categoryId?: string,
@@ -51,6 +54,9 @@ export class ProductsController {
     @Query('in_stock') inStock?: string,
     @Query('tags') tags?: string,
     @Query('status') status?: string,
+    @Query('sort') sort?: string,
+    @Query('limit') limit?: string,
+    @Query('ids') ids?: string,
   ) {
     const filters: any = {};
     if (search) filters.search = search;
@@ -61,6 +67,9 @@ export class ProductsController {
     if (inStock === 'true') filters.inStock = true;
     if (tags) filters.tags = tags.split(',');
     if (status) filters.status = status;
+    if (sort) filters.sort = sort;
+    if (limit) filters.limit = Math.min(parseInt(limit, 10) || 100, 200);
+    if (ids) filters.ids = ids.split(',').map((id: string) => id.trim()).filter(Boolean);
 
     const products = await this.productsService.findAll(filters);
     return { products, count: products.length };

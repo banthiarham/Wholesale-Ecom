@@ -3,10 +3,10 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider"
 import { SiteSettingsProvider } from "@/lib/settings/SiteSettingsProvider"
+import { AuthProvider } from "@/lib/auth"
 import Header from "@/components/layout/Header"
 import Footer from "@/components/layout/Footer"
 import { Analytics } from "@/lib/analytics"
-import { ErrorBoundary } from "@/components/ErrorBoundary"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -74,18 +74,18 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body className={inter.className}>
-        <ErrorBoundary>
-          <SiteSettingsProvider>
-            <LanguageProvider>
+        <SiteSettingsProvider>
+          <LanguageProvider>
+            <AuthProvider>
               <Header />
               {children}
               <Footer />
-            </LanguageProvider>
-            <Analytics />
-          </SiteSettingsProvider>
-        </ErrorBoundary>
+            </AuthProvider>
+          </LanguageProvider>
+          <Analytics />
+        </SiteSettingsProvider>
       </body>
     </html>
   )

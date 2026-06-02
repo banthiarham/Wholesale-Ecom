@@ -92,7 +92,7 @@ const emptyForm = (): RuleForm => ({
   endDate: "",
 })
 
-function ConditionsActionsFields({ form, setForm, products, categories }: { form: RuleForm; setForm: React.Dispatch<React.SetStateAction<RuleForm>>; products: Product[]; categories: Category[] }) {
+function ConditionsActionsFields({ form, setForm, products, categories, roles }: { form: RuleForm; setForm: React.Dispatch<React.SetStateAction<RuleForm>>; products: Product[]; categories: Category[]; roles: { id: string; name: string; label: string; color: string | null }[] }) {
   const t = form.type
   const c = form.conditions
   const a = form.actions
@@ -152,9 +152,9 @@ function ConditionsActionsFields({ form, setForm, products, categories }: { form
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
         <option value="">Select role</option>
-        <option value="BUYER">Buyer</option>
-        <option value="VENDOR">Vendor</option>
-        <option value="DISTRIBUTOR">Distributor</option>
+        {roles.map((r) => (
+          <option key={r.id} value={r.name}>{r.label}</option>
+        ))}
       </select>
     </div>
   )
@@ -500,6 +500,7 @@ export default function AdminRulesPage() {
   const [filtered, setFiltered] = useState<DynamicRule[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [roles, setRoles] = useState<{ id: string; name: string; label: string; color: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [showForm, setShowForm] = useState(false)
@@ -510,7 +511,7 @@ export default function AdminRulesPage() {
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
-  useEffect(() => { loadRules(); loadProducts(); loadCategories() }, [token])
+  useEffect(() => { loadRules(); loadProducts(); loadCategories(); loadRoles() }, [token])
   useEffect(() => {
     const q = search.toLowerCase()
     setFiltered(rules.filter((r) => {
@@ -546,6 +547,17 @@ export default function AdminRulesPage() {
       const walk = (arr: any[]) => { for (const c of arr || []) { flat.push({ id: c.id, name: c.name }); walk(c.children) } }
       walk(data.categories || [])
       setCategories(flat)
+    } catch (e) { console.error(e) }
+  }
+
+  const loadRoles = async () => {
+    try {
+      const t = localStorage.getItem("token") || ""
+      const res = await fetch("/api/roles", { headers: { Authorization: `Bearer ${t}` } })
+      if (res.ok) {
+        const data = await res.json()
+        setRoles((data.roles || []).map((r: any) => ({ id: r.id, name: r.name, label: r.label, color: r.color })))
+      }
     } catch (e) { console.error(e) }
   }
 
@@ -644,7 +656,7 @@ export default function AdminRulesPage() {
             <div className="col-span-full border-t border-gray-100 pt-4 mt-2">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Conditions & Actions for: {getTypeLabel(form.type)}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <ConditionsActionsFields form={form} setForm={setForm} products={products} categories={categories} />
+                <ConditionsActionsFields form={form} setForm={setForm} products={products} categories={categories} roles={roles} />
               </div>
             </div>
 

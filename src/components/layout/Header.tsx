@@ -29,10 +29,12 @@ import {
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
+import { useAuth, usePermissions } from "@/lib/auth"
 import { getCartSessionId } from "@/lib/utils"
 
 export default function Header() {
-  const [user, setUser] = useState<any>(null)
+  const { user, role, loading: authLoading, logout: authLogout } = useAuth()
+  const { can } = usePermissions()
   const [mobileMenu, setMobileMenu] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -45,28 +47,6 @@ export default function Header() {
   const siteName = useSetting("siteName", "WholesaleX Pro")
   const logoUrl = useSetting("logoUrl", "")
 
-  const fetchUser = () => {
-    const token = localStorage.getItem("token")
-    if (!token) { setUser(null); return }
-    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => {
-        if (!res.ok) {
-          // Token is invalid or expired — clear it
-          localStorage.removeItem("token")
-          setUser(null)
-          return null
-        }
-        return res.json()
-      })
-      .then((data) => {
-        if (!data) return // already handled above
-        // /auth/me returns user directly (not wrapped in { user: ... })
-        if (data.id) setUser(data)
-        else setUser(null)
-      })
-      .catch(() => { setUser(null); localStorage.removeItem("token") })
-  }
-
   const fetchCartCount = () => {
     fetch("/api/cart", { headers: { "x-session-id": getCartSessionId() } })
       .then((r) => r.json())
@@ -75,15 +55,10 @@ export default function Header() {
   }
 
   useEffect(() => {
-    fetchUser()
     fetchCartCount()
-    const authHandler = (e: any) => setUser(e.detail || null)
-    const cartHandler = () => fetchCartCount()
-    window.addEventListener("auth-change", authHandler)
-    window.addEventListener("cart-updated", cartHandler)
+    window.addEventListener("cart-updated", () => fetchCartCount())
     return () => {
-      window.removeEventListener("auth-change", authHandler)
-      window.removeEventListener("cart-updated", cartHandler)
+      window.removeEventListener("cart-updated", () => fetchCartCount())
     }
   }, [])
 
@@ -110,9 +85,7 @@ export default function Header() {
   }, [])
 
   const logout = () => {
-    localStorage.removeItem("token")
-    setUser(null)
-    window.location.href = "/"
+    authLogout()
   }
 
   const toggleLang = () => setLocale(locale === "en" ? "hi" : "en")
@@ -171,10 +144,10 @@ export default function Header() {
 
   const userLinks = user
     ? [
-        ...((user.effectiveRole || user.roleRel?.name || user.role) === "ADMIN"
+        ...(can("admin", "access")
           ? [{ href: "/admin", label: "Admin", icon: Settings }]
           : []),
-        { href: "/orders", label: t("nav.orders"), icon: ShoppingBag },
+        { href: "/orders", label: t("nav.orders"), icon: ShoppingBag, permission: "orders:view" },
         { href: "/wishlist", label: "Wishlist", icon: Heart },
         { href: "/account/role-request", label: "Role & Access", icon: Shield },
         { href: "/account/addresses", label: "Addresses", icon: MapPin },
@@ -183,7 +156,11 @@ export default function Header() {
         { href: "/compare", label: "Compare", icon: GitCompare },
         { href: "/loyalty", label: t("nav.loyalty"), icon: Heart },
         { href: "/notifications", label: t("nav.notifications"), icon: Bell },
-      ]
+      ].filter((link) => {
+        if (!("permission" in link)) return true
+        const parts = (link as any).permission.split(":")
+        return can(parts[0], parts[1])
+      })
     : []
 
   if (pathname?.startsWith("/admin")) return null
@@ -300,8 +277,8 @@ export default function Header() {
                     <div className="px-4 py-2 border-b border-gray-100">
                       <p className="text-sm font-medium text-gray-900">{user.firstName} {user.lastName}</p>
                       <p className="text-xs text-gray-400">{user.email}</p>
-                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold uppercase rounded text-white" style={{ backgroundColor: user.roleRel?.color || '#6B7280' }}>
-                        {user.roleRel?.label || user.role}
+                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold uppercase rounded text-white" style={{ backgroundColor: role?.color || '#6B7280' }}>
+                        {role?.label || user.role}
                       </span>
                     </div>
                     {[...userLinks, { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 }].map((link) => (

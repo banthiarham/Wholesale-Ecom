@@ -37,6 +37,8 @@ export default function RoleRequestPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [selectedRolePermissions, setSelectedRolePermissions] = useState<{ action: string; resource: string; description: string | null }[]>([])
+  const [loadingPermissions, setLoadingPermissions] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -63,6 +65,24 @@ export default function RoleRequestPage() {
         router.push("/login")
       })
   }, [router])
+
+  // Fetch permissions for the selected role
+  useEffect(() => {
+    if (!selectedRoleId) {
+      setSelectedRolePermissions([])
+      return
+    }
+    setLoadingPermissions(true)
+    const token = localStorage.getItem("token")
+    fetch(`/api/roles/${selectedRoleId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => {
+        const role = data.role || data
+        setSelectedRolePermissions(role.permissions || [])
+      })
+      .catch(() => setSelectedRolePermissions([]))
+      .finally(() => setLoadingPermissions(false))
+  }, [selectedRoleId])
 
   const handleSubmit = async () => {
     if (!selectedRoleId) {
@@ -217,19 +237,41 @@ export default function RoleRequestPage() {
                   const selectedRole = availableRoles.find((r) => r.id === selectedRoleId)
                   if (!selectedRole) return null
                   return (
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                        style={{ backgroundColor: selectedRole.color || "#6B7280" }}
-                      >
-                        <Shield size={16} />
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                          style={{ backgroundColor: selectedRole.color || "#6B7280" }}
+                        >
+                          <Shield size={16} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{selectedRole.label}</p>
+                          {selectedRole.description && (
+                            <p className="text-sm text-gray-500">{selectedRole.description}</p>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{selectedRole.label}</p>
-                        {selectedRole.description && (
-                          <p className="text-sm text-gray-500">{selectedRole.description}</p>
-                        )}
-                      </div>
+                      {/* Permission Preview */}
+                      {loadingPermissions ? (
+                        <div className="mt-3 flex items-center gap-2 text-sm text-gray-400">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                          Loading permissions...
+                        </div>
+                      ) : selectedRolePermissions.length > 0 ? (
+                        <div className="mt-3">
+                          <p className="text-sm font-medium text-gray-700 mb-2">This role grants access to:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedRolePermissions.map((p) => (
+                              <span key={`${p.action}-${p.resource}`} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full font-medium">
+                                {p.action}:{p.resource}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-gray-400 italic">No specific permissions defined for this role.</p>
+                      )}
                     </div>
                   )
                 })()}
