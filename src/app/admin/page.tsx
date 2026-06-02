@@ -18,6 +18,7 @@ import {
   IndianRupee,
   Truck,
   BarChart3,
+  Landmark,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
@@ -86,6 +87,7 @@ export default function AdminDashboardPage() {
   const [pendingRfqs, setPendingRfqs] = useState<PendingRfq[]>([])
   const [sales, setSales] = useState<SalesData | null>(null)
   const [ordersByStatus, setOrdersByStatus] = useState<OrdersByStatus | null>(null)
+  const [paymentOffersCount, setPaymentOffersCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -101,8 +103,9 @@ export default function AdminDashboardPage() {
       fetch("/api/analytics/activity?limit=10", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
       fetch("/api/rfqs", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
       fetch("/api/inventory", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      fetch("/api/pricing/payment-offers").then((r) => r.json()),
     ])
-      .then(([users, products, orders, analytics, ordersStatus, activity, rfqsData, inventoryData]) => {
+      .then(([users, products, orders, analytics, ordersStatus, activity, rfqsData, inventoryData, paymentOffersData]) => {
         const inventoryItems = Array.isArray(inventoryData) ? inventoryData : inventoryData.items ?? inventoryData.inventory ?? []
         const lowStockCount = inventoryItems.filter((item: any) => (item.stock ?? item.quantity ?? 0) <= 10).length
 
@@ -125,6 +128,8 @@ export default function AdminDashboardPage() {
         const allRfqs = Array.isArray(rfqsData) ? rfqsData : rfqsData.rfqs ?? []
         setPendingRfqs(allRfqs.filter((r: any) => r.status === 'SUBMITTED' || r.status === 'UNDER_REVIEW').slice(0, 5))
         setSales(analytics)
+        const offersList = Array.isArray(paymentOffersData) ? paymentOffersData : paymentOffersData.offers || []
+        setPaymentOffersCount(offersList.filter((o: any) => o.isActive).length)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -141,6 +146,7 @@ export default function AdminDashboardPage() {
     { label: "Total Revenue", value: formatPrice(stats?.totalRevenue ?? 0), icon: IndianRupee, href: "/admin/orders", color: "text-amber-600", bg: "bg-amber-50" },
     { label: "Low Stock", value: vendorData?.lowStockCount ?? 0, icon: AlertTriangle, href: "/admin/inventory", color: (vendorData?.lowStockCount ?? 0) > 0 ? "text-red-600" : "text-gray-400", bg: (vendorData?.lowStockCount ?? 0) > 0 ? "bg-red-50" : "bg-gray-50" },
     { label: "Pending RFQs", value: vendorData?.pendingRfqCount ?? 0, icon: FileText, href: "/admin/rfqs", color: "text-yellow-600", bg: "bg-yellow-50" },
+    { label: "Payment Offers", value: paymentOffersCount, icon: Landmark, href: "/admin/payment-offers", color: "text-indigo-600", bg: "bg-indigo-50" },
   ]
 
   if (loading) {
@@ -154,7 +160,7 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
         {cards.map((c) => (
           <Link key={c.label} href={c.href} className={`${c.bg} rounded-xl border border-gray-100 p-5 hover:shadow-sm transition group`}>
             <div className="flex items-center justify-between mb-2">
@@ -169,7 +175,7 @@ export default function AdminDashboardPage() {
       {/* Quick Actions */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           {[
             { href: "/admin/products", icon: Plus, label: "Add Product", color: "text-primary-600", bg: "bg-primary-50" },
             { href: "/admin/inventory", icon: Boxes, label: "Update Inventory", color: "text-amber-600", bg: "bg-amber-50" },
@@ -177,6 +183,7 @@ export default function AdminDashboardPage() {
             { href: "/admin/catalogs", icon: BarChart3, label: "Create Catalog", color: "text-purple-600", bg: "bg-purple-50" },
             { href: "/admin/orders", icon: Truck, label: "Manage Orders", color: "text-green-600", bg: "bg-green-50" },
             { href: "/admin/users", icon: Users, label: "Manage Users", color: "text-red-600", bg: "bg-red-50" },
+            { href: "/admin/payment-offers", icon: Landmark, label: "Payment Offers", color: "text-indigo-600", bg: "bg-indigo-50" },
           ].map((action) => (
             <Link key={action.label} href={action.href} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition group">
               <div className={`w-10 h-10 ${action.bg} rounded-lg flex items-center justify-center shrink-0`}>

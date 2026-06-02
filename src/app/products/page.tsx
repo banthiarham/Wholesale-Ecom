@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Search, SlidersHorizontal, X, GitCompare, Heart, Flame } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
-import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
+import { SeasonalDiscount, PaymentOffer, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
 
 interface Product {
   id: string
@@ -41,6 +41,7 @@ export default function ProductsPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set())
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
+  const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
   const { t } = useTranslation()
 
   useEffect(() => {
@@ -68,6 +69,7 @@ export default function ProductsPage() {
         setCategories(cats)
       })
     fetchSeasonalDiscounts().then(setDiscounts)
+    fetchPaymentOffers().then(setPaymentOffers)
     loadProducts()
   }, [])
 
@@ -223,6 +225,11 @@ export default function ProductsPage() {
                     {(() => {
                       const disc = getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)
                       if (disc) return <span className="absolute top-2 left-2 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><Flame size={10} />{discountBadge(disc)}</span>
+                      return null
+                    })()}
+                    {(() => {
+                      const offer = paymentOffers.find(o => o.productId === product.id || (product.categoryId && o.categoryId === product.categoryId) || (product.category?.id && o.categoryId === product.category.id) || (!o.productId && !o.categoryId))
+                      if (offer) return <span className={`absolute bottom-2 left-2 ${offer.offerType === 'BANK' ? 'bg-blue-600' : 'bg-purple-600'} text-white text-xs font-bold px-2 py-1 rounded`}>{getPaymentOfferBadge(offer)}</span>
                       return null
                     })()}
                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import Link from "next/link"
 import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight, MessageSquare, Flame } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
-import { PricingBreakdown, SeasonalDiscount, fetchPricing, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
+import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, getPaymentOfferLabel } from "@/lib/pricing"
 
 interface TierPrice { id: string; minQty: number; maxQty: number | null; price: number }
 
@@ -42,6 +42,7 @@ export default function ProductDetailPage() {
   const [userHasReviewed, setUserHasReviewed] = useState(false)
   const [pricing, setPricing] = useState<PricingBreakdown | null>(null)
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
+  const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
 
   useEffect(() => {
     if (!params.handle) return
@@ -56,10 +57,12 @@ export default function ProductDetailPage() {
           checkWishlist(data.product.id)
           checkUserReview(data.product.id)
           loadPricing(data.product)
+          fetchPaymentOffers(data.product.id, data.product.categoryId || data.product.category?.id).then(setPaymentOffers)
         }
         setLoading(false)
       })
     fetchSeasonalDiscounts().then(setDiscounts)
+    // Payment offers will be fetched after product loads
   }, [params.handle])
 
   const loadPricing = (p: Product) => {
@@ -258,7 +261,7 @@ export default function ProductDetailPage() {
           {/* Product Info */}
           <div className="space-y-5">
             {product.category && <Link href={`/categories/${product.category.handle}`} className="text-sm text-primary-600 hover:underline">{product.category.name}</Link>}
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3 flex-wrap">{product.title} {product.tags?.includes('best-seller') && <span className="text-sm bg-amber-500 text-white px-2 py-0.5 rounded font-semibold">Best Seller</span>}{getProductDiscount(discounts, product.id, product.categoryId || product.category?.id) && <span className="text-sm bg-orange-500 text-white px-2 py-0.5 rounded font-semibold flex items-center gap-1"><Flame size={12} />{discountBadge(getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)!)}</span>}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3 flex-wrap">{product.title} {product.tags?.includes('best-seller') && <span className="text-sm bg-amber-500 text-white px-2 py-0.5 rounded font-semibold">Best Seller</span>}{getProductDiscount(discounts, product.id, product.categoryId || product.category?.id) && <span className="text-sm bg-orange-500 text-white px-2 py-0.5 rounded font-semibold flex items-center gap-1"><Flame size={12} />{discountBadge(getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)!)}</span>}{paymentOffers.filter(o => o.productId === product.id || (!o.productId && !o.categoryId)).slice(0, 2).map((offer) => (<span key={offer.id} className={`text-sm ${offer.offerType === 'BANK' ? 'bg-blue-600' : 'bg-purple-600'} text-white px-2 py-0.5 rounded font-semibold`}>{getPaymentOfferBadge(offer)}</span>))}</h1>
 
             <div className="flex items-center gap-2">
               <div className="flex text-yellow-500">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={18} fill={i < Math.round(product.rating) ? "currentColor" : "none"} className={i < Math.round(product.rating) ? "" : "text-gray-300"} />)}</div>
@@ -300,6 +303,30 @@ export default function ProductDetailPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Available Offers */}
+            {paymentOffers.length > 0 && (
+              <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 space-y-2">
+                <h3 className="text-sm font-semibold text-amber-800">Available Offers</h3>
+                {paymentOffers.map((offer) => (
+                  <div key={offer.id} className="flex items-start gap-2">
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold text-white flex-shrink-0 ${offer.offerType === 'BANK' ? 'bg-blue-600' : 'bg-purple-600'}`}>
+                      {offer.offerType === 'BANK' ? 'BANK' : 'UPI'}
+                    </span>
+                    <div>
+                      <p className="text-sm text-gray-800 font-medium">{offer.name}</p>
+                      <p className="text-xs text-gray-600">{getPaymentOfferLabel(offer)}</p>
+                      {offer.maxDiscount && (
+                        <p className="text-xs text-gray-500">Max discount: {formatPrice(Number(offer.maxDiscount))}</p>
+                      )}
+                      {offer.minOrderValue && (
+                        <p className="text-xs text-gray-500">Min order: {formatPrice(Number(offer.minOrderValue))}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

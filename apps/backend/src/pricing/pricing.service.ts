@@ -282,4 +282,78 @@ export class PricingService {
       data: { usedCount: { increment: 1 } },
     });
   }
+
+  /**
+   * Get applicable payment offers for a product/category.
+   * Used by product pages (display) and checkout (computation).
+   */
+  async getApplicablePaymentOffers(productId?: string, categoryId?: string) {
+    const now = new Date();
+    return this.prisma.paymentOffer.findMany({
+      where: {
+        isActive: true,
+        startDate: { lte: now },
+        endDate: { gte: now },
+        OR: [
+          { productId: productId || undefined },
+          { categoryId: categoryId || undefined },
+          { productId: null, categoryId: null },
+        ],
+      },
+      include: {
+        product: { select: { id: true, title: true } },
+        category: { select: { id: true, name: true } },
+      },
+      orderBy: { value: 'desc' },
+    });
+  }
+
+  /**
+   * Compute the discount amount for a specific payment offer at checkout time.
+   * Validates the offer is active, within date range, and meets minOrderValue.
+   * Applies maxDiscount cap for PERCENTAGE offers.
+   */
+  async computePaymentOfferDiscount(
+    offerId: string,
+    subtotal: number,
+  ): Promise<{ valid: boolean; discountAmount: number; message: string; offer?: any }> {
+    const offer = await this.prisma.paymentOffer.findUnique({
+      where: { id: offerId },
+    });
+
+    if (!offer) {
+      return { valid: false, discountAmount: 0, message: 'Offer not found' };
+    }
+
+    if (!offer.isActive) {
+      return { valid: false, discountAmount: 0, message: 'Offer is inactive' };
+    }
+
+    const now = new Date();
+    if (now < new Date(offer.startDate) || now > new Date(offer.endDate)) {
+      return { valid: false, discountAmount: 0, message: 'Offer is expired or not yet active' };
+    }
+
+    if (offer.minOrderValue !== null && subtotal < Number(offer.minOrderValue)) {
+      return {
+        valid: false,
+        discountAmount: 0,
+        message: `Minimum order value of ₹${Number(offer.minOrderValue).toLocaleString('en-IN')} required`,
+      };
+    }
+
+    let discountAmount = 0;
+    if (offer.type === 'PERCENTAGE') {
+      discountAmount = subtotal * (Number(offer.value) / 100);
+    } else {
+      discountAmount = Number(offer.value);
+    }
+
+    // Apply maxDiscount cap
+    if (offer.maxDiscount !== null && discountAmount > Number(offer.maxDiscount)) {
+      discountAmount = Number(offer.maxDiscount);
+    }
+
+    return { valid: true, discountAmount, message: 'Offer applied', offer };
+  }
 }
