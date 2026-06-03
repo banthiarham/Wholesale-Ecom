@@ -24,7 +24,7 @@ interface QuickItem {
   id: string
   search: string
   selectedProduct: ProductOption | null
-  quantity: number
+  quantity: number | string   // string while typing, number when committed
 }
 
 export default function BulkUploadPage() {
@@ -171,7 +171,7 @@ export default function BulkUploadPage() {
   const clearProductSelection = (itemId: string) => {
     setQuickItems((prev) =>
       prev.map((i) =>
-        i.id === itemId ? { ...i, search: "", selectedProduct: null, quantity: 1 } : i
+        i.id === itemId ? { ...i, search: "", selectedProduct: null, quantity: "" } : i
       )
     )
   }
@@ -181,10 +181,23 @@ export default function BulkUploadPage() {
       prev.map((i) => {
         if (i.id !== itemId) return i
         if (field === "search") {
-          // If user edits after selecting, clear selection (they're re-searching)
           return { ...i, search: value as string, selectedProduct: null }
         }
-        return { ...i, quantity: value as number }
+        // Allow empty string while typing, otherwise parse to number
+        if (value === "" || value === 0) return { ...i, quantity: value }
+        return { ...i, quantity: parseInt(String(value)) || 1 }
+      })
+    )
+  }
+
+  const handleQuantityBlur = (itemId: string) => {
+    setQuickItems((prev) =>
+      prev.map((i) => {
+        if (i.id !== itemId) return i
+        const numQty = typeof i.quantity === "string" ? parseInt(i.quantity) || 0 : i.quantity
+        const minQty = i.selectedProduct?.moq || 1
+        if (numQty < minQty) return { ...i, quantity: minQty }
+        return { ...i, quantity: numQty }
       })
     )
   }
@@ -204,13 +217,19 @@ export default function BulkUploadPage() {
       e.preventDefault()
       const item = quickItems.find((i) => i.id === itemId)
       if (item?.selectedProduct) {
+        // Enforce MOQ on Enter before adding new row
+        const numQty = typeof item.quantity === "number" ? item.quantity : parseInt(item.quantity) || 0
+        const minQty = item.selectedProduct.moq || 1
+        if (numQty < minQty) {
+          setQuickItems((prev) => prev.map((i) => i.id === itemId ? { ...i, quantity: minQty } : i))
+        }
         addQuickItem()
       }
     }
   }
 
   const handleQuickOrder = async () => {
-    const validItems = quickItems.filter((i) => i.selectedProduct && i.selectedProduct.sku && i.quantity > 0)
+    const validItems = quickItems.filter((i) => i.selectedProduct && i.selectedProduct.sku && (typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 0) > 0)
     if (validItems.length === 0) {
       alert("Please select at least one product with quantity.")
       return
@@ -219,7 +238,7 @@ export default function BulkUploadPage() {
     if (!token) { router.push("/login"); return }
 
     // Check MOQ
-    const moqErrors = validItems.filter((i) => i.quantity < (i.selectedProduct?.moq || 1))
+    const moqErrors = validItems.filter((i) => (typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 0) < (i.selectedProduct?.moq || 1))
     if (moqErrors.length > 0) {
       alert(`Minimum order quantity not met for: ${moqErrors.map((i) => `${i.selectedProduct!.title} (MOQ: ${i.selectedProduct!.moq})`).join(", ")}`)
       return
@@ -233,7 +252,7 @@ export default function BulkUploadPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          items: validItems.map((i) => ({ sku: i.selectedProduct!.sku, quantity: i.quantity })),
+          items: validItems.map((i) => ({ sku: i.selectedProduct!.sku, quantity: typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 1 })),
           shippingAddress: quickShipping.street ? quickShipping : undefined,
           notes: quickNotes || undefined,
         }),
@@ -444,7 +463,8 @@ export default function BulkUploadPage() {
                           min={item.selectedProduct?.moq || 1}
                           placeholder="Qty"
                           value={item.quantity}
-                          onChange={(e) => updateQuickItem(item.id, "quantity", parseInt(e.target.value) || 1)}
+                          onChange={(e) => updateQuickItem(item.id, "quantity", e.target.value)}
+                          onBlur={() => handleQuantityBlur(item.id)}
                           onKeyDown={(e) => handleQuantityKeyDown(item.id, e)}
                           className="w-24 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
@@ -467,16 +487,22 @@ export default function BulkUploadPage() {
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-sm font-medium text-gray-700 mb-2">Order Summary</p>
                     <div className="space-y-1">
-                      {quickItems.filter((i) => i.selectedProduct).map((item) => (
-                        <div key={item.id} className="flex justify-between text-sm">
-                          <span className="text-gray-600">{item.selectedProduct!.title} × {item.quantity}</span>
-                          <span className="font-medium text-gray-900">{formatPrice(item.selectedProduct!.unitPrice * item.quantity)}</span>
-                        </div>
-                      ))}
+                      {quickItems.filter((i) => i.selectedProduct).map((item) => {
+                        const qty = typeof item.quantity === "number" ? item.quantity : parseInt(item.quantity) || 0
+                        return (
+                          <div key={item.id} className="flex justify-between text-sm">
+                            <span className="text-gray-600">{item.selectedProduct!.title} × {qty}</span>
+                            <span className="font-medium text-gray-900">{formatPrice(item.selectedProduct!.unitPrice * qty)}</span>
+                          </div>
+                        )
+                      })}
                       <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between font-semibold">
                         <span>Total</span>
                         <span className="text-primary-700">
-                          {formatPrice(quickItems.filter((i) => i.selectedProduct).reduce((sum, i) => sum + i.selectedProduct!.unitPrice * i.quantity, 0))}
+                          {formatPrice(quickItems.filter((i) => i.selectedProduct).reduce((sum, i) => {
+                            const qty = typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 0
+                            return sum + i.selectedProduct!.unitPrice * qty
+                          }, 0))}
                         </span>
                       </div>
                     </div>
