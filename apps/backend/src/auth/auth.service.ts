@@ -335,6 +335,21 @@ export class AuthService {
     return { accessToken, user: userWithoutPassword };
   }
 
+  async buildAuthResponseWithRole(userId: string): Promise<AuthResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { roleRel: true },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    const { password: _, ...userWithoutPassword } = user as any;
+    // Attach effectiveRole so frontend can use it immediately
+    (userWithoutPassword as any).effectiveRole = user.roleRel?.name || user.role;
+    const accessToken = this.generateToken(user);
+    return { accessToken, user: userWithoutPassword };
+  }
+
   private generateToken(user: any): string {
     const payload: TokenPayload = {
       sub: user.id,

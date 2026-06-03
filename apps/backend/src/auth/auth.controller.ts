@@ -41,12 +41,13 @@ export class AuthController {
     @Req() req: Request,
   ): Promise<AuthResponse> {
     const user = req.user as User;
-    // Update lastLoginAt — login() method in service was never called from here
+    // Update lastLoginAt
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
-    return this.authService.buildAuthResponse(user);
+    // Re-fetch user with roleRel so response includes effectiveRole
+    return this.authService.buildAuthResponseWithRole(user.id);
   }
 
   @Get('google')

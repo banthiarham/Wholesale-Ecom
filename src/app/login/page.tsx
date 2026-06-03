@@ -47,7 +47,11 @@ export default function LoginPage() {
             console.error("Cart merge failed", err)
           }
         }
+        // Dispatch auth-change so AuthProvider re-fetches user + permissions
         window.dispatchEvent(new CustomEvent("auth-change", { detail: data.user }))
+        // Wait briefly for AuthProvider to fetch /api/auth/me with permissions
+        // before redirecting (avoids race condition where admin page kicks you out)
+        await new Promise((r) => setTimeout(r, 500))
         // Use dynamic role for redirect — effectiveRole from roleRel takes precedence
         const effectiveRole = data.user?.effectiveRole || data.user?.roleRel?.name || data.user?.role
         const redirectTo = effectiveRole === "ADMIN" ? "/admin" : effectiveRole === "VENDOR" ? "/vendor/dashboard" : "/"

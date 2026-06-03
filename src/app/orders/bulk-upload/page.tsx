@@ -48,16 +48,19 @@ export default function BulkUploadPage() {
   // Autocomplete state
   const [searchResults, setSearchResults] = useState<Map<string, ProductOption[]>>(new Map())
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const [searchLoading, setSearchLoading] = useState<string | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rowInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
+  const dropdownItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
 
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setActiveDropdown(null)
+        setHighlightedIndex(-1)
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
@@ -115,6 +118,7 @@ export default function BulkUploadPage() {
     if (!query.trim()) {
       setSearchResults((prev) => { const m = new Map(prev); m.delete(itemId); return m })
       setActiveDropdown(null)
+      setHighlightedIndex(-1)
       return
     }
 
@@ -134,6 +138,7 @@ export default function BulkUploadPage() {
         }))
         setSearchResults((prev) => { const m = new Map(prev); m.set(itemId, products); return m })
         setActiveDropdown(itemId)
+        setHighlightedIndex(-1)
       } catch (e) {
         console.error(e)
       }
@@ -166,6 +171,7 @@ export default function BulkUploadPage() {
       )
     )
     setActiveDropdown(null)
+    setHighlightedIndex(-1)
   }
 
   const clearProductSelection = (itemId: string) => {
@@ -203,12 +209,44 @@ export default function BulkUploadPage() {
   }
 
   const handleSearchKeyDown = (itemId: string, e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+    const results = activeDropdown === itemId && searchResults.has(itemId) ? searchResults.get(itemId)! : []
+    const isOpen = results.length > 0
+
+    if (e.key === "ArrowDown") {
       e.preventDefault()
-      const item = quickItems.find((i) => i.id === itemId)
-      if (item?.selectedProduct) {
-        addQuickItem()
+      if (!isOpen) return
+      setHighlightedIndex((prev) => {
+        const next = Math.min(prev + 1, results.length - 1)
+        // Scroll into view
+        const key = `${itemId}-${next}`
+        setTimeout(() => dropdownItemRefs.current.get(key)?.scrollIntoView({ block: "nearest" }), 0)
+        return next
+      })
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      if (!isOpen) return
+      setHighlightedIndex((prev) => {
+        const next = Math.max(prev - 1, 0)
+        const key = `${itemId}-${next}`
+        setTimeout(() => dropdownItemRefs.current.get(key)?.scrollIntoView({ block: "nearest" }), 0)
+        return next
+      })
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      // If dropdown is open and an item is highlighted, select it
+      if (isOpen && highlightedIndex >= 0 && highlightedIndex < results.length) {
+        selectProduct(itemId, results[highlightedIndex])
+        setHighlightedIndex(-1)
+      } else {
+        // If product already selected, add new row
+        const item = quickItems.find((i) => i.id === itemId)
+        if (item?.selectedProduct) {
+          addQuickItem()
+        }
       }
+    } else if (e.key === "Escape") {
+      setActiveDropdown(null)
+      setHighlightedIndex(-1)
     }
   }
 
@@ -272,11 +310,11 @@ export default function BulkUploadPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 ${mode === "quick" ? "max-w-5xl" : "max-w-3xl"}`}>
         <Link href="/orders/bulk-orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to Bulk Orders</Link>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Bulk Order</h1>
 
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
           {/* Mode Tabs */}
           <div className="flex border-b border-gray-200">
             <button
@@ -293,7 +331,7 @@ export default function BulkUploadPage() {
             </button>
           </div>
 
-          <div className="p-6 space-y-5">
+          <div className={mode === "quick" ? "" : "p-6 space-y-5"}>
             {/* ========== EXCEL UPLOAD TAB ========== */}
             {mode === "excel" && (
               <>
@@ -352,15 +390,16 @@ export default function BulkUploadPage() {
 
             {/* ========== QUICK ORDER TAB ========== */}
             {mode === "quick" && (
-              <>
-                <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
-                  <p className="text-sm text-amber-800 font-medium flex items-center gap-1.5"><Zap size={14} /> Quick Order</p>
-                  <p className="text-xs text-amber-700 mt-1">Type product name or SKU to search. Select a product, set quantity, and press Enter to add another row. Order is placed immediately.</p>
-                </div>
+              <div className="flex flex-col lg:flex-row" ref={containerRef}>
+                {/* LEFT: Add products */}
+                <div className="flex-1 p-6 space-y-4">
+                  <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
+                    <p className="text-sm text-amber-800 font-medium flex items-center gap-1.5"><Zap size={14} /> Quick Order</p>
+                    <p className="text-xs text-amber-700 mt-1">Type product name or SKU to search. Select a product, set quantity, and press Enter to add another row.</p>
+                  </div>
 
-                <div ref={containerRef}>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-medium text-gray-700">Items</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">Add Products</label>
                     <button onClick={addQuickItem} className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 font-medium">
                       <Plus size={14} /> Add Row
                     </button>
@@ -374,7 +413,6 @@ export default function BulkUploadPage() {
                         {/* Search / Selected product input */}
                         <div className="flex-1 relative">
                           {item.selectedProduct ? (
-                            // Selected state — show product info with clear button
                             <div className="flex items-center gap-2 px-3 py-2.5 border border-primary-200 bg-primary-50 rounded-lg">
                               {item.selectedProduct.thumbnail ? (
                                 <img src={item.selectedProduct.thumbnail} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
@@ -385,18 +423,13 @@ export default function BulkUploadPage() {
                               )}
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{item.selectedProduct.title}</p>
-                                <p className="text-xs text-gray-500">SKU: {item.selectedProduct.sku || "—"} · {formatPrice(item.selectedProduct.unitPrice)} · MOQ: {item.selectedProduct.moq}</p>
+                                <p className="text-xs text-gray-500">SKU: {item.selectedProduct.sku || "—"} · {formatPrice(item.selectedProduct.unitPrice)}</p>
                               </div>
-                              <button
-                                onClick={() => clearProductSelection(item.id)}
-                                className="p-1 text-gray-400 hover:text-red-500 transition shrink-0"
-                                title="Remove product"
-                              >
+                              <button onClick={() => clearProductSelection(item.id)} className="p-1 text-gray-400 hover:text-red-500 transition shrink-0" title="Remove product">
                                 <X size={14} />
                               </button>
                             </div>
                           ) : (
-                            // Search state — input with autocomplete dropdown
                             <>
                               <div className="relative">
                                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -424,17 +457,17 @@ export default function BulkUploadPage() {
                                 )}
                               </div>
 
-                              {/* Dropdown */}
                               {activeDropdown === item.id && searchResults.has(item.id) && (
                                 <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                                   {searchResults.get(item.id)!.length === 0 ? (
                                     <div className="px-4 py-3 text-sm text-gray-500">No products found</div>
                                   ) : (
-                                    searchResults.get(item.id)!.map((product) => (
+                                    searchResults.get(item.id)!.map((product, pidx) => (
                                       <button
                                         key={product.id}
+                                        ref={(el) => { if (el) dropdownItemRefs.current.set(`${item.id}-${pidx}`, el) }}
                                         onClick={() => selectProduct(item.id, product)}
-                                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-primary-50 transition flex items-center gap-2.5"
+                                        className={`w-full text-left px-3 py-2.5 text-sm transition flex items-center gap-2.5 ${highlightedIndex === pidx ? "bg-primary-50 ring-1 ring-primary-200" : "hover:bg-primary-50"}`}
                                       >
                                         {product.thumbnail ? (
                                           <img src={product.thumbnail} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
@@ -466,7 +499,7 @@ export default function BulkUploadPage() {
                           onChange={(e) => updateQuickItem(item.id, "quantity", e.target.value)}
                           onBlur={() => handleQuantityBlur(item.id)}
                           onKeyDown={(e) => handleQuantityKeyDown(item.id, e)}
-                          className="w-24 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          className="w-20 px-2 py-2.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
 
                         {/* Remove row */}
@@ -480,71 +513,108 @@ export default function BulkUploadPage() {
                       </div>
                     ))}
                   </div>
-                </div>
 
-                {/* Order summary of selected items */}
-                {quickItems.some((i) => i.selectedProduct) && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Order Summary</p>
-                    <div className="space-y-1">
-                      {quickItems.filter((i) => i.selectedProduct).map((item) => {
-                        const qty = typeof item.quantity === "number" ? item.quantity : parseInt(item.quantity) || 0
-                        return (
-                          <div key={item.id} className="flex justify-between text-sm">
-                            <span className="text-gray-600">{item.selectedProduct!.title} × {qty}</span>
-                            <span className="font-medium text-gray-900">{formatPrice(item.selectedProduct!.unitPrice * qty)}</span>
-                          </div>
-                        )
-                      })}
-                      <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between font-semibold">
-                        <span>Total</span>
-                        <span className="text-primary-700">
-                          {formatPrice(quickItems.filter((i) => i.selectedProduct).reduce((sum, i) => {
-                            const qty = typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 0
-                            return sum + i.selectedProduct!.unitPrice * qty
-                          }, 0))}
-                        </span>
-                      </div>
+                  {quickResult && (
+                    <div className="p-4 rounded-lg bg-red-50 border border-red-100">
+                      {quickResult.message && <p className="text-sm text-red-700 font-medium">{quickResult.message}</p>}
+                      {quickResult.errors && (
+                        <ul className="text-sm text-yellow-700 list-disc list-inside">
+                          {quickResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
+                        </ul>
+                      )}
                     </div>
-                  </div>
-                )}
-
-                <details className="group">
-                  <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-primary-600 transition">
-                    Shipping Address (optional)
-                  </summary>
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input type="text" placeholder="Street" value={quickShipping.street} onChange={(e) => setQuickShipping({ ...quickShipping, street: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                    <input type="text" placeholder="City" value={quickShipping.city} onChange={(e) => setQuickShipping({ ...quickShipping, city: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                    <input type="text" placeholder="State" value={quickShipping.state} onChange={(e) => setQuickShipping({ ...quickShipping, state: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                    <input type="text" placeholder="ZIP" value={quickShipping.zip} onChange={(e) => setQuickShipping({ ...quickShipping, zip: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                  </div>
-                </details>
-
-                <div>
-                  <input type="text" value={quickNotes} onChange={(e) => setQuickNotes(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="Notes (optional)" />
+                  )}
                 </div>
 
-                <button
-                  onClick={handleQuickOrder}
-                  disabled={quickPlacing || !quickItems.some((i) => i.selectedProduct)}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-medium"
-                >
-                  <ShoppingCart size={16} />
-                  {quickPlacing ? "Placing Order..." : "Place Order"}
-                </button>
-
-                {quickResult && (
-                  <div className="p-4 rounded-lg bg-red-50 border border-red-100">
-                    {quickResult.message && <p className="text-sm text-red-700 font-medium">{quickResult.message}</p>}
-                    {quickResult.errors && (
-                      <ul className="text-sm text-yellow-700 list-disc list-inside">
-                        {quickResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
-                      </ul>
-                    )}
+                {/* RIGHT: Order sidebar */}
+                <div className="w-full lg:w-80 lg:border-l lg:border-gray-100 bg-gray-50 p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ShoppingCart size={16} className="text-primary-600" />
+                    <h3 className="text-sm font-semibold text-gray-900">Your Order</h3>
+                    <span className="ml-auto px-2 py-0.5 bg-primary-50 text-primary-700 text-xs font-medium rounded-full">
+                      {quickItems.filter((i) => i.selectedProduct).length} item{quickItems.filter((i) => i.selectedProduct).length !== 1 ? "s" : ""}
+                    </span>
                   </div>
-                )}
-              </>
+
+                  {quickItems.filter((i) => i.selectedProduct).length === 0 ? (
+                    <div className="text-center py-8">
+                      <Package size={28} className="text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-400">No products added yet</p>
+                      <p className="text-xs text-gray-300 mt-1">Search & select products on the left</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-3 mb-4">
+                        {quickItems.filter((i) => i.selectedProduct).map((item) => {
+                          const qty = typeof item.quantity === "number" ? item.quantity : parseInt(item.quantity) || 0
+                          return (
+                            <div key={item.id} className="flex items-start gap-2.5">
+                              {item.selectedProduct!.thumbnail ? (
+                                <img src={item.selectedProduct!.thumbnail} alt="" className="w-9 h-9 rounded object-cover shrink-0 mt-0.5" />
+                              ) : (
+                                <div className="w-9 h-9 rounded bg-white flex items-center justify-center shrink-0 mt-0.5">
+                                  <Package size={12} className="text-gray-400" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{item.selectedProduct!.title}</p>
+                                <p className="text-xs text-gray-500">
+                                  {formatPrice(item.selectedProduct!.unitPrice)} × {qty}
+                                </p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-sm font-medium text-gray-900">{formatPrice(item.selectedProduct!.unitPrice * qty)}</p>
+                                <button
+                                  onClick={() => removeQuickItem(item.id)}
+                                  className="text-xs text-gray-400 hover:text-red-500 transition"
+                                  title="Remove"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="border-t border-gray-200 pt-3 mb-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-900">Total</span>
+                          <span className="text-lg font-bold text-primary-700">
+                            {formatPrice(quickItems.filter((i) => i.selectedProduct).reduce((sum, i) => {
+                              const qty = typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 0
+                              return sum + i.selectedProduct!.unitPrice * qty
+                            }, 0))}
+                          </span>
+                        </div>
+                      </div>
+
+                      <details className="mb-3">
+                        <summary className="text-xs text-gray-500 cursor-pointer hover:text-primary-600 transition">
+                          Shipping Address (optional)
+                        </summary>
+                        <div className="mt-2 grid grid-cols-1 gap-2">
+                          <input type="text" placeholder="Street" value={quickShipping.street} onChange={(e) => setQuickShipping({ ...quickShipping, street: e.target.value })} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white" />
+                          <input type="text" placeholder="City" value={quickShipping.city} onChange={(e) => setQuickShipping({ ...quickShipping, city: e.target.value })} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white" />
+                          <input type="text" placeholder="State" value={quickShipping.state} onChange={(e) => setQuickShipping({ ...quickShipping, state: e.target.value })} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white" />
+                          <input type="text" placeholder="ZIP" value={quickShipping.zip} onChange={(e) => setQuickShipping({ ...quickShipping, zip: e.target.value })} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white" />
+                        </div>
+                      </details>
+
+                      <input type="text" value={quickNotes} onChange={(e) => setQuickNotes(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs mb-3 bg-white" placeholder="Notes (optional)" />
+
+                      <button
+                        onClick={handleQuickOrder}
+                        disabled={quickPlacing || !quickItems.some((i) => i.selectedProduct)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 text-sm font-medium"
+                      >
+                        <ShoppingCart size={14} />
+                        {quickPlacing ? "Placing..." : "Place Order"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
