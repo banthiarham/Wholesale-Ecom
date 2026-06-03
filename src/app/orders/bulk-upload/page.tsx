@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Upload, FileText, Download, Zap, Trash2, ShoppingCart, Search, Package, Minus, Plus } from "lucide-react"
+import { ArrowLeft, Upload, FileText, Download, Zap, Trash2, ShoppingCart, Search, X, Package, Minus, Plus } from "lucide-react"
 import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
@@ -40,6 +40,7 @@ export default function BulkUploadPage() {
   // Quick order state
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null)
   const [addQuantity, setAddQuantity] = useState<number | string>("")
   const [quickShipping, setQuickShipping] = useState({ street: "", city: "", state: "", zip: "", country: "India" })
   const [quickNotes, setQuickNotes] = useState("")
@@ -54,6 +55,7 @@ export default function BulkUploadPage() {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const qtyInputRef = useRef<HTMLInputElement>(null)
   const dropdownItemRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
 
   // Close dropdown on click outside
@@ -147,25 +149,38 @@ export default function BulkUploadPage() {
     }, 300)
   }, [])
 
-  const addToOrder = (product: ProductOption) => {
-    const qty = typeof addQuantity === "number" ? addQuantity : parseInt(String(addQuantity)) || 0
-    const finalQty = Math.max(qty, product.moq) // enforce MOQ
+  const selectForOrder = (product: ProductOption) => {
+    setSelectedProduct(product)
+    setAddQuantity(product.moq)
+    setSearchResults([])
+    setDropdownOpen(false)
+    setHighlightedIndex(-1)
+    // Auto-focus quantity input
+    setTimeout(() => qtyInputRef.current?.focus(), 0)
+  }
 
-    // Check if already added
-    const exists = orderItems.find((i) => i.product.id === product.id)
+  const confirmAddToOrder = () => {
+    if (!selectedProduct) return
+    const qty = typeof addQuantity === "number" ? addQuantity : parseInt(String(addQuantity)) || 0
+    const finalQty = Math.max(qty, selectedProduct.moq)
+
+    const exists = orderItems.find((i) => i.product.id === selectedProduct.id)
     if (exists) {
       const curQty = typeof exists.quantity === "number" ? exists.quantity : parseInt(exists.quantity) || 0
       updateOrderQty(exists.id, curQty + finalQty)
     } else {
-      setOrderItems((prev) => [...prev, { id: crypto.randomUUID(), product, quantity: finalQty }])
+      setOrderItems((prev) => [...prev, { id: crypto.randomUUID(), product: selectedProduct, quantity: finalQty }])
     }
-    // Reset search and quantity
-    setSearchQuery("")
+    // Reset
+    setSelectedProduct(null)
     setAddQuantity("")
-    setSearchResults([])
-    setDropdownOpen(false)
-    setHighlightedIndex(-1)
-    // Keep focus on search input
+    setSearchQuery("")
+    setTimeout(() => searchInputRef.current?.focus(), 0)
+  }
+
+  const clearSelection = () => {
+    setSelectedProduct(null)
+    setAddQuantity("")
     setTimeout(() => searchInputRef.current?.focus(), 0)
   }
 
@@ -210,7 +225,7 @@ export default function BulkUploadPage() {
     } else if (e.key === "Enter") {
       e.preventDefault()
       if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
-        addToOrder(searchResults[highlightedIndex])
+        selectForOrder(searchResults[highlightedIndex])
       }
     } else if (e.key === "Escape") {
       setDropdownOpen(false)
@@ -352,13 +367,63 @@ export default function BulkUploadPage() {
                 <div className="flex-1 p-6 space-y-4">
                   <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
                     <p className="text-sm text-amber-800 font-medium flex items-center gap-1.5"><Zap size={14} /> Quick Order</p>
-                    <p className="text-xs text-amber-700 mt-1">Type product name or SKU, use ↑↓ arrows to navigate, Enter to add. Products appear in the sidebar.</p>
+                    <p className="text-xs text-amber-700 mt-1">Type product name or SKU, select a product, set quantity, then add to order. Use ↑↓ arrows in dropdown.</p>
                   </div>
 
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-2 block">Search Product</label>
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1 relative">
+                  {selectedProduct ? (
+                    /* Selected product card — set qty then confirm */
+                    <div className="border border-primary-200 bg-primary-50 rounded-lg p-4">
+                      <div className="flex items-start gap-3 mb-3">
+                        {selectedProduct.thumbnail ? (
+                          <img src={selectedProduct.thumbnail} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-primary-100 flex items-center justify-center shrink-0">
+                            <Package size={20} className="text-primary-500" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{selectedProduct.title}</p>
+                          <p className="text-xs text-gray-500">SKU: {selectedProduct.sku || "—"} · {formatPrice(selectedProduct.unitPrice)} per unit</p>
+                          <p className="text-xs text-amber-600">MOQ: {selectedProduct.moq} · Stock: {selectedProduct.inventoryQuantity}</p>
+                        </div>
+                        <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-red-500 transition shrink-0" title="Cancel">
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-700 shrink-0">Qty:</label>
+                        <input
+                          ref={qtyInputRef}
+                          type="number"
+                          min={selectedProduct.moq}
+                          value={addQuantity}
+                          onChange={(e) => setAddQuantity(e.target.value)}
+                          onBlur={() => {
+                            const num = typeof addQuantity === "number" ? addQuantity : parseInt(String(addQuantity)) || 0
+                            if (num < selectedProduct.moq) setAddQuantity(selectedProduct.moq)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              confirmAddToOrder()
+                            }
+                          }}
+                          className="w-28 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                        />
+                        <span className="text-xs text-gray-400">min: {selectedProduct.moq}</span>
+                        <button
+                          onClick={confirmAddToOrder}
+                          className="ml-auto px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition"
+                        >
+                          Add to Order
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Search input */
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Search Product</label>
+                      <div className="relative">
                         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
                           ref={searchInputRef}
@@ -383,57 +448,38 @@ export default function BulkUploadPage() {
                           </div>
                         )}
                       </div>
-                      <div className="w-24">
-                        <input
-                          type="number"
-                          min={1}
-                          placeholder="Qty"
-                          value={addQuantity}
-                          onChange={(e) => setAddQuantity(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault()
-                              // If dropdown open with highlight, add that product
-                              if (dropdownOpen && highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
-                                addToOrder(searchResults[highlightedIndex])
-                              }
-                            }
-                          }}
-                          className="w-full px-2 py-2.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                    </div>
 
-                    {/* Dropdown */}
-                    {dropdownOpen && searchResults.length > 0 && (
-                      <div className="mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto relative z-30">
-                        {searchResults.map((product, pidx) => {
-                          const alreadyAdded = orderItems.some((i) => i.product.id === product.id)
-                          return (
-                            <button
-                              key={product.id}
-                              ref={(el) => { if (el) dropdownItemRefs.current.set(pidx, el) }}
-                              onClick={() => addToOrder(product)}
-                              className={`w-full text-left px-3 py-2.5 text-sm transition flex items-center gap-2.5 ${highlightedIndex === pidx ? "bg-primary-50 ring-1 ring-primary-200" : "hover:bg-primary-50"} ${alreadyAdded ? "opacity-50" : ""}`}
-                            >
-                              {product.thumbnail ? (
-                                <img src={product.thumbnail} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
-                              ) : (
-                                <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center shrink-0">
-                                  <Package size={12} className="text-gray-400" />
+                      {/* Dropdown */}
+                      {dropdownOpen && searchResults.length > 0 && (
+                        <div className="mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto relative z-30">
+                          {searchResults.map((product, pidx) => {
+                            const alreadyAdded = orderItems.some((i) => i.product.id === product.id)
+                            return (
+                              <button
+                                key={product.id}
+                                ref={(el) => { if (el) dropdownItemRefs.current.set(pidx, el) }}
+                                onClick={() => selectForOrder(product)}
+                                className={`w-full text-left px-3 py-2.5 text-sm transition flex items-center gap-2.5 ${highlightedIndex === pidx ? "bg-primary-50 ring-1 ring-primary-200" : "hover:bg-primary-50"} ${alreadyAdded ? "opacity-50" : ""}`}
+                              >
+                                {product.thumbnail ? (
+                                  <img src={product.thumbnail} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                                ) : (
+                                  <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center shrink-0">
+                                    <Package size={12} className="text-gray-400" />
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900 truncate">{product.title} {alreadyAdded && <span className="text-xs text-primary-500">(added)</span>}</p>
+                                  <p className="text-xs text-gray-500">SKU: {product.sku || "—"} · MOQ: {product.moq} · Stock: {product.inventoryQuantity}</p>
                                 </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-gray-900 truncate">{product.title} {alreadyAdded && <span className="text-xs text-primary-500">(added)</span>}</p>
-                                <p className="text-xs text-gray-500">SKU: {product.sku || "—"} · MOQ: {product.moq} · Stock: {product.inventoryQuantity}</p>
-                              </div>
-                              <span className="text-sm font-medium text-gray-700 shrink-0">{formatPrice(product.unitPrice)}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
+                                <span className="text-sm font-medium text-gray-700 shrink-0">{formatPrice(product.unitPrice)}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
 
                   {quickResult && (
                     <div className="p-4 rounded-lg bg-red-50 border border-red-100">
