@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, ReactNode } from "react"
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react"
 import { dictionary, Locale } from "./dictionary"
 
 interface LanguageContextType {
@@ -16,13 +16,16 @@ const LanguageContext = createContext<LanguageContextType>({
 })
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("locale") as Locale | null
-      if (saved === "en" || saved === "hi") return saved
+  // Always start with "en" to match server render — read localStorage in useEffect
+  // to avoid hydration mismatch that breaks React event handlers
+  const [locale, setLocaleState] = useState<Locale>("en")
+
+  useEffect(() => {
+    const saved = localStorage.getItem("locale") as Locale | null
+    if (saved === "en" || saved === "hi") {
+      setLocaleState(saved)
     }
-    return "en"
-  })
+  }, [])
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l)

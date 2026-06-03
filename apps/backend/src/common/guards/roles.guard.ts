@@ -22,7 +22,7 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Dual-read: check dynamic role (roleRel.name) first, then fall back to enum role
+    // Dual-read: check dynamic role (effectiveRole or roleRel.name) first, then fall back to enum role
     const userRole = user.effectiveRole || user.roleRel?.name || user.role;
 
     const hasRole = requiredRoles.some((role) => userRole === role);

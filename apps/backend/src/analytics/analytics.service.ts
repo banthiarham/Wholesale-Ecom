@@ -33,12 +33,24 @@ export class AnalyticsService {
   }
 
   async getTopProducts(limit = 10) {
-    return this.prisma.orderItem.groupBy({
+    const grouped = await this.prisma.orderItem.groupBy({
       by: ['productId'],
       _sum: { quantity: true, totalPrice: true },
       orderBy: { _sum: { quantity: 'desc' } },
       take: limit,
     });
+
+    const productIds = grouped.map((g) => g.productId);
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, title: true, thumbnail: true },
+    });
+    const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
+
+    return grouped.map((g) => ({
+      ...g,
+      product: productMap[g.productId] || null,
+    }));
   }
 
   async getVendorAnalytics(vendorId: string) {
@@ -71,7 +83,43 @@ export class AnalyticsService {
       this.prisma.review.findMany({ orderBy: { createdAt: 'desc' }, take: limit, include: { user: { select: { firstName: true, lastName: true } }, product: { select: { title: true } } } }),
       this.prisma.rfq.findMany({ orderBy: { createdAt: 'desc' }, take: limit, include: { buyer: { select: { firstName: true, lastName: true } } } }),
     ]);
-    return { recentOrders, recentReviews, recentRfqs };
+
+    const activities: any[] = [];
+
+    for (const o of recentOrders) {
+      activities.push({
+        id: o.id,
+        type: 'order',
+        action: `Order #${o.orderNumber?.slice(0, 8)} placed — ${o.status}`,
+        user: `${o.user?.firstName || ''} ${o.user?.lastName || ''}`.trim(),
+        createdAt: o.createdAt,
+      });
+    }
+
+    for (const r of recentReviews) {
+      activities.push({
+        id: r.id,
+        type: 'review',
+        action: `Review: "${r.title}" — ${r.rating} star${r.rating !== 1 ? 's' : ''}`,
+        user: `${r.user?.firstName || ''} ${r.user?.lastName || ''}`.trim(),
+        createdAt: r.createdAt,
+      });
+    }
+
+    for (const rfq of recentRfqs) {
+      activities.push({
+        id: rfq.id,
+        type: 'rfq',
+        action: `RFQ: ${rfq.title} — ${rfq.status}`,
+        user: `${rfq.buyer?.firstName || ''} ${rfq.buyer?.lastName || ''}`.trim(),
+        createdAt: rfq.createdAt,
+      });
+    }
+
+    // Sort combined activity by date descending
+    activities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return { activities: activities.slice(0, limit), recentOrders, recentReviews, recentRfqs };
   }
 
   private buildDateFilter(startDate?: string, endDate?: string) {

@@ -107,9 +107,11 @@ model User {
   phone     String?
   avatar    String?
 
-  role      UserRole @default(BUYER)   // kept during migration, will be removed later
-  roleId    String?                      // new FK, nullable during migration
+  role      UserRole @default(BUYER)
+  roleId    String?
   roleRel   Role?    @relation(fields: [roleId], references: [id])
+  referralCode String?  @unique
+  referredBy   String?
   status    UserStatus @default(PENDING_VERIFICATION)
   accountType AccountType @default(LOCAL)
   googleId  String?  @unique
@@ -125,23 +127,23 @@ model User {
   updatedAt DateTime @updatedAt
   lastLoginAt DateTime?
 
-  otps            OTP[]
-  passwordResets  PasswordReset[]
-  cart            Cart?
-  orders          Order[]
-  reviews         Review[]
-  loyalty         LoyaltyAccount?
-  addresses       Address[]
-  contractPrices  ContractPrice[]
-  roleChangeRequests RoleChangeRequest[]
-  rfqs            Rfq[]
-  quotes          Quote[]
-  catalogs        Catalog[]
-  notifications   Notification[]
-  wishlistItems   WishlistItem[]
-  returnRequests  ReturnRequest[]
-  wallet          Wallet?
-  bulkOrders      BulkOrder[]
+  otps                  OTP[]
+  passwordResets        PasswordReset[]
+  cart                  Cart?
+  orders                Order[]
+  reviews               Review[]
+  loyalty               LoyaltyAccount?
+  addresses             Address[]
+  contractPrices        ContractPrice[]
+  roleChangeRequests    RoleChangeRequest[]
+  rfqs                  Rfq[]
+  quotes                Quote[]
+  catalogs              Catalog[]
+  notifications         Notification[]
+  wishlistItems         WishlistItem[]
+  returnRequests        ReturnRequest[]
+  wallet                Wallet?
+  bulkOrders            BulkOrder[]
 
   referralCode    String?  @unique   // unique shareable referral code
   referredBy      String?              // referral code of the referrer
@@ -219,6 +221,7 @@ model Category {
 
   products          Product[]
   seasonalDiscounts SeasonalDiscount[]
+  paymentOffers     PaymentOffer[]
   homeSections      HomeSection[]
 
   @@index([handle])
@@ -256,6 +259,7 @@ model Product {
 
   tierPrices       TierPrice[]
   seasonalDiscounts SeasonalDiscount[]
+  paymentOffers  PaymentOffer[]
   contractPrices   ContractPrice[]
   rolePrices       RolePrice[]
   cartItems        CartItem[]
@@ -308,6 +312,37 @@ model SeasonalDiscount {
   @@index([productId])
   @@index([categoryId])
   @@index([isActive])
+}
+
+model PaymentOffer {
+  id             String     @id @default(uuid())
+  name           String
+  offerType      OfferType
+  type           String                        // PERCENTAGE | FLAT
+  value          Decimal    @db.Decimal(12, 2)
+  maxDiscount    Decimal?   @db.Decimal(12, 2)
+  minOrderValue  Decimal?   @db.Decimal(12, 2)
+  bankName       String?                      // HDFC, SBI, ICICI, Axis, Kotak, etc.
+  upiApp         String?                      // GOOGLE_PAY, PHONEPE, PAYTM, BHIM, etc.
+  cardType       CardType?  @default(BOTH)
+  startDate      DateTime
+  endDate        DateTime
+  isActive       Boolean    @default(true)
+  productId      String?
+  product        Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  categoryId     String?
+  category       Category?  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  description    String?    @db.Text
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([productId])
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([offerType])
+  @@index([bankName])
+  @@index([upiApp])
 }
 
 model Coupon {
@@ -554,7 +589,7 @@ model LoyaltyTransaction {
   points    Int
   amount    Decimal? @db.Decimal(12, 2)
   description String?
-  ruleId    String?                     // reference to the DynamicRule that triggered this earning
+  ruleId    String?
   rule      DynamicRule?  @relation(fields: [ruleId], references: [id])
 
   createdAt DateTime @default(now())
@@ -962,6 +997,17 @@ model RoleChangeRequest {
 // ==========================================
 // Dynamic Rules Engine Models
 // ==========================================
+
+enum OfferType {
+  BANK
+  UPI
+}
+
+enum CardType {
+  CREDIT
+  DEBIT
+  BOTH
+}
 
 enum DynamicRuleType {
   PRODUCT_DISCOUNT

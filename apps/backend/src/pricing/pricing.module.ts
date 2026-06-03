@@ -7,6 +7,8 @@ import { CouponsController } from './coupons.controller';
 import { CouponsService } from './coupons.service';
 import { ContractPricesController } from './contract-prices.controller';
 import { ContractPricesService } from './contract-prices.service';
+import { PaymentOffersController } from './payment-offers.controller';
+import { PaymentOffersService } from './payment-offers.service';
 
 @Module({
   controllers: [
@@ -14,12 +16,14 @@ import { ContractPricesService } from './contract-prices.service';
     SeasonalDiscountsController,
     CouponsController,
     ContractPricesController,
+    PaymentOffersController,
   ],
   providers: [
     PricingService,
     SeasonalDiscountsService,
     CouponsService,
     ContractPricesService,
+    PaymentOffersService,
   ],
   exports: [PricingService],
 })
