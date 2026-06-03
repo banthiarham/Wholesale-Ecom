@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as https from 'https';
+import * as http from 'http';
 
 @Injectable()
 export class ProductsService {
@@ -156,7 +160,55 @@ export class ProductsService {
     });
   }
 
-  async bulkUploadFromExcel(buffer: Buffer) {
+  private async downloadImageToDisk(url: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const client = url.startsWith('https') ? https : http;
+      const timeout = 10000;
+      let chunks: Buffer[] = [];
+      let totalSize = 0;
+      const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+
+      const req = client.get(url, { timeout }, (res) => {
+        // Follow redirects
+        if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307 || res.statusCode === 308) {
+          const redirectUrl = res.headers.location;
+          if (redirectUrl) {
+            this.downloadImageToDisk(redirectUrl).then(resolve);
+            return;
+          }
+        }
+        if (res.statusCode !== 200) { resolve(null); return; }
+        const contentType = res.headers['content-type'] || '';
+        if (!contentType.startsWith('image/')) { resolve(null); return; }
+
+        res.on('data', (chunk: Buffer) => {
+          totalSize += chunk.length;
+          if (totalSize > MAX_SIZE) { req.destroy(); resolve(null); return; }
+          chunks.push(chunk);
+        });
+        res.on('end', () => {
+          try {
+            const buffer = Buffer.concat(chunks);
+            const dir = path.join(process.cwd(), 'uploads', 'products');
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const ext = contentType.includes('png') ? '.png' : contentType.includes('webp') ? '.webp' : '.jpg';
+            const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+            fs.writeFileSync(path.join(dir, filename), buffer);
+            resolve(`/uploads/products/${filename}`);
+          } catch { resolve(null); }
+        });
+        res.on('error', () => resolve(null));
+      });
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+    });
+  }
+
+  async bulkUploadFromExcel(
+    buffer: Buffer,
+    imageFiles: Express.Multer.File[] = [],
+    imageMapping: Record<string, string> = {},
+  ) {
     const XLSX = await import('xlsx');
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -167,7 +219,7 @@ export class ProductsService {
       throw new BadRequestException('Excel file is empty or has no data rows');
     }
 
-    const results = { created: 0, updated: 0, errors: [] as string[] };
+    const results = { created: 0, updated: 0, errors: [] as string[], imageErrors: [] as string[], imagesDownloaded: 0, imagesUploaded: 0 };
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -184,6 +236,8 @@ export class ProductsService {
         const tagsStr = (row.tags || row.Tags || '').toString().trim();
         const tags = tagsStr ? tagsStr.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
         const compareAtPrice = parseFloat(row.compareAtPrice || row.CompareAtPrice || '0') || null;
+        const imagesStr = (row.images || row.Images || row.imageUrls || row.ImageUrls || '').toString().trim();
+        const imageUrlList = imagesStr ? imagesStr.split(',').map((u: string) => u.trim()).filter(Boolean) : [];
 
         if (!sku || !title || !unitPrice) {
           results.errors.push(`Row ${i + 2}: Missing required fields (sku, title, unitPrice)`);
@@ -192,6 +246,7 @@ export class ProductsService {
 
         // Check if product with this SKU already exists
         const existing = await this.prisma.product.findUnique({ where: { sku } });
+        let productId: string;
 
         if (existing) {
           // Update existing product
@@ -212,12 +267,13 @@ export class ProductsService {
             where: { id: existing.id },
             data: updateData,
           });
+          productId = existing.id;
           results.updated++;
         } else {
           // Create new product — generate handle from title
           const handle = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
 
-          await this.prisma.product.create({
+          const newProduct = await this.prisma.product.create({
             data: {
               title,
               handle,
@@ -233,10 +289,62 @@ export class ProductsService {
               tags,
             },
           });
+          productId = newProduct.id;
           results.created++;
+        }
+
+        // Process images for this product
+        const localImageUrls: string[] = [];
+
+        // 1) Download image URLs from Excel column
+        for (const url of imageUrlList) {
+          if (url.startsWith('http://') || url.startsWith('https://')) {
+            const localUrl = await this.downloadImageToDisk(url);
+            if (localUrl) {
+              localImageUrls.push(localUrl);
+              results.imagesDownloaded++;
+            } else {
+              results.imageErrors.push(`Row ${i + 2}: Failed to download image: ${url}`);
+            }
+          } else if (url.startsWith('/uploads/')) {
+            localImageUrls.push(url);
+          }
+        }
+
+        // 2) Save locally-uploaded image files matched by SKU
+        const skuMatchedFiles = imageFiles.filter(
+          (f) => imageMapping[f.originalname] === sku,
+        );
+        for (const f of skuMatchedFiles) {
+          const ext = path.extname(f.originalname) || '.jpg';
+          const dir = path.join(process.cwd(), 'uploads', 'products');
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+          fs.writeFileSync(path.join(dir, filename), f.buffer);
+          localImageUrls.push(`/uploads/products/${filename}`);
+          results.imagesUploaded++;
+        }
+
+        // Attach images to product (max 5)
+        if (localImageUrls.length > 0) {
+          const toAdd = localImageUrls.slice(0, 5);
+          if (localImageUrls.length > 5) {
+            results.imageErrors.push(`Row ${i + 2}: Only first 5 images added for SKU ${sku} (${localImageUrls.length} provided)`);
+          }
+          await this.addImages(productId, toAdd);
         }
       } catch (err) {
         results.errors.push(`Row ${i + 2}: ${err.message}`);
+      }
+    }
+
+    // Report unmatched local image files
+    const matchedFilenames = new Set(
+      imageFiles.filter((f) => imageMapping[f.originalname]).map((f) => f.originalname),
+    );
+    for (const f of imageFiles) {
+      if (!matchedFilenames.has(f.originalname)) {
+        results.imageErrors.push(`Unmatched image file: ${f.originalname} — no matching SKU found in Excel`);
       }
     }
 

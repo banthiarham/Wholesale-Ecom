@@ -5,6 +5,7 @@ import {
   Put,
   Delete,
   Body,
+  BadRequestException,
   Param,
   Query,
   UseGuards,
@@ -13,7 +14,7 @@ import {
   UploadedFile,
   ForbiddenException,
 } from '@nestjs/common';
-import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiParam, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -183,13 +184,29 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk upload/edit products via Excel file (Admin only)' })
+  @ApiOperation({ summary: 'Bulk upload/edit products via Excel file with optional images (Admin only)' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'file', maxCount: 1 },
+    { name: 'images', maxCount: 50 },
+  ]))
   async bulkUploadExcel(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() files: { file?: Express.Multer.File[]; images?: Express.Multer.File[] },
+    @Body('imageMapping') imageMappingStr?: string,
   ) {
-    const result = await this.productsService.bulkUploadFromExcel(file.buffer);
+    const excelBuffer = files.file?.[0]?.buffer;
+    if (!excelBuffer) {
+      throw new BadRequestException('Excel file is required');
+    }
+    let imageMapping: Record<string, string> = {};
+    if (imageMappingStr) {
+      try { imageMapping = JSON.parse(imageMappingStr); } catch { /* ignore */ }
+    }
+    const result = await this.productsService.bulkUploadFromExcel(
+      excelBuffer,
+      files.images || [],
+      imageMapping,
+    );
     return result;
   }
 }
