@@ -1,17 +1,29 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Upload, FileText, Download, Zap, Plus, Trash2, ShoppingCart } from "lucide-react"
+import { ArrowLeft, Upload, FileText, Download, Zap, Plus, Trash2, ShoppingCart, Search, X, Package } from "lucide-react"
 import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
+import { formatPrice } from "@/lib/utils"
 
 type TabMode = "excel" | "quick"
 
+interface ProductOption {
+  id: string
+  title: string
+  sku: string | null
+  thumbnail: string | null
+  unitPrice: number
+  moq: number
+  inventoryQuantity: number
+}
+
 interface QuickItem {
   id: string
-  sku: string
+  search: string
+  selectedProduct: ProductOption | null
   quantity: number
 }
 
@@ -27,11 +39,30 @@ export default function BulkUploadPage() {
   const [result, setResult] = useState<any>(null)
 
   // Quick order state
-  const [quickItems, setQuickItems] = useState<QuickItem[]>([{ id: crypto.randomUUID(), sku: "", quantity: 1 }])
+  const [quickItems, setQuickItems] = useState<QuickItem[]>([{ id: crypto.randomUUID(), search: "", selectedProduct: null, quantity: 1 }])
   const [quickShipping, setQuickShipping] = useState({ street: "", city: "", state: "", zip: "", country: "India" })
   const [quickNotes, setQuickNotes] = useState("")
   const [quickPlacing, setQuickPlacing] = useState(false)
   const [quickResult, setQuickResult] = useState<any>(null)
+
+  // Autocomplete state
+  const [searchResults, setSearchResults] = useState<Map<string, ProductOption[]>>(new Map())
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const [searchLoading, setSearchLoading] = useState<string | null>(null)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const rowInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setActiveDropdown(null)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
   const downloadExcelTemplate = () => {
     const headers = ["sku", "quantity", "notes"]
@@ -76,28 +107,123 @@ export default function BulkUploadPage() {
     setUploading(false)
   }
 
-  // Quick Order handlers
+  // === Quick Order Autocomplete ===
+
+  const searchProducts = useCallback((itemId: string, query: string) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+
+    if (!query.trim()) {
+      setSearchResults((prev) => { const m = new Map(prev); m.delete(itemId); return m })
+      setActiveDropdown(null)
+      return
+    }
+
+    setSearchLoading(itemId)
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/products?q=${encodeURIComponent(query)}&limit=8&in_stock=true`)
+        const data = await res.json()
+        const products: ProductOption[] = (data.products || []).map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          sku: p.sku,
+          thumbnail: p.thumbnail,
+          unitPrice: Number(p.unitPrice),
+          moq: p.moq,
+          inventoryQuantity: p.inventoryQuantity,
+        }))
+        setSearchResults((prev) => { const m = new Map(prev); m.set(itemId, products); return m })
+        setActiveDropdown(itemId)
+      } catch (e) {
+        console.error(e)
+      }
+      setSearchLoading((prev) => prev === itemId ? null : prev)
+    }, 300)
+  }, [])
+
   const addQuickItem = () => {
-    setQuickItems([...quickItems, { id: crypto.randomUUID(), sku: "", quantity: 1 }])
+    const newItem: QuickItem = { id: crypto.randomUUID(), search: "", selectedProduct: null, quantity: 1 }
+    setQuickItems((prev) => [...prev, newItem])
+    // Focus the new row's search input after render
+    setTimeout(() => {
+      rowInputRefs.current.get(newItem.id)?.focus()
+    }, 50)
   }
 
   const removeQuickItem = (id: string) => {
     if (quickItems.length <= 1) return
     setQuickItems(quickItems.filter((i) => i.id !== id))
+    setSearchResults((prev) => { const m = new Map(prev); m.delete(id); return m })
+    if (activeDropdown === id) setActiveDropdown(null)
   }
 
-  const updateQuickItem = (id: string, field: "sku" | "quantity", value: string | number) => {
-    setQuickItems(quickItems.map((i) => (i.id === id ? { ...i, [field]: value } : i)))
+  const selectProduct = (itemId: string, product: ProductOption) => {
+    setQuickItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId
+          ? { ...i, search: `${product.title} (SKU: ${product.sku || "—"})`, selectedProduct: product, quantity: Math.max(i.quantity, product.moq) }
+          : i
+      )
+    )
+    setActiveDropdown(null)
+  }
+
+  const clearProductSelection = (itemId: string) => {
+    setQuickItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, search: "", selectedProduct: null, quantity: 1 } : i
+      )
+    )
+  }
+
+  const updateQuickItem = (itemId: string, field: "search" | "quantity", value: string | number) => {
+    setQuickItems((prev) =>
+      prev.map((i) => {
+        if (i.id !== itemId) return i
+        if (field === "search") {
+          // If user edits after selecting, clear selection (they're re-searching)
+          return { ...i, search: value as string, selectedProduct: null }
+        }
+        return { ...i, quantity: value as number }
+      })
+    )
+  }
+
+  const handleSearchKeyDown = (itemId: string, e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      const item = quickItems.find((i) => i.id === itemId)
+      if (item?.selectedProduct) {
+        addQuickItem()
+      }
+    }
+  }
+
+  const handleQuantityKeyDown = (itemId: string, e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      const item = quickItems.find((i) => i.id === itemId)
+      if (item?.selectedProduct) {
+        addQuickItem()
+      }
+    }
   }
 
   const handleQuickOrder = async () => {
-    const validItems = quickItems.filter((i) => i.sku.trim() && i.quantity > 0)
+    const validItems = quickItems.filter((i) => i.selectedProduct && i.selectedProduct.sku && i.quantity > 0)
     if (validItems.length === 0) {
-      alert("Please enter at least one SKU with quantity.")
+      alert("Please select at least one product with quantity.")
       return
     }
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
+
+    // Check MOQ
+    const moqErrors = validItems.filter((i) => i.quantity < (i.selectedProduct?.moq || 1))
+    if (moqErrors.length > 0) {
+      alert(`Minimum order quantity not met for: ${moqErrors.map((i) => `${i.selectedProduct!.title} (MOQ: ${i.selectedProduct!.moq})`).join(", ")}`)
+      return
+    }
 
     setQuickPlacing(true)
     setQuickResult(null)
@@ -107,7 +233,7 @@ export default function BulkUploadPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          items: validItems.map((i) => ({ sku: i.sku.trim(), quantity: i.quantity })),
+          items: validItems.map((i) => ({ sku: i.selectedProduct!.sku, quantity: i.quantity })),
           shippingAddress: quickShipping.street ? quickShipping : undefined,
           notes: quickNotes || undefined,
         }),
@@ -210,39 +336,124 @@ export default function BulkUploadPage() {
               <>
                 <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
                   <p className="text-sm text-amber-800 font-medium flex items-center gap-1.5"><Zap size={14} /> Quick Order</p>
-                  <p className="text-xs text-amber-700 mt-1">Type SKU and quantity to place an order instantly. No draft — order is placed immediately.</p>
+                  <p className="text-xs text-amber-700 mt-1">Type product name or SKU to search. Select a product, set quantity, and press Enter to add another row. Order is placed immediately.</p>
                 </div>
 
-                <div>
+                <div ref={containerRef}>
                   <div className="flex items-center justify-between mb-3">
                     <label className="text-sm font-medium text-gray-700">Items</label>
                     <button onClick={addQuickItem} className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 font-medium">
                       <Plus size={14} /> Add Row
                     </button>
                   </div>
+
                   <div className="space-y-2">
                     {quickItems.map((item, idx) => (
-                      <div key={item.id} className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400 w-6 text-center">{idx + 1}</span>
-                        <input
-                          type="text"
-                          placeholder="SKU (e.g. SLP-004)"
-                          value={item.sku}
-                          onChange={(e) => updateQuickItem(item.id, "sku", e.target.value)}
-                          className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
+                      <div key={item.id} className="flex items-start gap-2">
+                        <span className="text-xs text-gray-400 w-6 text-center pt-3">{idx + 1}</span>
+
+                        {/* Search / Selected product input */}
+                        <div className="flex-1 relative">
+                          {item.selectedProduct ? (
+                            // Selected state — show product info with clear button
+                            <div className="flex items-center gap-2 px-3 py-2.5 border border-primary-200 bg-primary-50 rounded-lg">
+                              {item.selectedProduct.thumbnail ? (
+                                <img src={item.selectedProduct.thumbnail} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
+                              ) : (
+                                <div className="w-7 h-7 rounded bg-primary-100 flex items-center justify-center shrink-0">
+                                  <Package size={12} className="text-primary-500" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{item.selectedProduct.title}</p>
+                                <p className="text-xs text-gray-500">SKU: {item.selectedProduct.sku || "—"} · {formatPrice(item.selectedProduct.unitPrice)} · MOQ: {item.selectedProduct.moq}</p>
+                              </div>
+                              <button
+                                onClick={() => clearProductSelection(item.id)}
+                                className="p-1 text-gray-400 hover:text-red-500 transition shrink-0"
+                                title="Remove product"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            // Search state — input with autocomplete dropdown
+                            <>
+                              <div className="relative">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                  ref={(el) => { if (el) rowInputRefs.current.set(item.id, el) }}
+                                  type="text"
+                                  placeholder="Type product name or SKU..."
+                                  value={item.search}
+                                  onChange={(e) => {
+                                    updateQuickItem(item.id, "search", e.target.value)
+                                    searchProducts(item.id, e.target.value)
+                                  }}
+                                  onFocus={() => {
+                                    if (searchResults.has(item.id) && searchResults.get(item.id)!.length > 0) {
+                                      setActiveDropdown(item.id)
+                                    }
+                                  }}
+                                  onKeyDown={(e) => handleSearchKeyDown(item.id, e)}
+                                  className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                                {searchLoading === item.id && (
+                                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                    <div className="animate-spin h-4 w-4 border-2 border-primary-400 border-t-transparent rounded-full"></div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Dropdown */}
+                              {activeDropdown === item.id && searchResults.has(item.id) && (
+                                <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                  {searchResults.get(item.id)!.length === 0 ? (
+                                    <div className="px-4 py-3 text-sm text-gray-500">No products found</div>
+                                  ) : (
+                                    searchResults.get(item.id)!.map((product) => (
+                                      <button
+                                        key={product.id}
+                                        onClick={() => selectProduct(item.id, product)}
+                                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-primary-50 transition flex items-center gap-2.5"
+                                      >
+                                        {product.thumbnail ? (
+                                          <img src={product.thumbnail} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                                        ) : (
+                                          <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center shrink-0">
+                                            <Package size={12} className="text-gray-400" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium text-gray-900 truncate">{product.title}</p>
+                                          <p className="text-xs text-gray-500">SKU: {product.sku || "—"} · MOQ: {product.moq} · Stock: {product.inventoryQuantity}</p>
+                                        </div>
+                                        <span className="text-sm font-medium text-gray-700 shrink-0">{formatPrice(product.unitPrice)}</span>
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {/* Quantity */}
                         <input
                           type="number"
-                          min="1"
+                          min={item.selectedProduct?.moq || 1}
                           placeholder="Qty"
                           value={item.quantity}
                           onChange={(e) => updateQuickItem(item.id, "quantity", parseInt(e.target.value) || 1)}
+                          onKeyDown={(e) => handleQuantityKeyDown(item.id, e)}
                           className="w-24 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
+
+                        {/* Remove row */}
                         <button
                           onClick={() => removeQuickItem(item.id)}
                           disabled={quickItems.length <= 1}
-                          className="p-2 text-gray-300 hover:text-red-500 disabled:opacity-30 transition"
+                          className="p-2.5 text-gray-300 hover:text-red-500 disabled:opacity-30 transition mt-0.5"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -250,6 +461,27 @@ export default function BulkUploadPage() {
                     ))}
                   </div>
                 </div>
+
+                {/* Order summary of selected items */}
+                {quickItems.some((i) => i.selectedProduct) && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Order Summary</p>
+                    <div className="space-y-1">
+                      {quickItems.filter((i) => i.selectedProduct).map((item) => (
+                        <div key={item.id} className="flex justify-between text-sm">
+                          <span className="text-gray-600">{item.selectedProduct!.title} × {item.quantity}</span>
+                          <span className="font-medium text-gray-900">{formatPrice(item.selectedProduct!.unitPrice * item.quantity)}</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between font-semibold">
+                        <span>Total</span>
+                        <span className="text-primary-700">
+                          {formatPrice(quickItems.filter((i) => i.selectedProduct).reduce((sum, i) => sum + i.selectedProduct!.unitPrice * i.quantity, 0))}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <details className="group">
                   <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-primary-600 transition">
@@ -269,7 +501,7 @@ export default function BulkUploadPage() {
 
                 <button
                   onClick={handleQuickOrder}
-                  disabled={quickPlacing || quickItems.every((i) => !i.sku.trim())}
+                  disabled={quickPlacing || !quickItems.some((i) => i.selectedProduct)}
                   className="w-full flex items-center justify-center gap-2 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-medium"
                 >
                   <ShoppingCart size={16} />
@@ -277,7 +509,7 @@ export default function BulkUploadPage() {
                 </button>
 
                 {quickResult && (
-                  <div className={`p-4 rounded-lg ${quickResult.order ? "bg-green-50 border border-green-100" : "bg-red-50 border border-red-100"}`}>
+                  <div className="p-4 rounded-lg bg-red-50 border border-red-100">
                     {quickResult.message && <p className="text-sm text-red-700 font-medium">{quickResult.message}</p>}
                     {quickResult.errors && (
                       <ul className="text-sm text-yellow-700 list-disc list-inside">
