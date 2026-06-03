@@ -23,21 +23,19 @@ interface ProductOption {
 interface OrderItem {
   id: string
   product: ProductOption
-  quantity: number | string // string while typing
+  quantity: number | string
 }
 
 export default function BulkUploadPage() {
   const router = useRouter()
   const [mode, setMode] = useState<TabMode>("excel")
 
-  // Excel upload state
   const [file, setFile] = useState<File | null>(null)
   const [shippingAddress, setShippingAddress] = useState({ street: "", city: "", state: "", zip: "", country: "India" })
   const [notes, setNotes] = useState("")
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<any>(null)
 
-  // Quick order state
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null)
@@ -47,7 +45,6 @@ export default function BulkUploadPage() {
   const [quickPlacing, setQuickPlacing] = useState(false)
   const [quickResult, setQuickResult] = useState<any>(null)
 
-  // Autocomplete state
   const [searchResults, setSearchResults] = useState<ProductOption[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
@@ -58,7 +55,6 @@ export default function BulkUploadPage() {
   const qtyInputRef = useRef<HTMLInputElement>(null)
   const dropdownItemRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
 
-  // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -88,12 +84,10 @@ export default function BulkUploadPage() {
     if (!token) { router.push("/login"); return }
     setUploading(true)
     setResult(null)
-
     const formData = new FormData()
     formData.append("file", file)
     formData.append("shippingAddress", JSON.stringify(shippingAddress))
     formData.append("notes", notes)
-
     try {
       const res = await fetch("/api/bulk-orders/upload-excel", {
         method: "POST",
@@ -101,7 +95,6 @@ export default function BulkUploadPage() {
         body: formData,
       })
       const data = await res.json()
-
       if (res.ok && data.bulkOrder) {
         router.push(`/orders/bulk-orders/${data.bulkOrder.id}`)
       } else {
@@ -113,18 +106,14 @@ export default function BulkUploadPage() {
     setUploading(false)
   }
 
-  // === Quick Order: Search & Add to Sidebar ===
-
   const doSearch = useCallback((query: string) => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-
     if (!query.trim()) {
       setSearchResults([])
       setDropdownOpen(false)
       setHighlightedIndex(-1)
       return
     }
-
     setSearchLoading(true)
     searchTimerRef.current = setTimeout(async () => {
       try {
@@ -155,7 +144,6 @@ export default function BulkUploadPage() {
     setSearchResults([])
     setDropdownOpen(false)
     setHighlightedIndex(-1)
-    // Auto-focus quantity input
     setTimeout(() => qtyInputRef.current?.focus(), 0)
   }
 
@@ -163,15 +151,13 @@ export default function BulkUploadPage() {
     if (!selectedProduct) return
     const qty = typeof addQuantity === "number" ? addQuantity : parseInt(String(addQuantity)) || 0
     const finalQty = Math.max(qty, selectedProduct.moq)
-
     const exists = orderItems.find((i) => i.product.id === selectedProduct.id)
     if (exists) {
-      const curQty = typeof exists.quantity === "number" ? exists.quantity : parseInt(exists.quantity) || 0
+      const curQty = typeof exists.quantity === "number" ? exists.quantity : parseInt(String(exists.quantity)) || 0
       updateOrderQty(exists.id, curQty + finalQty)
     } else {
       setOrderItems((prev) => [...prev, { id: crypto.randomUUID(), product: selectedProduct, quantity: finalQty }])
     }
-    // Reset
     setSelectedProduct(null)
     setAddQuantity("")
     setSearchQuery("")
@@ -189,9 +175,7 @@ export default function BulkUploadPage() {
   }
 
   const updateOrderQty = (itemId: string, qty: number | string) => {
-    setOrderItems((prev) =>
-      prev.map((i) => (i.id === itemId ? { ...i, quantity: qty } : i))
-    )
+    setOrderItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, quantity: qty } : i)))
   }
 
   const commitOrderQty = (itemId: string) => {
@@ -207,7 +191,6 @@ export default function BulkUploadPage() {
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (!dropdownOpen || searchResults.length === 0) return
-
     if (e.key === "ArrowDown") {
       e.preventDefault()
       setHighlightedIndex((prev) => {
@@ -234,36 +217,31 @@ export default function BulkUploadPage() {
   }
 
   const handleQuickOrder = async () => {
-    const validItems = orderItems.filter((i) => i.product.sku && ((typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 0) > 0))
+    const validItems = orderItems.filter((i) => i.product.sku && ((typeof i.quantity === "number" ? i.quantity : parseInt(String(i.quantity)) || 0) > 0))
     if (validItems.length === 0) {
       alert("Please add at least one product.")
       return
     }
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
-
-    // Check MOQ
-    const moqErrors = validItems.filter((i) => (typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 0) < i.product.moq)
+    const moqErrors = validItems.filter((i) => (typeof i.quantity === "number" ? i.quantity : parseInt(String(i.quantity)) || 0) < i.product.moq)
     if (moqErrors.length > 0) {
       alert(`Minimum order quantity not met for: ${moqErrors.map((i) => `${i.product.title} (MOQ: ${i.product.moq})`).join(", ")}`)
       return
     }
-
     setQuickPlacing(true)
     setQuickResult(null)
-
     try {
       const res = await fetch("/api/bulk-orders/quick-order", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          items: validItems.map((i) => ({ sku: i.product.sku, quantity: typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 1 })),
+          items: validItems.map((i) => ({ sku: i.product.sku, quantity: typeof i.quantity === "number" ? i.quantity : parseInt(String(i.quantity)) || 1 })),
           shippingAddress: quickShipping.street ? quickShipping : undefined,
           notes: quickNotes || undefined,
         }),
       })
       const data = await res.json()
-
       if (res.ok && data.order) {
         router.push(`/orders/${data.order.id}`)
       } else {
@@ -276,18 +254,19 @@ export default function BulkUploadPage() {
   }
 
   const orderTotal = orderItems.reduce((sum, i) => {
-    const qty = typeof i.quantity === "number" ? i.quantity : parseInt(i.quantity) || 0
+    const qty = typeof i.quantity === "number" ? i.quantity : parseInt(String(i.quantity)) || 0
     return sum + i.product.unitPrice * qty
   }, 0)
 
   return (
     <div className="min-h-screen bg-gray-50">
       <main className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 ${mode === "quick" ? "max-w-5xl" : "max-w-3xl"}`}>
-        <Link href="/orders/bulk-orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to Bulk Orders</Link>
+        <Link href="/orders/bulk-orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6">
+          <ArrowLeft size={16} /> Back to Bulk Orders
+        </Link>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Bulk Order</h1>
 
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-          {/* Mode Tabs */}
           <div className="flex border-b border-gray-200">
             <button
               onClick={() => { setMode("excel"); setResult(null); setQuickResult(null) }}
@@ -304,17 +283,15 @@ export default function BulkUploadPage() {
           </div>
 
           <div className={mode === "quick" ? "" : "p-6 space-y-5"}>
-            {/* ========== EXCEL UPLOAD TAB ========== */}
             {mode === "excel" && (
               <>
                 <div className="bg-green-50 border border-green-100 rounded-lg p-4">
                   <p className="text-sm text-green-800 font-medium mb-1">Excel Format (.xlsx)</p>
-                  <p className="text-xs text-green-700">Columns: sku, quantity, notes (optional). Upload creates a draft — you can review & edit before placing the order.</p>
+                  <p className="text-xs text-green-700">Columns: sku, quantity, notes (optional). Upload creates a draft.</p>
                   <button onClick={downloadExcelTemplate} className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition">
                     <Download size={14} /> Download Template
                   </button>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Shipping Address</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -324,12 +301,10 @@ export default function BulkUploadPage() {
                     <input type="text" placeholder="ZIP" value={shippingAddress.zip} onChange={(e) => setShippingAddress({ ...shippingAddress, zip: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                   <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="Order notes" />
                 </div>
-
                 <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
                   <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" id="file-upload" />
                   <label htmlFor="file-upload" className="cursor-pointer">
@@ -337,22 +312,16 @@ export default function BulkUploadPage() {
                     <p className="text-sm text-gray-600">{file ? file.name : "Click to select Excel file (.xlsx)"}</p>
                   </label>
                 </div>
-
-                <button
-                  onClick={handleExcelUpload}
-                  disabled={uploading || !file || !shippingAddress.street || !shippingAddress.city}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-medium"
-                >
+                <button onClick={handleExcelUpload} disabled={uploading || !file || !shippingAddress.street || !shippingAddress.city} className="w-full flex items-center justify-center gap-2 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-medium">
                   <FileText size={16} />
                   {uploading ? "Uploading..." : "Upload & Review Order"}
                 </button>
-
                 {result && (
                   <div className="p-4 rounded-lg bg-red-50 border border-red-100">
                     {result.message && <p className="text-sm text-red-700 font-medium">{result.message}</p>}
                     {result.errors && (
                       <ul className="text-sm text-red-700 list-disc list-inside">
-                        {result.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
+                        {result.errors.map((err: string, i: number) => <li key={i}>{err}</li>)}
                       </ul>
                     )}
                   </div>
@@ -360,18 +329,15 @@ export default function BulkUploadPage() {
               </>
             )}
 
-            {/* ========== QUICK ORDER TAB ========== */}
             {mode === "quick" && (
               <div className="flex flex-col lg:flex-row" ref={containerRef}>
-                {/* LEFT: Search input */}
                 <div className="flex-1 p-6 space-y-4">
                   <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
                     <p className="text-sm text-amber-800 font-medium flex items-center gap-1.5"><Zap size={14} /> Quick Order</p>
-                    <p className="text-xs text-amber-700 mt-1">Type product name or SKU, select a product, set quantity, then add to order. Use ↑↓ arrows in dropdown.</p>
+                    <p className="text-xs text-amber-700 mt-1">Type product name or SKU, select a product, set quantity, then add to order. Use arrow keys in dropdown.</p>
                   </div>
 
                   {selectedProduct ? (
-                    /* Selected product card — set qty then confirm */
                     <div className="border border-primary-200 bg-primary-50 rounded-lg p-4">
                       <div className="flex items-start gap-3 mb-3">
                         {selectedProduct.thumbnail ? (
@@ -383,8 +349,8 @@ export default function BulkUploadPage() {
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-gray-900 truncate">{selectedProduct.title}</p>
-                          <p className="text-xs text-gray-500">SKU: {selectedProduct.sku || "—"} · {formatPrice(selectedProduct.unitPrice)} per unit</p>
-                          <p className="text-xs text-amber-600">MOQ: {selectedProduct.moq} · Stock: {selectedProduct.inventoryQuantity}</p>
+                          <p className="text-xs text-gray-500">SKU: {selectedProduct.sku || "—"} &middot; {formatPrice(selectedProduct.unitPrice)} per unit</p>
+                          <p className="text-xs text-amber-600">MOQ: {selectedProduct.moq} &middot; Stock: {selectedProduct.inventoryQuantity}</p>
                         </div>
                         <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-red-500 transition shrink-0" title="Cancel">
                           <X size={16} />
@@ -411,16 +377,12 @@ export default function BulkUploadPage() {
                           className="w-28 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                         />
                         <span className="text-xs text-gray-400">min: {selectedProduct.moq}</span>
-                        <button
-                          onClick={confirmAddToOrder}
-                          className="ml-auto px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition"
-                        >
+                        <button onClick={confirmAddToOrder} className="ml-auto px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition">
                           Add to Order
                         </button>
                       </div>
                     </div>
                   ) : (
-                    /* Search input */
                     <div>
                       <label className="text-sm font-medium text-gray-700 mb-2 block">Search Product</label>
                       <div className="relative">
@@ -430,15 +392,8 @@ export default function BulkUploadPage() {
                           type="text"
                           placeholder="Type product name or SKU..."
                           value={searchQuery}
-                          onChange={(e) => {
-                            setSearchQuery(e.target.value)
-                            doSearch(e.target.value)
-                          }}
-                          onFocus={() => {
-                            if (searchResults.length > 0 && searchQuery.trim()) {
-                              setDropdownOpen(true)
-                            }
-                          }}
+                          onChange={(e) => { setSearchQuery(e.target.value); doSearch(e.target.value) }}
+                          onFocus={() => { if (searchResults.length > 0 && searchQuery.trim()) setDropdownOpen(true) }}
                           onKeyDown={handleSearchKeyDown}
                           className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
@@ -448,8 +403,6 @@ export default function BulkUploadPage() {
                           </div>
                         )}
                       </div>
-
-                      {/* Dropdown */}
                       {dropdownOpen && searchResults.length > 0 && (
                         <div className="mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto relative z-30">
                           {searchResults.map((product, pidx) => {
@@ -470,7 +423,7 @@ export default function BulkUploadPage() {
                                 )}
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-gray-900 truncate">{product.title} {alreadyAdded && <span className="text-xs text-primary-500">(added)</span>}</p>
-                                  <p className="text-xs text-gray-500">SKU: {product.sku || "—"} · MOQ: {product.moq} · Stock: {product.inventoryQuantity}</p>
+                                  <p className="text-xs text-gray-500">SKU: {product.sku || "—"} &middot; MOQ: {product.moq} &middot; Stock: {product.inventoryQuantity}</p>
                                 </div>
                                 <span className="text-sm font-medium text-gray-700 shrink-0">{formatPrice(product.unitPrice)}</span>
                               </button>
@@ -479,21 +432,20 @@ export default function BulkUploadPage() {
                         </div>
                       )}
                     </div>
-                  )
+                  )}
 
                   {quickResult && (
                     <div className="p-4 rounded-lg bg-red-50 border border-red-100">
                       {quickResult.message && <p className="text-sm text-red-700 font-medium">{quickResult.message}</p>}
                       {quickResult.errors && (
                         <ul className="text-sm text-yellow-700 list-disc list-inside">
-                          {quickResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
+                          {quickResult.errors.map((err: string, i: number) => <li key={i}>{err}</li>)}
                         </ul>
                       )}
                     </div>
                   )}
                 </div>
 
-                {/* RIGHT: Order sidebar */}
                 <div className="w-full lg:w-80 lg:border-l lg:border-gray-100 bg-gray-50 p-6">
                   <div className="flex items-center gap-2 mb-4">
                     <ShoppingCart size={16} className="text-primary-600" />
@@ -507,13 +459,13 @@ export default function BulkUploadPage() {
                     <div className="text-center py-8">
                       <Package size={28} className="text-gray-300 mx-auto mb-2" />
                       <p className="text-sm text-gray-400">No products added yet</p>
-                      <p className="text-xs text-gray-300 mt-1">Search & select products on the left</p>
+                      <p className="text-xs text-gray-300 mt-1">Search and select products on the left</p>
                     </div>
                   ) : (
                     <>
                       <div className="space-y-3 mb-4">
                         {orderItems.map((item) => {
-                          const qty = typeof item.quantity === "number" ? item.quantity : parseInt(item.quantity) || 0
+                          const qty = typeof item.quantity === "number" ? item.quantity : parseInt(String(item.quantity)) || 0
                           return (
                             <div key={item.id} className="bg-white rounded-lg p-3 border border-gray-100">
                               <div className="flex items-start gap-2.5 mb-2">
@@ -526,24 +478,18 @@ export default function BulkUploadPage() {
                                 )}
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-medium text-gray-900 truncate">{item.product.title}</p>
-                                  <p className="text-xs text-gray-500">SKU: {item.product.sku || "—"} · {formatPrice(item.product.unitPrice)}</p>
+                                  <p className="text-xs text-gray-500">SKU: {item.product.sku || "—"} &middot; {formatPrice(item.product.unitPrice)}</p>
                                 </div>
-                                <button
-                                  onClick={() => removeFromOrder(item.id)}
-                                  className="p-1 text-gray-300 hover:text-red-500 transition shrink-0"
-                                  title="Remove"
-                                >
+                                <button onClick={() => removeFromOrder(item.id)} className="p-1 text-gray-300 hover:text-red-500 transition shrink-0" title="Remove">
                                   <Trash2 size={14} />
                                 </button>
                               </div>
-                              {/* Quantity controls */}
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1">
                                   <button
                                     onClick={() => {
-                                      const cur = typeof item.quantity === "number" ? item.quantity : parseInt(item.quantity) || 0
-                                      const next = Math.max(item.product.moq, cur - item.product.moq)
-                                      updateOrderQty(item.id, next)
+                                      const cur = typeof item.quantity === "number" ? item.quantity : parseInt(String(item.quantity)) || 0
+                                      updateOrderQty(item.id, Math.max(item.product.moq, cur - item.product.moq))
                                     }}
                                     className="w-7 h-7 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition"
                                   >
@@ -555,18 +501,12 @@ export default function BulkUploadPage() {
                                     value={item.quantity}
                                     onChange={(e) => updateOrderQty(item.id, e.target.value)}
                                     onBlur={() => commitOrderQty(item.id)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault()
-                                        commitOrderQty(item.id)
-                                        searchInputRef.current?.focus()
-                                      }
-                                    }}
+                                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitOrderQty(item.id); searchInputRef.current?.focus() } }}
                                     className="w-14 text-center text-sm border border-gray-200 rounded py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   />
                                   <button
                                     onClick={() => {
-                                      const cur = typeof item.quantity === "number" ? item.quantity : parseInt(item.quantity) || 0
+                                      const cur = typeof item.quantity === "number" ? item.quantity : parseInt(String(item.quantity)) || 0
                                       updateOrderQty(item.id, cur + item.product.moq)
                                     }}
                                     className="w-7 h-7 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition"
@@ -589,9 +529,7 @@ export default function BulkUploadPage() {
                       </div>
 
                       <details className="mb-3">
-                        <summary className="text-xs text-gray-500 cursor-pointer hover:text-primary-600 transition">
-                          Shipping Address (optional)
-                        </summary>
+                        <summary className="text-xs text-gray-500 cursor-pointer hover:text-primary-600 transition">Shipping Address (optional)</summary>
                         <div className="mt-2 grid grid-cols-1 gap-2">
                           <input type="text" placeholder="Street" value={quickShipping.street} onChange={(e) => setQuickShipping({ ...quickShipping, street: e.target.value })} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white" />
                           <input type="text" placeholder="City" value={quickShipping.city} onChange={(e) => setQuickShipping({ ...quickShipping, city: e.target.value })} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white" />
@@ -602,11 +540,7 @@ export default function BulkUploadPage() {
 
                       <input type="text" value={quickNotes} onChange={(e) => setQuickNotes(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs mb-3 bg-white" placeholder="Notes (optional)" />
 
-                      <button
-                        onClick={handleQuickOrder}
-                        disabled={quickPlacing || orderItems.length === 0}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 text-sm font-medium"
-                      >
+                      <button onClick={handleQuickOrder} disabled={quickPlacing || orderItems.length === 0} className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 text-sm font-medium">
                         <ShoppingCart size={14} />
                         {quickPlacing ? "Placing..." : "Place Order"}
                       </button>
