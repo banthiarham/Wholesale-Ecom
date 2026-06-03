@@ -48,7 +48,7 @@ export class OrdersController {
     @CurrentUser() user: any,
   ) {
     const order = await this.ordersService.createFromCart(
-      user.userId,
+      user.id,
       body.cartId,
       {
         shippingAddress: body.shippingAddress,
@@ -97,7 +97,7 @@ export class OrdersController {
   ) {
     const shippingAddress = JSON.parse(body.shippingAddress || '{}');
     const result = await this.csvParser.parseAndCreateOrder(
-      user.userId,
+      user.id,
       file.buffer,
       shippingAddress,
       body.notes,
@@ -129,7 +129,7 @@ export class OrdersController {
   ) {
     const shippingAddress = JSON.parse(body.shippingAddress || '{}');
     // Admin can place order on behalf of a buyer by specifying userId
-    const orderUserId = (user.role === UserRole.ADMIN && body.userId) ? body.userId : user.userId;
+    const orderUserId = (user.role === UserRole.ADMIN && body.userId) ? body.userId : user.id;
     const result = await this.excelParser.parseAndCreateOrder(
       orderUserId,
       file.buffer,
@@ -148,7 +148,7 @@ export class OrdersController {
   async findAll(@CurrentUser() user: any, @Query('status') status?: OrderStatus) {
     const isAdmin = user.role === UserRole.ADMIN;
     const orders = await this.ordersService.findAll(
-      isAdmin ? undefined : user.userId,
+      isAdmin ? undefined : user.id,
       status,
     );
     return { orders };
@@ -165,7 +165,7 @@ export class OrdersController {
     const isAdmin = user.role === UserRole.ADMIN;
     const order = await this.ordersService.findById(
       id,
-      isAdmin ? undefined : user.userId,
+      isAdmin ? undefined : user.id,
     );
     return { order };
   }
@@ -236,7 +236,7 @@ export class OrdersController {
   @ApiResponse({ status: 400, description: 'Cannot cancel delivered/cancelled order' })
   @ApiParam({ name: 'id', description: 'Order UUID' })
   async cancel(@Param('id') id: string, @CurrentUser() user: any) {
-    const order = await this.ordersService.cancelOrder(id, user.userId);
+    const order = await this.ordersService.cancelOrder(id, user.id);
     return { order };
   }
 }

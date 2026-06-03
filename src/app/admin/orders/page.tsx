@@ -9,7 +9,7 @@ interface Order {
   id: string
   orderNumber: string
   status: string
-  total: number
+  totalAmount: number
   paymentStatus: string
   createdAt: string
   user: { firstName: string; lastName: string; email: string } | null
@@ -18,6 +18,7 @@ interface Order {
   carrier?: string | null
   deliveryPartnerId?: string | null
   deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null } | null
+  payment?: { status: string } | null
 }
 
 interface Partner {
@@ -226,7 +227,7 @@ export default function AdminOrdersPage() {
                   {[
                     { key: "orderNumber" as const, label: "Order" },
                     { key: "status" as const, label: "Status" },
-                    { key: "total" as const, label: "Total" },
+                    { key: "totalAmount" as const, label: "Total" },
                     { key: "paymentStatus" as const, label: "Payment" },
                     { key: "createdAt" as const, label: "Date" },
                   ].map((col) => (
@@ -252,8 +253,8 @@ export default function AdminOrdersPage() {
                       <p className="text-xs text-gray-500 font-normal">{o.user ? `${o.user.firstName} ${o.user.lastName}` : "Guest"}</p>
                     </td>
                     <td className="px-4 py-3">{statusBadge(o.status)}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{formatPrice(Number(o.total))}</td>
-                    <td className="px-4 py-3 text-gray-600 uppercase text-xs">{o.paymentStatus}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{formatPrice(Number(o.totalAmount))}</td>
+                    <td className="px-4 py-3 text-gray-600 uppercase text-xs">{o.payment?.status || o.paymentStatus || 'N/A'}</td>
                     <td className="px-4 py-3 text-gray-500">{new Date(o.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -317,7 +318,7 @@ export default function AdminOrdersPage() {
 
               <div className="flex items-center justify-between border-t border-gray-100 pt-4">
                 <span className="text-sm text-gray-600">Total</span>
-                <span className="text-lg font-bold text-primary-700">{formatPrice(Number(detailOrder.total))}</span>
+                <span className="text-lg font-bold text-primary-700">{formatPrice(Number(detailOrder.totalAmount))}</span>
               </div>
 
                   {detailOrder.status !== "CANCELLED" && detailOrder.status !== "DELIVERED" && (

@@ -145,9 +145,6 @@ model User {
   wallet                Wallet?
   bulkOrders            BulkOrder[]
 
-  referralCode    String?  @unique   // unique shareable referral code
-  referredBy      String?              // referral code of the referrer
-
   @@index([email])
   @@index([role])
   @@index([roleId])

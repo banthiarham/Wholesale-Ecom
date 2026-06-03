@@ -14,7 +14,7 @@ export class WishlistController {
   @ApiBearerAuth()
   @ApiOperation({ summary: "Get user's wishlist" })
   async findAll(@CurrentUser() user: any) {
-    const items = await this.wishlistService.findByUser(user.userId);
+    const items = await this.wishlistService.findByUser(user.id);
     return { items };
   }
 
@@ -23,7 +23,7 @@ export class WishlistController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add product to wishlist' })
   async add(@CurrentUser() user: any, @Body() body: { productId: string }) {
-    const item = await this.wishlistService.add(user.userId, body.productId);
+    const item = await this.wishlistService.add(user.id, body.productId);
     return { item };
   }
 
@@ -32,7 +32,7 @@ export class WishlistController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Remove product from wishlist' })
   async remove(@CurrentUser() user: any, @Param('productId') productId: string) {
-    await this.wishlistService.remove(user.userId, productId);
+    await this.wishlistService.remove(user.id, productId);
     return { success: true };
   }
 }

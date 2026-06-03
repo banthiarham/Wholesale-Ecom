@@ -50,7 +50,7 @@ export class ReviewsController {
   @ApiResponse({ status: 400, description: 'Already reviewed this product' })
   @ApiBody({ type: CreateReviewDto })
   async create(@Body() dto: CreateReviewDto, @CurrentUser() user: any) {
-    const review = await this.reviewsService.create(user.userId, dto);
+    const review = await this.reviewsService.create(user.id, dto);
     return { review };
   }
 
@@ -64,6 +64,6 @@ export class ReviewsController {
   @ApiParam({ name: 'id', description: 'Review UUID' })
   async remove(@Param('id') id: string, @CurrentUser() user: any) {
     const isAdmin = user.role === UserRole.ADMIN;
-    return this.reviewsService.remove(id, user.userId, isAdmin);
+    return this.reviewsService.remove(id, user.id, isAdmin);
   }
 }

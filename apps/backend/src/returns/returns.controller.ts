@@ -20,7 +20,7 @@ export class ReturnsController {
     @CurrentUser() user: any,
     @Body() body: { orderId: string; reason: string; notes?: string; items: { orderItemId: string; quantity: number; reason?: string }[] },
   ) {
-    const ret = await this.returnsService.create(user.userId, body);
+    const ret = await this.returnsService.create(user.id, body);
     return { return: ret };
   }
 
@@ -29,7 +29,7 @@ export class ReturnsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: "List user's returns (admin sees all)" })
   async findAll(@CurrentUser() user: any) {
-    const returns = await this.returnsService.findAll(user.userId, user.role);
+    const returns = await this.returnsService.findAll(user.id, user.role);
     return { returns };
   }
 
@@ -38,7 +38,7 @@ export class ReturnsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get return request details' })
   async findById(@Param('id') id: string, @CurrentUser() user: any) {
-    const ret = await this.returnsService.findById(id, user.userId, user.role);
+    const ret = await this.returnsService.findById(id, user.id, user.role);
     return { return: ret };
   }
 

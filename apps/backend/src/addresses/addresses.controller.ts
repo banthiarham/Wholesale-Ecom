@@ -14,7 +14,7 @@ export class AddressesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: "Get user's addresses" })
   async findAll(@CurrentUser() user: any) {
-    const addresses = await this.addressesService.findByUser(user.userId);
+    const addresses = await this.addressesService.findByUser(user.id);
     return { addresses };
   }
 
@@ -26,7 +26,7 @@ export class AddressesController {
     @CurrentUser() user: any,
     @Body() body: { label?: string; street: string; city: string; state: string; zip: string; country?: string; isDefault?: boolean },
   ) {
-    const address = await this.addressesService.create(user.userId, body);
+    const address = await this.addressesService.create(user.id, body);
     return { address };
   }
 
@@ -39,7 +39,7 @@ export class AddressesController {
     @CurrentUser() user: any,
     @Body() body: { label?: string; street?: string; city?: string; state?: string; zip?: string; country?: string; isDefault?: boolean },
   ) {
-    const address = await this.addressesService.update(id, user.userId, body);
+    const address = await this.addressesService.update(id, user.id, body);
     return { address };
   }
 
@@ -48,7 +48,7 @@ export class AddressesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set address as default' })
   async setDefault(@Param('id') id: string, @CurrentUser() user: any) {
-    const address = await this.addressesService.setDefault(id, user.userId);
+    const address = await this.addressesService.setDefault(id, user.id);
     return { address };
   }
 
@@ -57,7 +57,7 @@ export class AddressesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete an address' })
   async delete(@Param('id') id: string, @CurrentUser() user: any) {
-    await this.addressesService.delete(id, user.userId);
+    await this.addressesService.delete(id, user.id);
     return { success: true };
   }
 }
