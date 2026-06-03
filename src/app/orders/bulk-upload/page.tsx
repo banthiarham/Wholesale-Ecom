@@ -40,6 +40,7 @@ export default function BulkUploadPage() {
   // Quick order state
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [addQuantity, setAddQuantity] = useState<number | string>("")
   const [quickShipping, setQuickShipping] = useState({ street: "", city: "", state: "", zip: "", country: "India" })
   const [quickNotes, setQuickNotes] = useState("")
   const [quickPlacing, setQuickPlacing] = useState(false)
@@ -147,17 +148,20 @@ export default function BulkUploadPage() {
   }, [])
 
   const addToOrder = (product: ProductOption) => {
+    const qty = typeof addQuantity === "number" ? addQuantity : parseInt(String(addQuantity)) || 0
+    const finalQty = Math.max(qty, product.moq) // enforce MOQ
+
     // Check if already added
     const exists = orderItems.find((i) => i.product.id === product.id)
     if (exists) {
-      // Increment quantity by MOQ
       const curQty = typeof exists.quantity === "number" ? exists.quantity : parseInt(exists.quantity) || 0
-      updateOrderQty(exists.id, curQty + product.moq)
+      updateOrderQty(exists.id, curQty + finalQty)
     } else {
-      setOrderItems((prev) => [...prev, { id: crypto.randomUUID(), product, quantity: product.moq }])
+      setOrderItems((prev) => [...prev, { id: crypto.randomUUID(), product, quantity: finalQty }])
     }
-    // Reset search
+    // Reset search and quantity
     setSearchQuery("")
+    setAddQuantity("")
     setSearchResults([])
     setDropdownOpen(false)
     setHighlightedIndex(-1)
@@ -353,30 +357,51 @@ export default function BulkUploadPage() {
 
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-2 block">Search Product</label>
-                    <div className="relative">
-                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder="Type product name or SKU..."
-                        value={searchQuery}
-                        onChange={(e) => {
-                          setSearchQuery(e.target.value)
-                          doSearch(e.target.value)
-                        }}
-                        onFocus={() => {
-                          if (searchResults.length > 0 && searchQuery.trim()) {
-                            setDropdownOpen(true)
-                          }
-                        }}
-                        onKeyDown={handleSearchKeyDown}
-                        className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                      {searchLoading && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <div className="animate-spin h-4 w-4 border-2 border-primary-400 border-t-transparent rounded-full"></div>
-                        </div>
-                      )}
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 relative">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          placeholder="Type product name or SKU..."
+                          value={searchQuery}
+                          onChange={(e) => {
+                            setSearchQuery(e.target.value)
+                            doSearch(e.target.value)
+                          }}
+                          onFocus={() => {
+                            if (searchResults.length > 0 && searchQuery.trim()) {
+                              setDropdownOpen(true)
+                            }
+                          }}
+                          onKeyDown={handleSearchKeyDown}
+                          className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        {searchLoading && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <div className="animate-spin h-4 w-4 border-2 border-primary-400 border-t-transparent rounded-full"></div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="w-24">
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder="Qty"
+                          value={addQuantity}
+                          onChange={(e) => setAddQuantity(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              // If dropdown open with highlight, add that product
+                              if (dropdownOpen && highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+                                addToOrder(searchResults[highlightedIndex])
+                              }
+                            }
+                          }}
+                          className="w-full px-2 py-2.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
                     </div>
 
                     {/* Dropdown */}
