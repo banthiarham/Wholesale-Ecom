@@ -290,7 +290,7 @@ function DefaultHeroFallback({
   visibleProducts: Product[]
   discounts: SeasonalDiscount[]
   hiddenPriceProductIds: Set<string>
-  nonPurchasableProducts: Set<string>
+  nonPurchasableProducts: Map<string, string>
   ruleDiscountMap: Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>
   bogoMap: Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>
   qtyDiscountMap: Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>

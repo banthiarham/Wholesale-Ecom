@@ -44,7 +44,7 @@ export class ProductsService {
       });
       // Preserve the requested order
       const orderMap = new Map(filters.ids.map((id: string, i: number) => [id, i]));
-      return products.sort((a: any, b: any) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+      return products.sort((a: any, b: any) => ((orderMap.get(a.id) as number) ?? 0) - ((orderMap.get(b.id) as number) ?? 0));
     }
 
     // Sort order
