@@ -15,6 +15,8 @@ export class BulkOrdersService {
   async quickOrder(userId: string, items: { sku: string; quantity: number }[], data: { shippingAddress?: any; notes?: string }) {
     const errors: string[] = [];
     const orderItems: { productId: string; quantity: number }[] = [];
+    const bulkOrderItemsData: any[] = [];
+    let totalAmount = 0;
 
     for (const item of items) {
       const product = await this.prisma.product.findUnique({ where: { sku: item.sku } });
@@ -35,19 +37,57 @@ export class BulkOrdersService {
         errors.push(`Not enough stock for "${item.sku}" (available: ${available})`);
         continue;
       }
+
       orderItems.push({ productId: product.id, quantity: item.quantity });
+
+      // Build BulkOrderItem data for tracking in bulk orders
+      const pricing = await this.pricingService.calculateEffectivePrice(product.id, item.quantity, userId);
+      const unitPrice = pricing.finalPrice;
+      const totalPrice = unitPrice * item.quantity;
+      totalAmount += totalPrice;
+
+      bulkOrderItemsData.push({
+        product: { connect: { id: product.id } },
+        sku: product.sku,
+        quantity: item.quantity,
+        unitPrice,
+        totalPrice,
+        notes: `Quick order: ${item.sku} x${item.quantity}`,
+      });
     }
 
     if (orderItems.length === 0) {
       throw new BadRequestException('No valid items to order. Errors: ' + errors.join('; '));
     }
 
+    // Create the real Order
     const result = await this.ordersService.createFromBulk(userId, orderItems, {
       shippingAddress: data.shippingAddress,
       notes: data.notes || 'Quick order',
     });
 
-    return { order: result.order, errors: errors.length > 0 ? errors : undefined };
+    // Also create a BulkOrder record (PLACED status) so it shows in bulk orders panel
+    const bulkOrderNumber = 'BULK-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    const bulkOrder = await this.prisma.bulkOrder.create({
+      data: {
+        bulkOrderNumber,
+        user: { connect: { id: userId } },
+        status: BulkOrderStatus.PLACED,
+        shippingAddress: data.shippingAddress || null,
+        notes: data.notes || 'Quick order',
+        totalAmount,
+        order: { connect: { id: result.order.id } },
+        items: { create: bulkOrderItemsData },
+      },
+      include: {
+        items: { include: { product: { select: { id: true, title: true, thumbnail: true, sku: true } } } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true, companyName: true } },
+        order: { select: { id: true, orderNumber: true, status: true } },
+      },
+    });
+
+    return { order: result.order, bulkOrder, errors: errors.length > 0 ? errors : undefined };
   }
 
   async createDraftFromExcel(userId: string, buffer: Buffer, shippingAddress: any, notes?: string) {
