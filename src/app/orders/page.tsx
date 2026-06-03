@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ShoppingBag, ArrowLeft, ShoppingCart, RotateCcw } from "lucide-react"
+import { ShoppingBag, ArrowLeft, ShoppingCart, RotateCcw, FileText } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface Order {
@@ -58,7 +58,12 @@ export default function OrdersPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
-          <Link href="/products" className="text-primary-600 hover:underline">Continue Shopping</Link>
+          <div className="flex items-center gap-3">
+            <Link href="/orders/bulk-upload" className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition">
+              <FileText size={16} /> Bulk Order
+            </Link>
+            <Link href="/products" className="text-primary-600 hover:underline text-sm">Continue Shopping</Link>
+          </div>
         </div>
 
         {loading ? (

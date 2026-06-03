@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Search, Trash2, Edit, Plus, X, Package, ImagePlus, Tag, FolderPlus } from "lucide-react"
+import { Search, Trash2, Edit, Plus, X, Package, ImagePlus, Tag, FolderPlus, FileSpreadsheet } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
 interface Product {
@@ -295,6 +295,9 @@ function AdminProductsContent() {
           />
         </div>
         <div className="flex gap-3">
+          <Link href="/admin/products/bulk-upload" className="flex items-center gap-2 px-4 py-2 border border-green-200 text-green-700 rounded-lg hover:bg-green-50 transition text-sm">
+            <FileSpreadsheet size={16} /> Bulk Upload
+          </Link>
           <button onClick={() => setShowCatForm(!showCatForm)} className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm">
             <FolderPlus size={16} /> Add Category
           </button>

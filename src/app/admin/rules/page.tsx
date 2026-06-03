@@ -509,9 +509,30 @@ export default function AdminRulesPage() {
   const [form, setForm] = useState<RuleForm>(emptyForm())
   const [filterType, setFilterType] = useState("")
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
+  const getAuthHeaders = (): Record<string, string> => {
+    const t = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const headers: Record<string, string> = {}
+    if (t) headers["Authorization"] = `Bearer ${t}`
+    return headers
+  }
 
-  useEffect(() => { loadRules(); loadProducts(); loadCategories(); loadRoles() }, [token])
+  const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+    const t = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    if (!t) {
+      window.location.href = "/login"
+      throw new Error("Not authenticated")
+    }
+    const headers: Record<string, string> = { ...options.headers as Record<string, string>, Authorization: `Bearer ${t}` }
+    const res = await fetch(url, { ...options, headers })
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem("token")
+      window.location.href = "/login"
+      throw new Error("Session expired. Please log in again.")
+    }
+    return res
+  }
+
+  useEffect(() => { loadRules(); loadProducts(); loadCategories(); loadRoles() }, [])
   useEffect(() => {
     const q = search.toLowerCase()
     setFiltered(rules.filter((r) => {
@@ -524,7 +545,7 @@ export default function AdminRulesPage() {
   const loadRules = async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/rules", { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch("/api/rules", { headers: getAuthHeaders() })
       const data = await res.json()
       setRules(Array.isArray(data) ? data : data.rules ?? [])
       setFiltered(Array.isArray(data) ? data : data.rules ?? [])
@@ -533,7 +554,7 @@ export default function AdminRulesPage() {
 
   const loadProducts = async () => {
     try {
-      const res = await fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED", { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED", { headers: getAuthHeaders() })
       const data = await res.json()
       setProducts(data.products ?? [])
     } catch (e) { console.error(e) }
@@ -552,8 +573,7 @@ export default function AdminRulesPage() {
 
   const loadRoles = async () => {
     try {
-      const t = localStorage.getItem("token") || ""
-      const res = await fetch("/api/roles", { headers: { Authorization: `Bearer ${t}` } })
+      const res = await fetch("/api/roles", { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
         setRoles((data.roles || []).map((r: any) => ({ id: r.id, name: r.name, label: r.label, color: r.color })))
@@ -581,6 +601,12 @@ export default function AdminRulesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const t = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    if (!t) {
+      alert("Your session has expired. Please log in again.")
+      window.location.href = "/login"
+      return
+    }
     setSaving(true)
     const body: any = {
       name: form.name,
@@ -593,29 +619,34 @@ export default function AdminRulesPage() {
       startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
       endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
     }
-    const t = localStorage.getItem("token")!
     try {
-      const res = await fetch(editing ? `/api/rules/${editing.id}` : "/api/rules", {
+      const res = await authFetch(editing ? `/api/rules/${editing.id}` : "/api/rules", {
         method: editing ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
       if (res.ok) { resetForm(); loadRules() }
-      else { const d = await res.json(); alert(d.message || "Failed to save") }
-    } catch (e) { console.error(e); alert("Failed to save") } finally { setSaving(false) }
+      else {
+        let msg = "Failed to save rule"
+        try { const d = await res.json(); msg = d.message || msg } catch {}
+        alert(msg)
+      }
+    } catch (e) { console.error(e); alert(e instanceof Error ? e.message : "Failed to save") } finally { setSaving(false) }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this rule?")) return
-    const t = localStorage.getItem("token")!
-    await fetch(`/api/rules/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } })
-    setRules((prev) => prev.filter((r) => r.id !== id))
+    try {
+      await authFetch(`/api/rules/${id}`, { method: "DELETE" })
+      setRules((prev) => prev.filter((r) => r.id !== id))
+    } catch (e) { console.error(e) }
   }
 
   const handleToggle = async (id: string) => {
-    const t = localStorage.getItem("token")!
-    const res = await fetch(`/api/rules/${id}/toggle`, { method: "PATCH", headers: { Authorization: `Bearer ${t}` } })
-    if (res.ok) loadRules()
+    try {
+      const res = await authFetch(`/api/rules/${id}/toggle`, { method: "PATCH" })
+      if (res.ok) loadRules()
+    } catch (e) { console.error(e) }
   }
 
   const getTypeLabel = (type: string) => RULE_TYPES.find((r) => r.value === type)?.label || type

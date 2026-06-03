@@ -14,6 +14,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CsvOrderParserService } from './csv-order-parser.service';
+import { ExcelOrderParserService } from './excel-order-parser.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateBulkOrderDto } from './dto/create-bulk-order.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -31,6 +32,7 @@ export class OrdersController {
   constructor(
     private ordersService: OrdersService,
     private csvParser: CsvOrderParserService,
+    private excelParser: ExcelOrderParserService,
     private deliveryPartnersService: DeliveryPartnersService,
   ) {}
 
@@ -96,6 +98,40 @@ export class OrdersController {
     const shippingAddress = JSON.parse(body.shippingAddress || '{}');
     const result = await this.csvParser.parseAndCreateOrder(
       user.userId,
+      file.buffer,
+      shippingAddress,
+      body.notes,
+    );
+    return result;
+  }
+
+  @Post('bulk-excel')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk order upload via Excel file (sku, quantity, notes)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        shippingAddress: { type: 'object' },
+        notes: { type: 'string' },
+        userId: { type: 'string', description: 'Admin can specify a buyer userId' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async bulkExcel(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { shippingAddress: string; notes?: string; userId?: string },
+    @CurrentUser() user: any,
+  ) {
+    const shippingAddress = JSON.parse(body.shippingAddress || '{}');
+    // Admin can place order on behalf of a buyer by specifying userId
+    const orderUserId = (user.role === UserRole.ADMIN && body.userId) ? body.userId : user.userId;
+    const result = await this.excelParser.parseAndCreateOrder(
+      orderUserId,
       file.buffer,
       shippingAddress,
       body.notes,

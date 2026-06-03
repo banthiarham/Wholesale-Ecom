@@ -10,9 +10,10 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFiles,
+  UploadedFile,
   ForbiddenException,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiParam, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -176,5 +177,19 @@ export class ProductsController {
     const urls = files.map((f) => `/uploads/products/${f.filename}`);
     const product = await this.productsService.addImages(id, urls);
     return { product, uploaded: urls };
+  }
+
+  @Post('bulk-upload-excel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk upload/edit products via Excel file (Admin only)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async bulkUploadExcel(
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const result = await this.productsService.bulkUploadFromExcel(file.buffer);
+    return result;
   }
 }

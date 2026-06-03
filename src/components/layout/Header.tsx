@@ -140,6 +140,7 @@ export default function Header() {
     { href: "/categories", label: t("nav.categories"), icon: BarChart3 },
     { href: "/rfqs", label: t("nav.rfqs"), icon: FileText },
     { href: "/catalogs", label: t("nav.catalogs"), icon: FileText },
+    { href: "/orders/bulk-orders", label: "Bulk Orders", icon: FileText },
   ]
 
   const userLinks = user

@@ -32,6 +32,7 @@ import { RulesModule } from './rules/rules.module';
 import { WalletModule } from './wallet/wallet.module';
 import { BannersModule } from './banners/banners.module';
 import { HomeSectionsModule } from './home-sections/home-sections.module';
+import { BulkOrdersModule } from './bulk-orders/bulk-orders.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { HomeSectionsModule } from './home-sections/home-sections.module';
     WalletModule,
     BannersModule,
     HomeSectionsModule,
+    BulkOrdersModule,
   ],
   controllers: [AppController],
 })

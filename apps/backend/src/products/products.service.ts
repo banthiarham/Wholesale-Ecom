@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -43,7 +43,7 @@ export class ProductsService {
         },
       });
       // Preserve the requested order
-      const orderMap = new Map(filters.ids.map((id: string, i: number) => [id, i]));
+      const orderMap = new Map<string, number>(filters.ids.map((id: string, i: number) => [id, i]));
       return products.sort((a: any, b: any) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
     }
 
@@ -154,5 +154,92 @@ export class ProductsService {
       data,
       include: { category: true, tierPrices: true },
     });
+  }
+
+  async bulkUploadFromExcel(buffer: Buffer) {
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (rows.length === 0) {
+      throw new BadRequestException('Excel file is empty or has no data rows');
+    }
+
+    const results = { created: 0, updated: 0, errors: [] as string[] };
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        const sku = (row.sku || row.SKU || '').toString().trim();
+        const title = (row.title || row.Title || row.name || row.Name || '').toString().trim();
+        const unitPrice = parseFloat(row.unitPrice || row.UnitPrice || row.price || row.Price || '0');
+        const moq = parseInt(row.moq || row.MOQ || row.minQty || row.MinQty || '1', 10);
+        const inventoryQuantity = parseInt(row.inventoryQuantity || row.InventoryQuantity || row.stock || row.Stock || row.qty || '0', 10);
+        const description = (row.description || row.Description || '').toString().trim();
+        const status = (row.status || row.Status || 'PUBLISHED').toString().trim().toUpperCase();
+        const vendorName = (row.vendorName || row.VendorName || '').toString().trim();
+        const categoryId = (row.categoryId || row.CategoryId || '').toString().trim();
+        const tagsStr = (row.tags || row.Tags || '').toString().trim();
+        const tags = tagsStr ? tagsStr.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
+        const compareAtPrice = parseFloat(row.compareAtPrice || row.CompareAtPrice || '0') || null;
+
+        if (!sku || !title || !unitPrice) {
+          results.errors.push(`Row ${i + 2}: Missing required fields (sku, title, unitPrice)`);
+          continue;
+        }
+
+        // Check if product with this SKU already exists
+        const existing = await this.prisma.product.findUnique({ where: { sku } });
+
+        if (existing) {
+          // Update existing product
+          const updateData: any = {
+            title: title || existing.title,
+            unitPrice: unitPrice || existing.unitPrice,
+            moq: moq > 0 ? moq : existing.moq,
+            inventoryQuantity: inventoryQuantity || existing.inventoryQuantity,
+          };
+          if (description) updateData.description = description;
+          if (['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status)) updateData.status = status;
+          if (vendorName) updateData.vendorName = vendorName;
+          if (categoryId) updateData.categoryId = categoryId;
+          if (tags.length > 0) updateData.tags = tags;
+          if (compareAtPrice) updateData.compareAtPrice = compareAtPrice;
+
+          await this.prisma.product.update({
+            where: { id: existing.id },
+            data: updateData,
+          });
+          results.updated++;
+        } else {
+          // Create new product — generate handle from title
+          const handle = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
+
+          await this.prisma.product.create({
+            data: {
+              title,
+              handle,
+              sku,
+              unitPrice,
+              compareAtPrice,
+              moq: moq > 0 ? moq : 1,
+              inventoryQuantity: inventoryQuantity || 0,
+              description: description || null,
+              status: ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status) ? status : 'PUBLISHED',
+              vendorName: vendorName || null,
+              categoryId: categoryId || null,
+              tags,
+            },
+          });
+          results.created++;
+        }
+      } catch (err) {
+        results.errors.push(`Row ${i + 2}: ${err.message}`);
+      }
+    }
+
+    return results;
   }
 }

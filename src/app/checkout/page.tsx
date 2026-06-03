@@ -102,14 +102,16 @@ export default function CheckoutPage() {
   }, [quantityDiscounts])
 
   useEffect(() => {
-    fetch("/api/cart", { cache: "no-store", headers: { "x-session-id": getCartSessionId() } })
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const headers: Record<string, string> = { "x-session-id": getCartSessionId() }
+    if (token) headers["Authorization"] = `Bearer ${token}`
+    fetch("/api/cart", { cache: "no-store", headers })
       .then((res) => res.json())
       .then((data) => {
-        if (data.cart?.items?.length > 0) setCart(data)
+        if (data.cart) setCart(data)
         setLoading(false)
       })
       .catch(() => { setLoading(false) })
-    const token = localStorage.getItem("token")
     if (token) {
       fetch("/api/loyalty/me", { headers: { Authorization: `Bearer ${token}` } })
         .then((res) => res.json())

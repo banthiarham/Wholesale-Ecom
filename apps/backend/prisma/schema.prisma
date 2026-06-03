@@ -92,6 +92,12 @@ enum DeliveryStatus {
   RETURNED
 }
 
+enum BulkOrderStatus {
+  DRAFT
+  PLACED
+  CANCELLED
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -135,6 +141,7 @@ model User {
   wishlistItems   WishlistItem[]
   returnRequests  ReturnRequest[]
   wallet          Wallet?
+  bulkOrders      BulkOrder[]
 
   referralCode    String?  @unique   // unique shareable referral code
   referredBy      String?              // referral code of the referrer
@@ -259,6 +266,7 @@ model Product {
   stockAdjustments StockAdjustment[]
   catalogItems     CatalogItem[]
   wishlistItems    WishlistItem[]
+  bulkOrderItems   BulkOrderItem[]
 
   @@index([handle])
   @@index([status])
@@ -398,6 +406,7 @@ model Order {
   returnRequests ReturnRequest[]
   deliveryTracking  DeliveryTracking?
   shipmentSyncLogs  ShipmentSyncLog[]
+  bulkOrder         BulkOrder?
 
   @@index([userId])
   @@index([status])
@@ -416,6 +425,44 @@ model OrderItem {
   metadata   Json?
 
   @@index([orderId])
+  @@index([productId])
+}
+
+model BulkOrder {
+  id              String          @id @default(uuid())
+  bulkOrderNumber String          @unique
+  userId          String
+  user            User            @relation(fields: [userId], references: [id])
+  status          BulkOrderStatus @default(DRAFT)
+  shippingAddress Json?
+  notes           String?
+  totalAmount     Decimal         @db.Decimal(12, 2) @default(0)
+  orderId         String?         @unique
+  order           Order?          @relation(fields: [orderId], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  items BulkOrderItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([bulkOrderNumber])
+}
+
+model BulkOrderItem {
+  id           String     @id @default(uuid())
+  bulkOrderId  String
+  bulkOrder    BulkOrder  @relation(fields: [bulkOrderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id])
+  sku          String?
+  quantity     Int
+  unitPrice    Decimal    @db.Decimal(12, 2)
+  totalPrice   Decimal    @db.Decimal(12, 2)
+  notes        String?
+  metadata     Json?
+
+  @@index([bulkOrderId])
   @@index([productId])
 }
 
