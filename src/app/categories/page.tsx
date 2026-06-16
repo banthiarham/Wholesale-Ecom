@@ -32,6 +32,8 @@ const categoryMeta: Record<string, { icon: any; gradient: string; accent: string
   electronics: { icon: Cpu, gradient: "from-blue-600 to-cyan-500", accent: "bg-blue-500/20" },
   fashion: { icon: Shirt, gradient: "from-pink-500 to-rose-400", accent: "bg-pink-500/20" },
   industrial: { icon: Wrench, gradient: "from-amber-600 to-orange-500", accent: "bg-amber-500/20" },
+  "home-kitchen": { icon: Utensils, gradient: "from-green-600 to-emerald-500", accent: "bg-green-500/20" },
+  "health-beauty": { icon: Sparkles, gradient: "from-purple-500 to-pink-400", accent: "bg-purple-500/20" },
   food: { icon: Utensils, gradient: "from-green-600 to-emerald-500", accent: "bg-green-500/20" },
   health: { icon: Heart, gradient: "from-red-500 to-pink-500", accent: "bg-red-500/20" },
   books: { icon: BookOpen, gradient: "from-indigo-600 to-violet-500", accent: "bg-indigo-500/20" },

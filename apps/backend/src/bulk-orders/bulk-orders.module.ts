@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
 import { BulkOrdersController } from './bulk-orders.controller';
 import { BulkOrdersService } from './bulk-orders.service';
-import { PricingModule } from '../pricing/pricing.module';
-import { OrdersModule } from '../orders/orders.module';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports: [PricingModule, OrdersModule],
+  imports: [PrismaModule],
   controllers: [BulkOrdersController],
   providers: [BulkOrdersService],
   exports: [BulkOrdersService],

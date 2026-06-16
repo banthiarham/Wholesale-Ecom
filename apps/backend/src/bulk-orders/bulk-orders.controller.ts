@@ -1,132 +1,92 @@
 import {
   Controller,
   Get,
-  Post,
   Put,
-  Delete,
-  Body,
   Param,
+  Body,
   Query,
   UseGuards,
-  UseInterceptors,
-  UploadedFile,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody, ApiConsumes } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { BulkOrdersService } from './bulk-orders.service';
+import { UpdateBulkOrderStatusDto } from './dto/update-bulk-order-status.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { UpdateBulkOrderItemDto } from './dto/update-bulk-order-item.dto';
-import { QuickOrderDto } from './dto/quick-order.dto';
-import { BulkOrderStatus } from '@prisma/client';
+import { UserRole, BulkOrderStatus } from '@prisma/client';
 
 @ApiTags('Bulk Orders')
 @Controller('bulk-orders')
 export class BulkOrdersController {
   constructor(private bulkOrdersService: BulkOrdersService) {}
 
-  @Post('quick-order')
+  @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Quick order: place order by SKU + quantity (no draft)' })
-  async quickOrder(@Body() body: QuickOrderDto, @CurrentUser() user: any) {
-    const result = await this.bulkOrdersService.quickOrder(
-      user.id,
-      body.items,
-      { shippingAddress: body.shippingAddress, notes: body.notes },
-    );
-    return result;
-  }
-
-  @Post('upload-excel')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Upload Excel file to create a draft bulk order' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: { type: 'string', format: 'binary' },
-        shippingAddress: { type: 'object' },
-        notes: { type: 'string' },
-      },
-    },
-  })
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadExcel(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: { shippingAddress: string; notes?: string },
-    @CurrentUser() user: any,
-  ) {
-    const shippingAddress = JSON.parse(body.shippingAddress || '{}');
-    const result = await this.bulkOrdersService.createDraftFromExcel(
-      user.id,
-      file.buffer,
-      shippingAddress,
-      body.notes,
-    );
-    return result;
+  @ApiOperation({ summary: "Get current user's bulk orders" })
+  @ApiResponse({ status: 200, description: 'Bulk orders retrieved' })
+  async findMine(@CurrentUser() user: any) {
+    const bulkOrders = await this.bulkOrdersService.findByUserId(user.id);
+    return { bulkOrders };
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List bulk orders (Buyer sees own, Admin sees all)' })
+  @ApiOperation({ summary: 'List all bulk orders (Admin)' })
   @ApiQuery({ name: 'status', enum: BulkOrderStatus, required: false })
-  async findAll(
-    @CurrentUser() user: any,
-    @Query('status') status?: BulkOrderStatus,
-  ) {
-    const effectiveRole = user.effectiveRole || user.role;
-    const bulkOrders = await this.bulkOrdersService.findAll(user.id, effectiveRole, status);
+  @ApiResponse({ status: 200, description: 'Bulk orders retrieved' })
+  async findAll(@Query('status') status?: BulkOrderStatus) {
+    const bulkOrders = await this.bulkOrdersService.findAll(status);
     return { bulkOrders };
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get bulk order details by ID' })
-  @ApiParam({ name: 'id', description: 'Bulk Order UUID' })
-  async findById(@Param('id') id: string, @CurrentUser() user: any) {
-    const effectiveRole = user.effectiveRole || user.role;
-    const bulkOrder = await this.bulkOrdersService.findById(id, user.id, effectiveRole);
+  @ApiOperation({ summary: 'Get bulk order details (Admin)' })
+  @ApiParam({ name: 'id', description: 'Bulk order UUID' })
+  @ApiResponse({ status: 200, description: 'Bulk order found' })
+  @ApiResponse({ status: 404, description: 'Bulk order not found' })
+  async findById(@Param('id') id: string) {
+    const bulkOrder = await this.bulkOrdersService.findById(id);
     return { bulkOrder };
   }
 
-  @Put(':id/items/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @Put(':id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update quantity of a bulk order item (owner only)' })
-  @ApiParam({ name: 'id', description: 'Bulk Order UUID' })
-  @ApiParam({ name: 'itemId', description: 'Bulk Order Item UUID' })
-  async updateItemQuantity(
+  @ApiOperation({ summary: 'Update bulk order status (Admin)' })
+  @ApiParam({ name: 'id', description: 'Bulk order UUID' })
+  @ApiResponse({ status: 200, description: 'Status updated' })
+  async updateStatus(
     @Param('id') id: string,
-    @Param('itemId') itemId: string,
-    @Body() body: UpdateBulkOrderItemDto,
-    @CurrentUser() user: any,
+    @Body() body: UpdateBulkOrderStatusDto,
   ) {
-    const item = await this.bulkOrdersService.updateItemQuantity(id, itemId, body.quantity, user.id);
-    return { item };
-  }
-
-  @Post(':id/place')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Convert a DRAFT bulk order into a real Order' })
-  @ApiParam({ name: 'id', description: 'Bulk Order UUID' })
-  async placeOrder(@Param('id') id: string, @CurrentUser() user: any) {
-    const result = await this.bulkOrdersService.placeOrder(id, user.id);
-    return result;
-  }
-
-  @Delete(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Cancel a DRAFT bulk order (owner only)' })
-  @ApiParam({ name: 'id', description: 'Bulk Order UUID' })
-  async cancelDraft(@Param('id') id: string, @CurrentUser() user: any) {
-    const bulkOrder = await this.bulkOrdersService.cancelDraft(id, user.id);
+    const bulkOrder = await this.bulkOrdersService.updateStatus(id, body.status);
     return { bulkOrder };
+  }
+
+  @Put(':id/convert')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Convert a draft bulk order to a regular order (Admin)' })
+  @ApiParam({ name: 'id', description: 'Bulk order UUID' })
+  @ApiResponse({ status: 200, description: 'Bulk order converted to order' })
+  async convertToOrder(@Param('id') id: string) {
+    const result = await this.bulkOrdersService.convertToOrder(id);
+    return result;
   }
 }

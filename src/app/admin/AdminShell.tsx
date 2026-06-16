@@ -32,7 +32,7 @@ import {
   Shield,
   DollarSign,
   ClipboardList,
-  Sparkles,
+  PackageOpen,
   Wallet,
   Image,
   LayoutDashboard as LayoutIcon,
@@ -76,7 +76,6 @@ const navGroups: NavGroup[] = [
       { label: "Categories", href: "/admin/categories", icon: Tag },
       { label: "Inventory", href: "/admin/inventory", icon: Warehouse },
       { label: "Bulk Orders", href: "/admin/bulk-orders", icon: ClipboardList },
-      { label: "Addons", href: "/admin/addons", icon: Sparkles },
     ],
   },
   {
