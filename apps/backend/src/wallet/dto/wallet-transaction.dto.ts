@@ -37,10 +37,3 @@ export class DebitWalletDto {
   @IsString()
   referenceId?: string;
 }
-
-export class SetCreditLimitDto {
-  @ApiProperty()
-  @IsNumber()
-  @Min(0)
-  creditLimit: number;
-}
