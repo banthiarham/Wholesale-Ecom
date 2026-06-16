@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { Heart, ShoppingCart, Trash2, Package } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
@@ -137,7 +138,7 @@ export default function WishlistPage() {
                 <Link href={`/products/${p.handle}`}>
                   <div className="relative h-48 bg-gray-100">
                     {p.thumbnail ? (
-                      <img src={p.thumbnail} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <Image src={p.thumbnail} alt={p.title} fill className="object-cover group-hover:scale-105 transition-transform duration-300" sizes="192px" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center"><Package size={40} className="text-gray-300" /></div>
                     )}

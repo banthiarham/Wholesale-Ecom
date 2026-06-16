@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Search, SlidersHorizontal, X, Heart, Flame, Grid3X3, List, ArrowUpDown, ChevronLeft, ChevronRight, Star } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
@@ -432,7 +433,7 @@ function ProductCard({
       <Link href={`/products/${product.handle}`} className="card-base flex group">
         <div className="relative w-48 sm:w-56 flex-shrink-0 bg-gray-50 overflow-hidden">
           {product.thumbnail ? (
-            <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+            <Image src={product.thumbnail} alt={product.title} width={224} height={224} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" sizes="224px" />
           ) : (
             <div className="w-full h-full min-h-[160px] flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
               <Package2Icon size={32} className="text-gray-200" />
@@ -501,7 +502,7 @@ function ProductCard({
     <Link href={`/products/${product.handle}`} className="card-base overflow-hidden group">
       <div className="relative aspect-square bg-gray-50">
         {product.thumbnail ? (
-          <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+          <Image src={product.thumbnail} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
             <Package2Icon size={40} className="text-gray-200" />

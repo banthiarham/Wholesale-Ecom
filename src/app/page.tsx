@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   ShoppingCart,
   Star,
@@ -361,7 +362,7 @@ function DefaultHeroFallback({
               >
                 <div className="relative aspect-square bg-gray-50">
                   {product.thumbnail || product.images?.[0] ? (
-                    <img src={product.thumbnail || product.images[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                    <Image src={product.thumbnail || product.images[0]} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" loading="lazy" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
                       <Package size={32} className="text-gray-200" />

@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, getPaymentOfferLabel } from "@/lib/pricing"
@@ -280,7 +281,9 @@ export default function ProductDetailPage() {
               {/* Main image */}
               <div className="card-base-static overflow-hidden">
                 {mainImage ? (
-                  <img src={mainImage} alt={product.title} className="w-full aspect-square object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+                  <div className="relative w-full aspect-square">
+                    <Image src={mainImage} alt={product.title} fill className="object-cover" sizes="(max-width: 1024px) 100vw, 60vw" priority />
+                  </div>
                 ) : (
                   <div className="w-full aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
                     <Package size={64} className="text-gray-200" />
@@ -292,7 +295,7 @@ export default function ProductDetailPage() {
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {product.images.map((img, idx) => (
                     <button key={idx} onClick={() => setMainImage(img)} className={`flex-shrink-0 w-20 h-20 rounded-xl border-2 overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
-                      <img src={img} alt={`${product.title} ${idx + 1}`} className="w-full h-full object-cover" />
+                      <Image src={img} alt={`${product.title} ${idx + 1}`} width={80} height={80} className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>
@@ -651,7 +654,7 @@ export default function ProductDetailPage() {
                     <Link key={rp.id} href={`/products/${rp.handle}`} className="card-base overflow-hidden group">
                       <div className="relative aspect-square bg-gray-50 overflow-hidden">
                         {rp.thumbnail ? (
-                          <img src={rp.thumbnail} alt={rp.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                          <Image src={rp.thumbnail} alt={rp.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 50vw, 25vw" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center"><Package size={32} className="text-gray-200" /></div>
                         )}

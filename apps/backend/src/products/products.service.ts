@@ -185,14 +185,19 @@ export class ProductsService {
           if (totalSize > MAX_SIZE) { req.destroy(); resolve(null); return; }
           chunks.push(chunk);
         });
-        res.on('end', () => {
+        res.on('end', async () => {
           try {
             const buffer = Buffer.concat(chunks);
             const dir = path.join(process.cwd(), 'uploads', 'products');
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            const ext = contentType.includes('png') ? '.png' : contentType.includes('webp') ? '.webp' : '.jpg';
-            const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-            fs.writeFileSync(path.join(dir, filename), buffer);
+            const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
+            const filePath = path.join(dir, filename);
+            // Resize and convert to WebP
+            const sharp = (await import('sharp')).default;
+            await sharp(buffer)
+              .resize(1200, null, { withoutEnlargement: true, fit: 'inside' })
+              .webp({ quality: 80 })
+              .toFile(filePath);
             resolve(`/uploads/products/${filename}`);
           } catch { resolve(null); }
         });
@@ -310,16 +315,25 @@ export class ProductsService {
           }
         }
 
-        // 2) Save locally-uploaded image files matched by SKU
+        // 2) Save locally-uploaded image files matched by SKU (resize to max 1200px, convert to WebP)
         const skuMatchedFiles = imageFiles.filter(
           (f) => imageMapping[f.originalname] === sku,
         );
         for (const f of skuMatchedFiles) {
-          const ext = path.extname(f.originalname) || '.jpg';
           const dir = path.join(process.cwd(), 'uploads', 'products');
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-          fs.writeFileSync(path.join(dir, filename), f.buffer);
+          const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
+          const filePath = path.join(dir, filename);
+          try {
+            const sharp = (await import('sharp')).default;
+            await sharp(f.buffer)
+              .resize(1200, null, { withoutEnlargement: true, fit: 'inside' })
+              .webp({ quality: 80 })
+              .toFile(filePath);
+          } catch {
+            // Fallback: save original if resize fails
+            fs.writeFileSync(filePath, f.buffer);
+          }
           localImageUrls.push(`/uploads/products/${filename}`);
           results.imagesUploaded++;
         }
