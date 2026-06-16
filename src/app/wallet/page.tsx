@@ -13,6 +13,16 @@ interface WalletTransaction {
   createdAt: string
 }
 
+interface CreditInfo {
+  walletId: string
+  userId: string
+  balance: number
+  creditLimit: number
+  availableCredit: number
+  outstanding: number
+  limitReached: boolean
+}
+
 function isCreditType(type: string): boolean {
   return type === "CREDIT" || type === "CASHBACK" || type === "REFUND" || type === "TOPUP"
 }
@@ -20,6 +30,7 @@ function isCreditType(type: string): boolean {
 export default function WalletPage() {
   const [balance, setBalance] = useState(0)
   const [transactions, setTransactions] = useState<WalletTransaction[]>([])
+  const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [hasWallet, setHasWallet] = useState(true)
 
@@ -32,17 +43,27 @@ export default function WalletPage() {
   const loadWallet = async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/wallets/me", { headers: { Authorization: `Bearer ${token}` } })
-      if (res.status === 404) {
+      const [walletRes, creditRes] = await Promise.all([
+        fetch("/api/wallets/me", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/wallets/me/credit-info", { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+      ])
+
+      if (walletRes.status === 404) {
         setHasWallet(false)
         setLoading(false)
         return
       }
-      const data = await res.json()
-      const wallet = data.wallet
+
+      const walletData = await walletRes.json()
+      const wallet = walletData.wallet
       if (wallet) {
         setBalance(Number(wallet.balance))
         setTransactions(wallet.transactions || [])
+      }
+
+      if (creditRes && creditRes.ok) {
+        const creditData = await creditRes.json()
+        setCreditInfo(creditData.creditInfo)
       }
     } catch (e) {
       console.error(e)
@@ -71,6 +92,11 @@ export default function WalletPage() {
     ADJUSTMENT: MinusCircle,
   }
 
+  const hasCreditLimit = creditInfo && creditInfo.creditLimit > 0
+  const creditUsagePercent = hasCreditLimit
+    ? Math.min(100, Math.round((creditInfo!.outstanding / creditInfo!.creditLimit) * 100))
+    : 0
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Wallet</h1>
@@ -87,10 +113,70 @@ export default function WalletPage() {
       ) : (
         <>
           {/* Balance Card */}
-          <div className="rounded-2xl p-6 mb-4 text-white shadow-lg bg-gradient-to-br from-primary-600 to-primary-700">
-            <p className="text-sm opacity-80 mb-1">Available Balance</p>
-            <p className="text-3xl font-bold">{formatPrice(balance)}</p>
+          <div className={`rounded-2xl p-6 mb-4 text-white shadow-lg ${
+            creditInfo?.limitReached
+              ? "bg-gradient-to-br from-red-500 to-red-600"
+              : "bg-gradient-to-br from-primary-600 to-primary-700"
+          }`}>
+            <p className="text-sm opacity-80 mb-1">
+              {balance >= 0 ? "Available Balance" : "Outstanding Balance"}
+            </p>
+            <p className="text-3xl font-bold">
+              {balance >= 0 ? formatPrice(balance) : `- ${formatPrice(Math.abs(balance))}`}
+            </p>
+            {creditInfo?.limitReached && (
+              <p className="text-sm mt-2 opacity-90">
+                ⚠️ Credit limit reached. Pay your outstanding bills to continue spending.
+              </p>
+            )}
           </div>
+
+          {/* Credit Limit Info */}
+          {hasCreditLimit && creditInfo && (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Credit Limit</h3>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-gray-400">Credit Limit</p>
+                  <p className="text-lg font-bold text-blue-700">{formatPrice(creditInfo.creditLimit)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Available Credit</p>
+                  <p className={`text-lg font-bold ${creditInfo.availableCredit > 0 ? "text-green-700" : "text-red-600"}`}>
+                    {formatPrice(creditInfo.availableCredit)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Outstanding</p>
+                  <p className={`text-lg font-bold ${creditInfo.outstanding > 0 ? "text-red-700" : "text-gray-500"}`}>
+                    {formatPrice(creditInfo.outstanding)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Credit Usage Progress Bar */}
+              <div>
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>Credit Used</span>
+                  <span>{creditUsagePercent}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2.5">
+                  <div
+                    className={`h-2.5 rounded-full transition-all ${
+                      creditUsagePercent >= 90 ? "bg-red-500" : creditUsagePercent >= 70 ? "bg-yellow-500" : "bg-green-500"
+                    }`}
+                    style={{ width: `${creditUsagePercent}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {creditInfo.outstanding > 0 && (
+                <p className="mt-3 text-sm text-red-600">
+                  Pay <span className="font-bold">{formatPrice(creditInfo.outstanding)}</span> to free up your credit limit
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Transaction History */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
