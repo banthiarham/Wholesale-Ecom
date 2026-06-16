@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import { Search, SlidersHorizontal, X, GitCompare, Heart, Flame, Minus, Plus } from "lucide-react"
+import { Search, SlidersHorizontal, X, Heart, Flame, Minus, Plus } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 import { SeasonalDiscount, PaymentOffer, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
@@ -203,17 +203,6 @@ export default function ProductsPage() {
     } catch (err) { console.error(err) }
   }
 
-  const addToCompare = (e: React.MouseEvent, productId: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const stored = localStorage.getItem("compareItems")
-    const items: string[] = stored ? JSON.parse(stored) : []
-    if (items.includes(productId)) return
-    if (items.length >= 4) { alert("Max 4 products to compare"); return }
-    items.push(productId)
-    localStorage.setItem("compareItems", JSON.stringify(items))
-  }
-
   const hasActiveFilters = filters.category || filters.minPrice || filters.maxPrice || filters.inStock
 
   return (
@@ -270,12 +259,6 @@ export default function ProductsPage() {
             <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded-lg border ${hasActiveFilters ? "border-primary-600 text-primary-600" : "border-gray-200 text-gray-600"}`}>
               <SlidersHorizontal size={18} />
             </button>
-            <Link href="/compare" className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:text-primary-600 hover:border-primary-600 transition relative">
-              <GitCompare size={18} />
-              {typeof window !== "undefined" && JSON.parse(localStorage.getItem("compareItems") || "[]").length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-600 text-white text-[10px] rounded-full flex items-center justify-center">{JSON.parse(localStorage.getItem("compareItems") || "[]").length}</span>
-              )}
-            </Link>
           </div>
         </div>
 
@@ -326,9 +309,6 @@ export default function ProductsPage() {
                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={(e) => toggleWishlist(e, product.id)} className={`p-1.5 rounded-full shadow-sm ${wishlistIds.has(product.id) ? "bg-red-50 text-red-500" : "bg-white/90 text-gray-500 hover:text-red-500"}`}>
                         <Heart size={14} fill={wishlistIds.has(product.id) ? "currentColor" : "none"} />
-                      </button>
-                      <button onClick={(e) => addToCompare(e, product.id)} className="p-1.5 rounded-full bg-white/90 text-gray-500 hover:text-primary-600 shadow-sm">
-                        <GitCompare size={14} />
                       </button>
                     </div>
                   </div>
