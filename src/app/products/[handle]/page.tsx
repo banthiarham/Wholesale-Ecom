@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check } from "lucide-react"
-import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { formatPrice, getCartSessionId, getContrastTextColor } from "@/lib/utils"
 import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, getPaymentOfferLabel } from "@/lib/pricing"
 import { useAuth } from "@/lib/auth"
 import { useStorefrontRules } from "@/lib/rules"
@@ -546,7 +546,7 @@ export default function ProductDetailPage() {
                       <>
                         <span className="text-3xl font-bold text-primary-700">{formatPrice(Number(ruleDiscount ? product.unitPrice - ruleDiscount.discountAmount : displayPrice))}</span>
                         {priceLabel && (
-                          <span className="text-sm font-medium px-2.5 py-0.5 rounded-full text-white" style={{ backgroundColor: role?.color || "#7c3aed" }}>{priceLabel} Price</span>
+                          <span className="text-sm font-medium px-2.5 py-0.5 rounded-full" style={{ backgroundColor: role?.color || "#7c3aed", color: getContrastTextColor(role?.color || "#7c3aed") }}>{priceLabel} Price</span>
                         )}
                         {ruleDiscount && Number(product.unitPrice) > (Number(product.unitPrice) - ruleDiscount.discountAmount) && (
                           <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Shield, ArrowLeft, Check, X, Clock } from "lucide-react"
+import { getContrastTextColor } from "@/lib/utils"
 
 interface Role {
   id: string
@@ -182,8 +183,8 @@ export default function RoleRequestPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Current Role</h2>
           <div className="flex items-center gap-3">
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-              style={{ backgroundColor: user?.roleRel?.color || "#6B7280" }}
+              className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm"
+              style={{ backgroundColor: user?.roleRel?.color || "#6B7280", color: getContrastTextColor(user?.roleRel?.color || "#6B7280") }}
             >
               <Shield size={20} />
             </div>
@@ -240,8 +241,8 @@ export default function RoleRequestPage() {
                     <div>
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                          style={{ backgroundColor: selectedRole.color || "#6B7280" }}
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                          style={{ backgroundColor: selectedRole.color || "#6B7280", color: getContrastTextColor(selectedRole.color || "#6B7280") }}
                         >
                           <Shield size={16} />
                         </div>
@@ -312,8 +313,8 @@ export default function RoleRequestPage() {
                 <div key={req.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                      style={{ backgroundColor: req.role?.color || "#6B7280" }}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                      style={{ backgroundColor: req.role?.color || "#6B7280", color: getContrastTextColor(req.role?.color || "#6B7280") }}
                     >
                       <Shield size={16} />
                     </div>

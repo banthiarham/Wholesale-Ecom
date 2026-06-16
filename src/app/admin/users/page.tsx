@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Search, ChevronDown, ChevronUp, Shield, User, Ban, Trash2, X, Plus } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { getContrastTextColor } from "@/lib/utils"
 
 interface RoleData {
   id: string
@@ -277,8 +278,8 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{u.email}</td>
                     <td className="px-4 py-3">
                       <span
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
-                        style={{ backgroundColor: getRoleBadgeColor(u) }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: getRoleBadgeColor(u), color: getContrastTextColor(getRoleBadgeColor(u)) }}
                       >
                         <Shield size={12} />
                         {getRoleLabel(u)}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Minus, Plus, Trash2, Link as LinkIcon, Tag, Gift, Layers, AlertTriangle, Loader2 } from "lucide-react"
 import Link from "next/link"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, getContrastTextColor } from "@/lib/utils"
 
 interface TierPrice { minQty: number; maxQty: number | null; price: string }
 
@@ -129,7 +129,7 @@ export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleP
               )}
               {hasRolePrice && !ruleProductDiscount && (
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="badge text-white" style={{ backgroundColor: "#7c3aed" }}>{appliedRoleName} Price</span>
+                  <span className="badge" style={{ backgroundColor: "#7c3aed", color: getContrastTextColor("#7c3aed") }}>{appliedRoleName} Price</span>
                 </div>
               )}
               {hasDiscount && !ruleProductDiscount && !hasTierPrice && (
