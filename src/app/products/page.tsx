@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import { Search, SlidersHorizontal, X, GitCompare, Heart, Flame, Grid3X3, List, ArrowUpDown, ChevronLeft, ChevronRight, Star } from "lucide-react"
+import { Search, SlidersHorizontal, X, Heart, Flame, Grid3X3, List, ArrowUpDown, ChevronLeft, ChevronRight, Star } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 import { SeasonalDiscount, PaymentOffer, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
@@ -171,17 +171,6 @@ export default function ProductsPage() {
     } catch (err) { console.error(err) }
   }
 
-  const addToCompare = (e: React.MouseEvent, productId: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const stored = localStorage.getItem("compareItems")
-    const items: string[] = stored ? JSON.parse(stored) : []
-    if (items.includes(productId)) return
-    if (items.length >= 4) { alert("Max 4 products to compare"); return }
-    items.push(productId)
-    localStorage.setItem("compareItems", JSON.stringify(items))
-  }
-
   const hasActiveFilters = filters.category || filters.minPrice || filters.maxPrice || filters.inStock
 
   // Sort & paginate visible products
@@ -291,13 +280,6 @@ export default function ProductsPage() {
             <button onClick={() => setShowFilters(!showFilters)} className={`p-2.5 rounded-xl border transition-all ${hasActiveFilters ? "border-primary-300 text-primary-600 bg-primary-50" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
               <SlidersHorizontal size={18} />
             </button>
-            {/* Compare */}
-            <Link href="/compare" className="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:text-primary-600 hover:border-primary-300 transition-all relative">
-              <GitCompare size={18} />
-              {typeof window !== "undefined" && JSON.parse(localStorage.getItem("compareItems") || "[]").length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-600 text-white text-[10px] rounded-full flex items-center justify-center">{JSON.parse(localStorage.getItem("compareItems") || "[]").length}</span>
-              )}
-            </Link>
             {/* View toggle */}
             <div className="hidden sm:flex border border-gray-200 rounded-xl overflow-hidden">
               <button onClick={() => setView("grid")} className={`p-2.5 transition-all ${view === "grid" ? "bg-primary-50 text-primary-600" : "text-gray-400 hover:text-gray-600"}`}>
@@ -352,7 +334,6 @@ export default function ProductsPage() {
                     addingId={addingId}
                     onAddToCart={handleAddToCart}
                     onToggleWishlist={toggleWishlist}
-                    onAddToCompare={addToCompare}
                     t={t}
                   />
                 ))}
@@ -377,7 +358,6 @@ export default function ProductsPage() {
                     addingId={addingId}
                     onAddToCart={handleAddToCart}
                     onToggleWishlist={toggleWishlist}
-                    onAddToCompare={addToCompare}
                     t={t}
                   />
                 ))}
@@ -426,7 +406,7 @@ export default function ProductsPage() {
 function ProductCard({
   product, view, isPriceHidden, isNonPurchasable, nonPurchasableMsg,
   rp, ruleDisc, productBogo, productQtyDisc, disc, paymentOffers,
-  wishlistIds, addingId, onAddToCart, onToggleWishlist, onAddToCompare, t,
+  wishlistIds, addingId, onAddToCart, onToggleWishlist, t,
 }: {
   product: Product
   view: "grid" | "list"
@@ -443,7 +423,6 @@ function ProductCard({
   addingId: string | null
   onAddToCart: (id: string, qty: number) => void
   onToggleWishlist: (e: React.MouseEvent, id: string) => void
-  onAddToCompare: (e: React.MouseEvent, id: string) => void
   t: (key: string) => string
 }) {
   const comparePrice = !!(product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice))
@@ -539,9 +518,6 @@ function ProductCard({
         <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <button onClick={(e) => onToggleWishlist(e, product.id)} className={`p-2 rounded-xl shadow-sm backdrop-blur-sm transition-colors ${wishlistIds.has(product.id) ? "bg-red-50 text-red-500" : "bg-white/90 text-gray-500 hover:text-red-500"}`}>
             <Heart size={14} fill={wishlistIds.has(product.id) ? "currentColor" : "none"} />
-          </button>
-          <button onClick={(e) => onAddToCompare(e, product.id)} className="p-2 rounded-xl bg-white/90 text-gray-500 hover:text-primary-600 shadow-sm backdrop-blur-sm transition-colors">
-            <GitCompare size={14} />
           </button>
         </div>
         {/* Payment offer badge */}

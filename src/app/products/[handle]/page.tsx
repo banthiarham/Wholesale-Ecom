@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { ShoppingCart, Heart, GitCompare, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check } from "lucide-react"
+import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, getPaymentOfferLabel } from "@/lib/pricing"
 import { useAuth } from "@/lib/auth"
@@ -163,17 +163,6 @@ export default function ProductDetailPage() {
         if (res.ok) setInWishlist(true)
       }
     } catch (err) { console.error(err) } finally { setWishlistLoading(false) }
-  }
-
-  const addToCompare = () => {
-    if (!product) return
-    const stored = localStorage.getItem("compareItems")
-    const items: string[] = stored ? JSON.parse(stored) : []
-    if (!items.includes(product.id)) {
-      if (items.length >= 4) { alert("Max 4 products to compare."); return }
-      items.push(product.id)
-      localStorage.setItem("compareItems", JSON.stringify(items))
-    }
   }
 
   const checkUserReview = (productId: string) => {
@@ -622,9 +611,6 @@ export default function ProductDetailPage() {
                       <div className="flex gap-3">
                         <button onClick={toggleWishlist} disabled={wishlistLoading} className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-sm font-medium ${inWishlist ? "border-red-200 text-red-600 bg-red-50 hover:bg-red-100" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
                           <Heart size={16} fill={inWishlist ? "currentColor" : "none"} /> {inWishlist ? "Saved" : "Wishlist"}
-                        </button>
-                        <button onClick={addToCompare} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all text-sm font-medium">
-                          <GitCompare size={16} /> Compare
                         </button>
                       </div>
                     </>
