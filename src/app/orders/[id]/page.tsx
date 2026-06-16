@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
-import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation, ExternalLink, Circle, Clock } from "lucide-react"
-import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { ArrowLeft, Package, Truck, MapPin, CreditCard, Receipt, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation, ExternalLink, Circle, Clock } from "lucide-react"
+import { formatPrice, getCartSessionId, formatAddress } from "@/lib/utils"
 
 interface OrderDetail {
   id: string
@@ -335,11 +335,26 @@ export default function OrderDetailPage() {
             </div>
             {order.shippingAddress ? (
               <div className="text-sm text-gray-700 space-y-1">
-                <p>{order.shippingAddress.street}</p>
-                <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}</p>
-                <p>{order.shippingAddress.country}</p>
+                {formatAddress(order.shippingAddress as any)?.map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
               </div>
             ) : <p className="text-sm text-gray-500">No shipping address provided</p>}
+
+            {/* Billing Address (shown if different from shipping) */}
+            {order.billingAddress && JSON.stringify(order.billingAddress) !== JSON.stringify(order.shippingAddress) && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <Receipt className="text-primary-600" size={16} />
+                  <h3 className="font-medium text-gray-900 text-sm">Billing Address</h3>
+                </div>
+                <div className="text-sm text-gray-700 space-y-1">
+                  {formatAddress(order.billingAddress as any)?.map((line, i) => (
+                    <p key={i}>{line}</p>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">

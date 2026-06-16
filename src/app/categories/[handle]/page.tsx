@@ -19,6 +19,8 @@ import {
   Paintbrush,
   Filter,
   Flame,
+  Minus,
+  Plus,
 } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
@@ -54,6 +56,8 @@ const categoryMeta: Record<string, { icon: any; gradient: string }> = {
   electronics: { icon: Cpu, gradient: "from-blue-600 to-cyan-500" },
   fashion: { icon: Shirt, gradient: "from-pink-500 to-rose-400" },
   industrial: { icon: Wrench, gradient: "from-amber-600 to-orange-500" },
+  "home-kitchen": { icon: Utensils, gradient: "from-green-600 to-emerald-500" },
+  "health-beauty": { icon: Sparkles, gradient: "from-purple-500 to-pink-400" },
   food: { icon: Utensils, gradient: "from-green-600 to-emerald-500" },
   health: { icon: Heart, gradient: "from-red-500 to-pink-500" },
   books: { icon: BookOpen, gradient: "from-indigo-600 to-violet-500" },
@@ -73,6 +77,7 @@ export default function CategoryPage() {
   const [category, setCategory] = useState<Category | null>(null)
   const [loading, setLoading] = useState(true)
   const [addingId, setAddingId] = useState<string | null>(null)
+  const [cartQtys, setCartQtys] = useState<Record<string, number>>({})
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
 
   useEffect(() => {
@@ -92,6 +97,41 @@ export default function CategoryPage() {
         body: JSON.stringify({ productId, quantity: qty }),
       })
       window.dispatchEvent(new CustomEvent("cart-updated"))
+      setCartQtys((prev) => ({ ...prev, [productId]: (prev[productId] || 0) + qty }))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAddingId(null)
+    }
+  }
+
+  const updateCartQty = async (productId: string, newQty: number, moq: number) => {
+    if (newQty < moq) {
+      // Remove from cart / reset
+      try {
+        await fetch("/api/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
+          body: JSON.stringify({ productId, quantity: 0 }),
+        })
+        window.dispatchEvent(new CustomEvent("cart-updated"))
+      } catch { /* ignore */ }
+      setCartQtys((prev) => {
+        const next = { ...prev }
+        delete next[productId]
+        return next
+      })
+      return
+    }
+    setAddingId(productId)
+    try {
+      await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
+        body: JSON.stringify({ productId, quantity: newQty }),
+      })
+      window.dispatchEvent(new CustomEvent("cart-updated"))
+      setCartQtys((prev) => ({ ...prev, [productId]: newQty }))
     } catch (err) {
       console.error(err)
     } finally {
@@ -179,7 +219,7 @@ export default function CategoryPage() {
                 href={`/products/${product.handle}`}
                 className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all group"
               >
-                <div className="relative h-48 bg-gray-100">
+                <div className="relative h-48 bg-gray-100 overflow-hidden">
                   {product.thumbnail || product.images?.[0] ? (
                     <img
                       src={product.thumbnail || product.images[0]}
@@ -242,17 +282,37 @@ export default function CategoryPage() {
                       </>
                     )}
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault()
-                      if (product.inventoryQuantity > 0) handleAddToCart(product.id, product.moq)
-                    }}
-                    disabled={addingId === product.id || product.inventoryQuantity <= 0}
-                    className="w-full py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    <ShoppingCart size={16} />
-                    {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? "Out of Stock" : `Add ${product.moq} to Cart`}
-                  </button>
+                  {cartQtys[product.id] ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.preventDefault(); updateCartQty(product.id, cartQtys[product.id] - product.moq, product.moq) }}
+                        disabled={addingId === product.id}
+                        className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <span className="flex-1 text-center font-bold text-gray-900 tabular-nums">{cartQtys[product.id]}</span>
+                      <button
+                        onClick={(e) => { e.preventDefault(); updateCartQty(product.id, cartQtys[product.id] + product.moq, product.moq) }}
+                        disabled={addingId === product.id}
+                        className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (product.inventoryQuantity > 0) handleAddToCart(product.id, product.moq)
+                      }}
+                      disabled={addingId === product.id || product.inventoryQuantity <= 0}
+                      className="w-full py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <ShoppingCart size={16} />
+                      {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? "Out of Stock" : "Add to Cart"}
+                    </button>
+                  )}
                 </div>
               </Link>
             ))}

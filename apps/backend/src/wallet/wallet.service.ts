@@ -5,136 +5,187 @@ import { PrismaService } from '../prisma/prisma.service';
 export class WalletService {
   constructor(private prisma: PrismaService) {}
 
-  async getOrCreateWallet(userId: string) {
-    let wallet = await this.prisma.wallet.findUnique({ where: { userId } });
-    if (!wallet) {
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
-      if (!user) throw new NotFoundException(`User ${userId} not found`);
-      wallet = await this.prisma.wallet.create({ data: { userId } });
-    }
+  async findByUserId(userId: string) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+      include: {
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!wallet) throw new NotFoundException('Wallet not found for this user');
     return wallet;
   }
 
-  async getBalance(userId: string) {
-    const wallet = await this.getOrCreateWallet(userId);
-    return { balance: wallet.balance, walletId: wallet.id };
-  }
-
-  async getTransactions(userId: string, limit = 50, offset = 0) {
-    const wallet = await this.getOrCreateWallet(userId);
-    const transactions = await this.prisma.walletTransaction.findMany({
-      where: { walletId: wallet.id },
+  async findAll() {
+    return this.prisma.wallet.findMany({
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
       orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
     });
-    const total = await this.prisma.walletTransaction.count({ where: { walletId: wallet.id } });
-    return { transactions, total };
   }
 
-  async topup(userId: string, amount: number, description?: string, referenceId?: string, createdBy?: string) {
-    const wallet = await this.getOrCreateWallet(userId);
-    const newBalance = Number(wallet.balance) + amount;
+  async findById(id: string) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+      },
+    });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+    return wallet;
+  }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: newBalance },
-      });
+  async getTransactions(walletId: string) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    return this.prisma.walletTransaction.findMany({
+      where: { walletId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getCreditInfo(walletId: string) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { id: walletId },
+      include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+    });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    const balance = Number(wallet.balance);
+    const creditLimit = Number(wallet.creditLimit);
+    const availableCredit = balance + creditLimit;
+    const outstanding = balance < 0 ? Math.abs(balance) : 0;
+
+    return {
+      walletId: wallet.id,
+      userId: wallet.userId,
+      balance,
+      creditLimit,
+      availableCredit: Math.max(0, availableCredit),
+      outstanding,
+      limitReached: availableCredit <= 0,
+    };
+  }
+
+  async getCreditInfoByUserId(userId: string) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found for this user');
+
+    const balance = Number(wallet.balance);
+    const creditLimit = Number(wallet.creditLimit);
+    const availableCredit = balance + creditLimit;
+    const outstanding = balance < 0 ? Math.abs(balance) : 0;
+
+    return {
+      walletId: wallet.id,
+      userId: wallet.userId,
+      balance,
+      creditLimit,
+      availableCredit: Math.max(0, availableCredit),
+      outstanding,
+      limitReached: availableCredit <= 0,
+    };
+  }
+
+  async credit(walletId: string, amount: number, description?: string) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    const currentBalance = Number(wallet.balance);
+    const newBalance = currentBalance + amount;
+
+    return this.prisma.$transaction(async (tx) => {
       const transaction = await tx.walletTransaction.create({
         data: {
-          walletId: wallet.id,
-          type: 'TOPUP',
+          walletId,
+          type: 'CREDIT',
           amount,
           balance: newBalance,
-          description: description || 'Wallet top-up',
-          referenceId,
-          createdBy,
+          description: description || 'Admin credit',
         },
       });
-      return { wallet: updated, transaction };
-    });
 
-    return result;
-  }
-
-  async deduct(userId: string, amount: number, description?: string, referenceId?: string, createdBy?: string) {
-    const wallet = await this.getOrCreateWallet(userId);
-    if (Number(wallet.balance) < amount) {
-      throw new BadRequestException(`Insufficient wallet balance. Available: ${wallet.balance}, Requested: ${amount}`);
-    }
-    const newBalance = Number(wallet.balance) - amount;
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.wallet.update({
-        where: { id: wallet.id },
+      const updatedWallet = await tx.wallet.update({
+        where: { id: walletId },
         data: { balance: newBalance },
-      });
-      const transaction = await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: 'DEDUCTION',
-          amount: -amount,
-          balance: newBalance,
-          description: description || 'Wallet deduction',
-          referenceId,
-          createdBy,
+        include: {
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
         },
       });
-      return { wallet: updated, transaction };
-    });
 
-    return result;
+      return { wallet: updatedWallet, transaction };
+    });
   }
 
-  async adjust(userId: string, amount: number, description?: string, createdBy?: string) {
-    const wallet = await this.getOrCreateWallet(userId);
+  async debit(walletId: string, amount: number, description?: string, referenceId?: string) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
     const currentBalance = Number(wallet.balance);
-    const difference = amount - currentBalance;
-    const type = difference >= 0 ? 'ADJUSTMENT' : 'ADJUSTMENT';
+    const creditLimit = Number(wallet.creditLimit);
+    const availableCredit = currentBalance + creditLimit;
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: amount },
-      });
+    if (amount > availableCredit) {
+      if (creditLimit > 0) {
+        throw new BadRequestException(
+          `Credit limit exceeded. Available credit: ${availableCredit}, requested: ${amount}`,
+        );
+      }
+      throw new BadRequestException('Insufficient wallet balance');
+    }
+
+    const newBalance = currentBalance - amount;
+
+    return this.prisma.$transaction(async (tx) => {
       const transaction = await tx.walletTransaction.create({
         data: {
-          walletId: wallet.id,
-          type,
-          amount: difference,
-          balance: amount,
-          description: description || `Balance adjusted from ${currentBalance} to ${amount}`,
-          createdBy,
+          walletId,
+          type: 'DEBIT',
+          amount,
+          balance: newBalance,
+          description: description || 'Admin debit',
+          referenceId: referenceId || null,
         },
       });
-      return { wallet: updated, transaction };
-    });
 
-    return result;
+      const updatedWallet = await tx.wallet.update({
+        where: { id: walletId },
+        data: { balance: newBalance },
+        include: {
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
+      });
+
+      return { wallet: updatedWallet, transaction };
+    });
   }
 
-  async findAll(page = 1, limit = 20) {
-    const skip = (page - 1) * limit;
-    const [wallets, total] = await Promise.all([
-      this.prisma.wallet.findMany({
-        include: { user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } } },
-        orderBy: { updatedAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.wallet.count(),
-    ]);
-    return { wallets, total, page, limit };
-  }
+  async setCreditLimit(walletId: string, creditLimit: number) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
 
-  async getWalletByUserId(userId: string) {
-    const wallet = await this.getOrCreateWallet(userId);
-    const transactions = await this.prisma.walletTransaction.findMany({
-      where: { walletId: wallet.id },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+    // Validate that the new limit doesn't make current balance invalid
+    const currentBalance = Number(wallet.balance);
+    if (currentBalance < 0 && Math.abs(currentBalance) > creditLimit) {
+      throw new BadRequestException(
+        `Cannot set credit limit to ${creditLimit}. Current outstanding balance is ${Math.abs(currentBalance)}, which exceeds the new limit. User must pay ₹${Math.abs(currentBalance) - creditLimit} first.`,
+      );
+    }
+
+    return this.prisma.wallet.update({
+      where: { id: walletId },
+      data: { creditLimit },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
     });
-    return { wallet, transactions };
   }
 }

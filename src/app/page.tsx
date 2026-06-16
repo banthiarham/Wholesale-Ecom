@@ -240,7 +240,7 @@ export default function Home() {
             <CategoryIconStrip />
 
             {/* ── Top Selling per category ── */}
-            {categories.slice(0, 3).map((cat) => (
+            {categories.map((cat) => (
               <TopSellingSection
                 key={cat.id}
                 sectionId={`default-${cat.id}`}

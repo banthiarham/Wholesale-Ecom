@@ -303,7 +303,7 @@ export default function ProductDetailPage() {
           {/* Images */}
           <div className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm">
             {mainImage ? (
-              <img src={mainImage} alt={product.title} className="w-full h-96 object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <img src={mainImage} alt={product.title} className="w-full h-96 object-cover" />
             ) : (
               <div className="w-full h-96 bg-gray-100 flex items-center justify-center"><Package size={64} className="text-gray-300" /></div>
             )}

@@ -25,6 +25,8 @@ import {
   GitCompare,
   Star,
   Shield,
+  PackageOpen,
+  Wallet,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
@@ -140,7 +142,6 @@ export default function Header() {
     { href: "/categories", label: t("nav.categories"), icon: BarChart3 },
     { href: "/rfqs", label: t("nav.rfqs"), icon: FileText },
     { href: "/catalogs", label: t("nav.catalogs"), icon: FileText },
-    { href: "/orders/bulk-orders", label: "Bulk Orders", icon: FileText },
   ]
 
   const userLinks = user
@@ -156,6 +157,8 @@ export default function Header() {
         { href: "/account/reviews", label: "My Reviews", icon: Star },
         { href: "/compare", label: "Compare", icon: GitCompare },
         { href: "/loyalty", label: t("nav.loyalty"), icon: Heart },
+        { href: "/bulk-orders", label: "Bulk Orders", icon: PackageOpen },
+        { href: "/wallet", label: "Wallet", icon: Wallet },
         { href: "/notifications", label: t("nav.notifications"), icon: Bell },
       ].filter((link) => {
         if (!("permission" in link)) return true

@@ -1,92 +1,131 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+} from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
-import { TopupDto } from './dto/topup.dto';
-import { DeductDto } from './dto/deduct.dto';
-import { AdjustDto } from './dto/adjust.dto';
+import { CreditWalletDto, DebitWalletDto, SetCreditLimitDto } from './dto/wallet-transaction.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 
-@ApiTags('Wallet')
-@Controller('wallet')
+@ApiTags('Wallets')
+@Controller('wallets')
 export class WalletController {
-  constructor(private readonly walletService: WalletService) {}
+  constructor(private walletService: WalletService) {}
 
-  @Get('balance')
+  @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user wallet balance' })
-  async getBalance(@CurrentUser('id') userId: string) {
-    return this.walletService.getBalance(userId);
+  @ApiOperation({ summary: "Get current user's wallet with transactions" })
+  @ApiResponse({ status: 200, description: 'Wallet found' })
+  @ApiResponse({ status: 404, description: 'Wallet not found' })
+  async findMyWallet(@CurrentUser() user: any) {
+    const wallet = await this.walletService.findByUserId(user.id);
+    return { wallet };
   }
 
-  @Get('transactions')
+  @Get('me/credit-info')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user wallet transactions' })
-  @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'offset', required: false })
-  async getTransactions(
-    @CurrentUser('id') userId: string,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
-    return this.walletService.getTransactions(userId, limit ? Number(limit) : 50, offset ? Number(offset) : 0);
+  @ApiOperation({ summary: "Get current user's credit info (limit, available, outstanding)" })
+  @ApiResponse({ status: 200, description: 'Credit info retrieved' })
+  async getMyCreditInfo(@CurrentUser() user: any) {
+    const info = await this.walletService.getCreditInfoByUserId(user.id);
+    return { creditInfo: info };
   }
 
-  @Get('admin')
+  @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all wallets (Admin only)' })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  async findAll(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.walletService.findAll(page ? Number(page) : 1, limit ? Number(limit) : 20);
+  @ApiOperation({ summary: 'List all wallets (Admin)' })
+  @ApiResponse({ status: 200, description: 'Wallets retrieved' })
+  async findAll() {
+    const wallets = await this.walletService.findAll();
+    return { wallets };
   }
 
-  @Get('admin/:userId')
+  @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get user wallet details (Admin only)' })
-  async getWalletByUserId(@Param('userId') userId: string) {
-    return this.walletService.getWalletByUserId(userId);
+  @ApiOperation({ summary: 'Get wallet details with recent transactions (Admin)' })
+  @ApiParam({ name: 'id', description: 'Wallet UUID' })
+  @ApiResponse({ status: 200, description: 'Wallet found' })
+  @ApiResponse({ status: 404, description: 'Wallet not found' })
+  async findById(@Param('id') id: string) {
+    const wallet = await this.walletService.findById(id);
+    return { wallet };
   }
 
-  @Post('topup')
+  @Get(':id/credit-info')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Top up wallet (Admin only)' })
-  async topup(@Body() dto: TopupDto, @CurrentUser('id') adminId: string) {
-    const result = await this.walletService.topup(dto.userId, dto.amount, dto.description, dto.referenceId, adminId);
+  @ApiOperation({ summary: 'Get wallet credit info (Admin)' })
+  @ApiParam({ name: 'id', description: 'Wallet UUID' })
+  async getCreditInfo(@Param('id') id: string) {
+    const info = await this.walletService.getCreditInfo(id);
+    return { creditInfo: info };
+  }
+
+  @Get(':id/transactions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get wallet transaction history (Admin)' })
+  @ApiParam({ name: 'id', description: 'Wallet UUID' })
+  @ApiResponse({ status: 200, description: 'Transactions retrieved' })
+  async getTransactions(@Param('id') id: string) {
+    const transactions = await this.walletService.getTransactions(id);
+    return { transactions };
+  }
+
+  @Post('credit')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Credit (top-up) a wallet (Admin)' })
+  @ApiResponse({ status: 200, description: 'Wallet credited' })
+  async credit(@Body() body: CreditWalletDto) {
+    const result = await this.walletService.credit(body.walletId, body.amount, body.description);
     return result;
   }
 
-  @Post('deduct')
+  @Post('debit')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Deduct from wallet (Admin only)' })
-  async deduct(@Body() dto: DeductDto, @CurrentUser('id') adminId: string) {
-    const result = await this.walletService.deduct(dto.userId, dto.amount, dto.description, dto.referenceId, adminId);
+  @ApiOperation({ summary: 'Debit (deduct) from a wallet (Admin)' })
+  @ApiResponse({ status: 200, description: 'Wallet debited' })
+  async debit(@Body() body: DebitWalletDto) {
+    const result = await this.walletService.debit(body.walletId, body.amount, body.description, body.referenceId);
     return result;
   }
 
-  @Post('adjust')
+  @Put(':id/credit-limit')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Adjust wallet balance (Admin only)' })
-  async adjust(@Body() dto: AdjustDto, @CurrentUser('id') adminId: string) {
-    const result = await this.walletService.adjust(dto.userId, dto.amount, dto.description, adminId);
-    return result;
+  @ApiOperation({ summary: 'Set credit limit for a wallet (Admin)' })
+  @ApiParam({ name: 'id', description: 'Wallet UUID' })
+  @ApiResponse({ status: 200, description: 'Credit limit updated' })
+  async setCreditLimit(@Param('id') id: string, @Body() body: SetCreditLimitDto) {
+    const wallet = await this.walletService.setCreditLimit(id, body.creditLimit);
+    return { wallet };
   }
 }

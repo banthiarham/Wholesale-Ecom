@@ -29,10 +29,10 @@ import { RolesModule } from './roles/roles.module';
 import { RolePricesModule } from './role-prices/role-prices.module';
 import { RoleRequestsModule } from './role-requests/role-requests.module';
 import { RulesModule } from './rules/rules.module';
-import { WalletModule } from './wallet/wallet.module';
 import { BannersModule } from './banners/banners.module';
 import { HomeSectionsModule } from './home-sections/home-sections.module';
 import { BulkOrdersModule } from './bulk-orders/bulk-orders.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -68,10 +68,10 @@ import { BulkOrdersModule } from './bulk-orders/bulk-orders.module';
     RolePricesModule,
     RoleRequestsModule,
     RulesModule,
-    WalletModule,
     BannersModule,
     HomeSectionsModule,
     BulkOrdersModule,
+    WalletModule,
   ],
   controllers: [AppController],
 })

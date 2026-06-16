@@ -119,7 +119,7 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
             return (
               <div key={product.id} className="min-w-[200px] sm:min-w-[220px] lg:min-w-[240px] bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition group flex-shrink-0">
                 <Link href={`/products/${product.handle}`}>
-                  <div className="relative h-40 bg-gray-100">
+                  <div className="relative h-40 bg-gray-100 overflow-hidden">
                     {product.thumbnail || product.images?.[0] ? (
                       <img src={product.thumbnail || product.images[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     ) : (

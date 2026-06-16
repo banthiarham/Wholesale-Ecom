@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import { Search, SlidersHorizontal, X, GitCompare, Heart, Flame } from "lucide-react"
+import { Search, SlidersHorizontal, X, GitCompare, Heart, Flame, Minus, Plus } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 import { SeasonalDiscount, PaymentOffer, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
@@ -41,6 +41,7 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [addingId, setAddingId] = useState<string | null>(null)
+  const [cartQtys, setCartQtys] = useState<Record<string, number>>({})
   const [filters, setFilters] = useState({ category: "", minPrice: "", maxPrice: "", inStock: false })
   const [showFilters, setShowFilters] = useState(false)
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set())
@@ -143,7 +144,42 @@ export default function ProductsPage() {
         body: JSON.stringify({ productId, quantity: qty }),
       })
       window.dispatchEvent(new CustomEvent("cart-updated"))
-      alert(t("products.addToCart"))
+      setCartQtys((prev) => ({ ...prev, [productId]: (prev[productId] || 0) + qty }))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAddingId(null)
+    }
+  }
+
+  const updateCartQty = async (productId: string, newQty: number, moq: number) => {
+    if (newQty < moq) {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+        const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
+        if (token) headers["Authorization"] = `Bearer ${token}`
+        await fetch("/api/cart", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ productId, quantity: 0 }),
+        })
+        window.dispatchEvent(new CustomEvent("cart-updated"))
+      } catch { /* ignore */ }
+      setCartQtys((prev) => { const next = { ...prev }; delete next[productId]; return next })
+      return
+    }
+    setAddingId(productId)
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+      const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+      await fetch("/api/cart", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ productId, quantity: newQty }),
+      })
+      window.dispatchEvent(new CustomEvent("cart-updated"))
+      setCartQtys((prev) => ({ ...prev, [productId]: newQty }))
     } catch (err) {
       console.error(err)
     } finally {
@@ -268,9 +304,9 @@ export default function ProductsPage() {
                 return (
               <div key={product.id} className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition group">
                 <Link href={`/products/${product.handle}`}>
-                  <div className="h-48 bg-gray-100 relative">
+                  <div className="h-48 bg-gray-100 relative overflow-hidden">
                     {product.thumbnail ? (
-                      <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      <img src={product.thumbnail} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
                     )}
@@ -353,13 +389,33 @@ export default function ProductsPage() {
                     <span className="text-yellow-500 text-sm">{"★".repeat(Math.round(product.rating))}</span>
                     <span className="text-xs text-gray-500">({product.rating})</span>
                   </div>
-                  <button
-                    onClick={() => handleAddToCart(product.id, product.moq)}
-                    disabled={addingId === product.id || product.inventoryQuantity <= 0 || isNonPurchasable}
-                    className="mt-4 w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
-                  >
-                    {isNonPurchasable ? (nonPurchasableMsg || "Not Available") : addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? t("product.outOfStock") : t("product.addToCart")}
-                  </button>
+                  {cartQtys[product.id] ? (
+                    <div className="mt-4 flex items-center gap-2">
+                      <button
+                        onClick={() => updateCartQty(product.id, cartQtys[product.id] - product.moq, product.moq)}
+                        disabled={addingId === product.id}
+                        className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <span className="flex-1 text-center font-bold text-gray-900 tabular-nums">{cartQtys[product.id]}</span>
+                      <button
+                        onClick={() => updateCartQty(product.id, cartQtys[product.id] + product.moq, product.moq)}
+                        disabled={addingId === product.id}
+                        className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleAddToCart(product.id, product.moq)}
+                      disabled={addingId === product.id || product.inventoryQuantity <= 0 || isNonPurchasable}
+                      className="mt-4 w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isNonPurchasable ? (nonPurchasableMsg || "Not Available") : addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? t("product.outOfStock") : t("product.addToCart")}
+                    </button>
+                  )}
                 </div>
               </div>
             )

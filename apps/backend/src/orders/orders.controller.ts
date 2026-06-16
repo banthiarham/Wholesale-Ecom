@@ -16,7 +16,6 @@ import { OrdersService } from './orders.service';
 import { CsvOrderParserService } from './csv-order-parser.service';
 import { ExcelOrderParserService } from './excel-order-parser.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { CreateBulkOrderDto } from './dto/create-bulk-order.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -58,85 +57,6 @@ export class OrdersController {
       },
     );
     return { order };
-  }
-
-  @Post('bulk')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a bulk order (Admin only)' })
-  @ApiResponse({ status: 201, description: 'Bulk order created' })
-  async createBulk(@Body() body: CreateBulkOrderDto) {
-    const result = await this.ordersService.createFromBulk(body.userId, body.items, {
-      shippingAddress: body.shippingAddress,
-      notes: body.notes,
-    });
-    return result;
-  }
-
-  @Post('bulk-csv')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk order upload via CSV (sku, quantity, notes)' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: { type: 'string', format: 'binary' },
-        shippingAddress: { type: 'object' },
-        notes: { type: 'string' },
-      },
-    },
-  })
-  @UseInterceptors(FileInterceptor('file'))
-  async bulkCsv(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: { shippingAddress: string; notes?: string },
-    @CurrentUser() user: any,
-  ) {
-    const shippingAddress = JSON.parse(body.shippingAddress || '{}');
-    const result = await this.csvParser.parseAndCreateOrder(
-      user.id,
-      file.buffer,
-      shippingAddress,
-      body.notes,
-    );
-    return result;
-  }
-
-  @Post('bulk-excel')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk order upload via Excel file (sku, quantity, notes)' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: { type: 'string', format: 'binary' },
-        shippingAddress: { type: 'object' },
-        notes: { type: 'string' },
-        userId: { type: 'string', description: 'Admin can specify a buyer userId' },
-      },
-    },
-  })
-  @UseInterceptors(FileInterceptor('file'))
-  async bulkExcel(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: { shippingAddress: string; notes?: string; userId?: string },
-    @CurrentUser() user: any,
-  ) {
-    const shippingAddress = JSON.parse(body.shippingAddress || '{}');
-    // Admin can place order on behalf of a buyer by specifying userId
-    const orderUserId = (user.role === UserRole.ADMIN && body.userId) ? body.userId : user.id;
-    const result = await this.excelParser.parseAndCreateOrder(
-      orderUserId,
-      file.buffer,
-      shippingAddress,
-      body.notes,
-    );
-    return result;
   }
 
   @Get()

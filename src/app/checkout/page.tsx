@@ -3,8 +3,9 @@
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck } from "lucide-react"
-import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { ArrowLeft, MapPin, CreditCard, Receipt, Tag, Smartphone, Banknote, Shield, Gift, AlertTriangle, Percent, Layers, Truck, Wallet } from "lucide-react"
+import { formatPrice, getCartSessionId, COUNTRIES } from "@/lib/utils"
+import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
 import { useStorefrontRules } from "@/lib/rules"
 
 interface CartItem {
@@ -15,10 +16,6 @@ interface CartItem {
 interface CartData {
   cart: { id: string; items: CartItem[] }
   totals: { subtotal: number; itemCount: number; tax: number; shipping: number; total: number }
-}
-
-interface LoyaltyData {
-  points: number; walletBalance: number; tier: string
 }
 
 interface EnabledGateway {
@@ -45,28 +42,31 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   PAYU: "Cards, UPI, NetBanking",
 }
 
-type PaymentMethod = "COD" | "ONLINE"
+type PaymentMethod = "COD" | "ONLINE" | "WALLET"
 
 export default function CheckoutPage() {
   const router = useRouter()
   const [cart, setCart] = useState<CartData | null>(null)
   const [loading, setLoading] = useState(true)
   const [placing, setPlacing] = useState(false)
-  const [address, setAddress] = useState({ street: "", city: "", state: "", zip: "", country: "India" })
+  const [address, setAddress] = useState({ fullName: "", phone: "", email: "", street: "", apartment: "", landmark: "", city: "", state: "", zip: "", country: "India" })
+  const [billingSameAsShipping, setBillingSameAsShipping] = useState(true)
+  const [billingAddress, setBillingAddress] = useState({ fullName: "", phone: "", email: "", street: "", apartment: "", landmark: "", city: "", state: "", zip: "", country: "India" })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [billingErrors, setBillingErrors] = useState<Record<string, string>>({})
+  const [pincodeLoading, setPincodeLoading] = useState(false)
+  const [billingPincodeLoading, setBillingPincodeLoading] = useState(false)
+  const [pincodeLocations, setPincodeLocations] = useState<{ name: string; district: string; state: string; block: string }[]>([])
+  const [billingPincodeLocations, setBillingPincodeLocations] = useState<{ name: string; district: string; state: string; block: string }[]>([])
   const [couponCode, setCouponCode] = useState("")
   const [couponDiscount, setCouponDiscount] = useState(0)
   const [couponError, setCouponError] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD")
   const [selectedProvider, setSelectedProvider] = useState<string>("")
   const [gateways, setGateways] = useState<EnabledGateway[]>([])
+  const [walletCreditInfo, setWalletCreditInfo] = useState<{ availableCredit: number; balance: number; creditLimit: number; outstanding: number; walletId: string; limitReached: boolean } | null>(null)
   const [redirectData, setRedirectData] = useState<{ url: string; method: string; params: Record<string, string> } | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
-  const [loyalty, setLoyalty] = useState<LoyaltyData | null>(null)
-  const [useWallet, setUseWallet] = useState(false)
-  const [walletAmount, setWalletAmount] = useState(0)
-  const [usePoints, setUsePoints] = useState(false)
-  const [pointsToRedeem, setPointsToRedeem] = useState(0)
-  const [pointsRedeeming, setPointsRedeeming] = useState(false)
 
   // Evaluate dynamic rules for checkout
   const cartItemsForRules = useMemo(
@@ -112,12 +112,6 @@ export default function CheckoutPage() {
         setLoading(false)
       })
       .catch(() => { setLoading(false) })
-    if (token) {
-      fetch("/api/loyalty/me", { headers: { Authorization: `Bearer ${token}` } })
-        .then((res) => res.json())
-        .then((data) => { if (data.points !== undefined) setLoyalty(data) })
-        .catch(() => {})
-    }
     fetch("/api/payment-gateways/enabled")
       .then((res) => res.json())
       .then((data) => {
@@ -129,6 +123,13 @@ export default function CheckoutPage() {
         }
       })
       .catch(() => {})
+    // Load wallet credit info if logged in
+    if (token) {
+      fetch("/api/wallets/me/credit-info", { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data?.creditInfo) setWalletCreditInfo(data.creditInfo) })
+        .catch(() => {})
+    }
   }, [])
 
   useEffect(() => {
@@ -186,10 +187,64 @@ export default function CheckoutPage() {
     document.body.appendChild(script)
   }
 
+  const validateAddress = (addr: typeof address): Record<string, string> => {
+    const errs: Record<string, string> = {}
+    if (!addr.fullName.trim()) errs.fullName = "Full name is required"
+    if (!addr.phone.trim()) errs.phone = "Phone number is required"
+    else if (!/^\+?[\d\s-]{7,15}$/.test(addr.phone.trim())) errs.phone = "Enter a valid phone number"
+    if (addr.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr.email)) errs.email = "Enter a valid email"
+    if (!addr.street.trim()) errs.street = "Street address is required"
+    if (!addr.city.trim()) errs.city = "City is required"
+    if (!addr.state.trim()) errs.state = "State is required"
+    if (!addr.zip.trim()) errs.zip = "ZIP/Postal code is required"
+    else if (!/^[\dA-Za-z\s-]{3,10}$/.test(addr.zip.trim())) errs.zip = "Enter a valid ZIP/Postal code"
+    if (!addr.country.trim()) errs.country = "Country is required"
+    return errs
+  }
+
+  const handlePincodeLookup = async (pincode: string, isBilling: boolean) => {
+    if (!/^\d{6}$/.test(pincode)) return
+    if ((isBilling ? billingAddress : address).country !== "India") return
+    const setLoading = isBilling ? setBillingPincodeLoading : setPincodeLoading
+    const setLocations = isBilling ? setBillingPincodeLocations : setPincodeLocations
+    setLoading(true)
+    setLocations([])
+    try {
+      const result = await lookupPincode(pincode)
+      if (result) {
+        setLocations(result.locations)
+        if (isBilling) {
+          setBillingAddress((prev) => ({ ...prev, city: result.district, state: result.state }))
+        } else {
+          setAddress((prev) => ({ ...prev, city: result.district, state: result.state }))
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const placeOrder = async () => {
     if (!cart) return
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
+
+    const shippingErrors = validateAddress(address)
+    if (Object.keys(shippingErrors).length > 0) {
+      setErrors(shippingErrors)
+      setPlacing(false)
+      return
+    }
+    if (!billingSameAsShipping) {
+      const bErrors = validateAddress(billingAddress)
+      if (Object.keys(bErrors).length > 0) {
+        setBillingErrors(bErrors)
+        setPlacing(false)
+        return
+      }
+    }
+    setErrors({})
+    setBillingErrors({})
 
     setPlacing(true)
     try {
@@ -199,6 +254,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           cartId: cart.cart.id,
           shippingAddress: address,
+          billingAddress: billingSameAsShipping ? undefined : billingAddress,
           couponCode: couponCode || undefined,
         }),
       })
@@ -210,6 +266,35 @@ export default function CheckoutPage() {
       }
 
       const orderId = data.order.id
+
+      if (paymentMethod === "WALLET") {
+        // Pay from wallet — debit the wallet and mark payment
+        const total = cart.totals.total - couponDiscount
+        const walletRes = await fetch("/api/wallets/debit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            walletId: walletCreditInfo!.walletId,
+            amount: total,
+            description: `Payment for order ${data.order.orderNumber || orderId}`,
+            referenceId: orderId,
+          }),
+        })
+        if (!walletRes.ok) {
+          const walletErr = await walletRes.json()
+          alert(walletErr.message || "Wallet payment failed. Please try another payment method.")
+          setPlacing(false)
+          return
+        }
+        // Record wallet payment
+        await fetch(`/api/payments/initiate/${orderId}?provider=WALLET&returnUrl=${encodeURIComponent(`${window.location.origin}/orders/${orderId}`)}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {})
+        alert("Order placed and paid from wallet!")
+        router.push(`/orders/${orderId}`)
+        return
+      }
 
       if (paymentMethod === "COD") {
         alert("Order placed successfully!")
@@ -282,9 +367,7 @@ export default function CheckoutPage() {
   const extraChargesTotal = extraCharges.reduce((sum, ec) => sum + ec.chargeAmount, 0)
   const ruleTaxTotal = taxes.reduce((sum, tax) => sum + (totals.subtotal * tax.taxRate) / 100, 0)
   const effectiveShipping = shipping ? shipping.cost : totals.shipping
-  const walletDeduction = useWallet ? Math.min(walletAmount, Number(loyalty?.walletBalance || 0), totals.total - couponDiscount) : 0
-  const pointsValue = usePoints ? pointsToRedeem : 0
-  const finalTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount - walletDeduction - pointsValue + extraChargesTotal + ruleTaxTotal + effectiveShipping)
+  const finalTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount + extraChargesTotal + ruleTaxTotal + effectiveShipping)
 
   // Payment method filtering based on rules
   const totalCartQty = cart?.cart.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0
@@ -298,6 +381,7 @@ export default function CheckoutPage() {
 
   // Checkout restriction enforcement
   const hasCheckoutRestriction = checkoutRestrictions.some(cr => cr.restricted)
+  const walletInsufficient = paymentMethod === "WALLET" && cart && walletCreditInfo && (cart.totals.total - couponDiscount) > walletCreditInfo.availableCredit
   const isCheckoutBlocked = hasCheckoutRestriction
     || minimumOrderQuantities.some(m => {
       const item = cart?.cart.items.find(ci => ci.product.id === m.productId)
@@ -312,26 +396,6 @@ export default function CheckoutPage() {
   const ruleDiscountLabels: string[] = []
   for (const d of productDiscounts) { if (d.ruleName && !ruleDiscountLabels.includes(d.ruleName)) ruleDiscountLabels.push(d.ruleName) }
   if (cartDiscount?.ruleName && !ruleDiscountLabels.includes(cartDiscount.ruleName)) ruleDiscountLabels.push(cartDiscount.ruleName)
-
-  const handleRedeemPoints = async () => {
-    if (!pointsToRedeem || pointsToRedeem <= 0) return
-    const token = localStorage.getItem("token")
-    if (!token) return
-    setPointsRedeeming(true)
-    try {
-      const res = await fetch("/api/loyalty/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ points: pointsToRedeem, description: "Redeemed at checkout" }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setLoyalty((prev) => prev ? { ...prev, points: data.points ?? prev.points - pointsToRedeem, walletBalance: data.walletBalance ?? prev.walletBalance } : prev)
-        setUseWallet(true)
-        setWalletAmount((prev) => prev + pointsToRedeem)
-      } else { alert("Failed to redeem points") }
-    } catch { alert("Failed to redeem points") } finally { setPointsRedeeming(false) }
-  }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
   if (!cart || cart.cart.items.length === 0) return (
@@ -377,12 +441,193 @@ export default function CheckoutPage() {
                 <MapPin className="text-primary-600" size={20} />
                 <h2 className="font-semibold">Shipping Address</h2>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input type="text" placeholder="Street" value={address.street} onChange={(e) => setAddress({ ...address, street: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg" />
-                <input type="text" placeholder="City" value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg" />
-                <input type="text" placeholder="State" value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg" />
-                <input type="text" placeholder="ZIP Code" value={address.zip} onChange={(e) => setAddress({ ...address, zip: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg" />
+              <div className="space-y-4">
+                {/* Contact Info */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="John Doe" value={address.fullName} onChange={(e) => { setAddress({ ...address, fullName: e.target.value }); if (errors.fullName) setErrors({ ...errors, fullName: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.fullName ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.fullName && <p className="text-xs text-red-500 mt-1">{errors.fullName}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
+                    <input type="tel" placeholder="+91 98765 43210" value={address.phone} onChange={(e) => { setAddress({ ...address, phone: e.target.value }); if (errors.phone) setErrors({ ...errors, phone: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.phone ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-gray-400">(optional)</span></label>
+                    <input type="email" placeholder="john@example.com" value={address.email} onChange={(e) => { setAddress({ ...address, email: e.target.value }); if (errors.email) setErrors({ ...errors, email: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.email ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+                  </div>
+                </div>
+
+                {/* Address Lines */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Street Address <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="123 Main Street" value={address.street} onChange={(e) => { setAddress({ ...address, street: e.target.value }); if (errors.street) setErrors({ ...errors, street: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.street ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.street && <p className="text-xs text-red-500 mt-1">{errors.street}</p>}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Apartment / Suite / Unit <span className="text-gray-400">(optional)</span></label>
+                      <input type="text" placeholder="Apt 4B, Building 5" value={address.apartment} onChange={(e) => setAddress({ ...address, apartment: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Landmark / Area <span className="text-gray-400">(optional)</span></label>
+                      <input type="text" placeholder="Near City Mall" value={address.landmark} onChange={(e) => setAddress({ ...address, landmark: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* City / State / ZIP / Country */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">City <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="Mumbai" value={address.city} onChange={(e) => { setAddress({ ...address, city: e.target.value }); if (errors.city) setErrors({ ...errors, city: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.city ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.city && <p className="text-xs text-red-500 mt-1">{errors.city}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">State <span className="text-red-500">*</span></label>
+                    {address.country === "India" ? (
+                      <select value={address.state} onChange={(e) => { setAddress({ ...address, state: e.target.value }); if (errors.state) setErrors({ ...errors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${errors.state ? "border-red-400" : "border-gray-200"}`}>
+                        <option value="">Select State</option>
+                        {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      <input type="text" placeholder="State" value={address.state} onChange={(e) => { setAddress({ ...address, state: e.target.value }); if (errors.state) setErrors({ ...errors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.state ? "border-red-400" : "border-gray-200"}`} />
+                    )}
+                    {errors.state && <p className="text-xs text-red-500 mt-1">{errors.state}</p>}
+                  </div>
+                  <div className="relative">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">PIN Code <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <input type="text" placeholder="400001" maxLength={6} value={address.zip} onChange={(e) => { setAddress({ ...address, zip: e.target.value }); if (errors.zip) setErrors({ ...errors, zip: "" }) }} onBlur={(e) => { if (e.target.value.length === 6) handlePincodeLookup(e.target.value, false) }} className={`w-full px-4 py-2 border rounded-lg text-sm pr-8 ${errors.zip ? "border-red-400" : "border-gray-200"}`} />
+                      {pincodeLoading && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div></div>}
+                    </div>
+                    {errors.zip && <p className="text-xs text-red-500 mt-1">{errors.zip}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Country <span className="text-red-500">*</span></label>
+                    <select value={address.country} onChange={(e) => { setAddress({ ...address, country: e.target.value }); if (errors.country) setErrors({ ...errors, country: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${errors.country ? "border-red-400" : "border-gray-200"}`}>
+                      {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {errors.country && <p className="text-xs text-red-500 mt-1">{errors.country}</p>}
+                  </div>
+                </div>
+                {/* Locality dropdown — shown when PIN code lookup returns specific areas */}
+                {pincodeLocations.length > 0 && (
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Locality / Post Office</label>
+                    <select value={address.street} onChange={(e) => { setAddress({ ...address, street: e.target.value }); if (errors.street) setErrors({ ...errors, street: "" }) }} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                      <option value="">Select locality</option>
+                      {pincodeLocations.map((loc, i) => (
+                        <option key={i} value={loc.name}>{loc.name} — {loc.district}, {loc.block}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-400 mt-1">Select your specific area, or type your street address below</p>
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* Billing Address */}
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Receipt className="text-primary-600" size={20} />
+                  <h2 className="font-semibold">Billing Address</h2>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input type="checkbox" checked={billingSameAsShipping} onChange={(e) => setBillingSameAsShipping(e.target.checked)} className="rounded border-gray-300 accent-primary-600" />
+                  Same as shipping
+                </label>
+              </div>
+              {!billingSameAsShipping && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
+                      <input type="text" placeholder="John Doe" value={billingAddress.fullName} onChange={(e) => { setBillingAddress({ ...billingAddress, fullName: e.target.value }); if (billingErrors.fullName) setBillingErrors({ ...billingErrors, fullName: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.fullName ? "border-red-400" : "border-gray-200"}`} />
+                      {billingErrors.fullName && <p className="text-xs text-red-500 mt-1">{billingErrors.fullName}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
+                      <input type="tel" placeholder="+91 98765 43210" value={billingAddress.phone} onChange={(e) => { setBillingAddress({ ...billingAddress, phone: e.target.value }); if (billingErrors.phone) setBillingErrors({ ...billingErrors, phone: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.phone ? "border-red-400" : "border-gray-200"}`} />
+                      {billingErrors.phone && <p className="text-xs text-red-500 mt-1">{billingErrors.phone}</p>}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-gray-400">(optional)</span></label>
+                    <input type="email" placeholder="billing@example.com" value={billingAddress.email} onChange={(e) => { setBillingAddress({ ...billingAddress, email: e.target.value }); if (billingErrors.email) setBillingErrors({ ...billingErrors, email: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.email ? "border-red-400" : "border-gray-200"}`} />
+                    {billingErrors.email && <p className="text-xs text-red-500 mt-1">{billingErrors.email}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Street Address <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="123 Main Street" value={billingAddress.street} onChange={(e) => { setBillingAddress({ ...billingAddress, street: e.target.value }); if (billingErrors.street) setBillingErrors({ ...billingErrors, street: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.street ? "border-red-400" : "border-gray-200"}`} />
+                    {billingErrors.street && <p className="text-xs text-red-500 mt-1">{billingErrors.street}</p>}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Apartment / Suite / Unit <span className="text-gray-400">(optional)</span></label>
+                      <input type="text" placeholder="Apt 4B" value={billingAddress.apartment} onChange={(e) => setBillingAddress({ ...billingAddress, apartment: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Landmark / Area <span className="text-gray-400">(optional)</span></label>
+                      <input type="text" placeholder="Near City Mall" value={billingAddress.landmark} onChange={(e) => setBillingAddress({ ...billingAddress, landmark: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">City <span className="text-red-500">*</span></label>
+                      <input type="text" placeholder="Mumbai" value={billingAddress.city} onChange={(e) => { setBillingAddress({ ...billingAddress, city: e.target.value }); if (billingErrors.city) setBillingErrors({ ...billingErrors, city: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.city ? "border-red-400" : "border-gray-200"}`} />
+                      {billingErrors.city && <p className="text-xs text-red-500 mt-1">{billingErrors.city}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">State <span className="text-red-500">*</span></label>
+                      {billingAddress.country === "India" ? (
+                        <select value={billingAddress.state} onChange={(e) => { setBillingAddress({ ...billingAddress, state: e.target.value }); if (billingErrors.state) setBillingErrors({ ...billingErrors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${billingErrors.state ? "border-red-400" : "border-gray-200"}`}>
+                          <option value="">Select State</option>
+                          {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <input type="text" placeholder="State" value={billingAddress.state} onChange={(e) => { setBillingAddress({ ...billingAddress, state: e.target.value }); if (billingErrors.state) setBillingErrors({ ...billingErrors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.state ? "border-red-400" : "border-gray-200"}`} />
+                      )}
+                      {billingErrors.state && <p className="text-xs text-red-500 mt-1">{billingErrors.state}</p>}
+                    </div>
+                    <div className="relative">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">PIN Code <span className="text-red-500">*</span></label>
+                      <div className="relative">
+                        <input type="text" placeholder="400001" maxLength={6} value={billingAddress.zip} onChange={(e) => { setBillingAddress({ ...billingAddress, zip: e.target.value }); if (billingErrors.zip) setBillingErrors({ ...billingErrors, zip: "" }) }} onBlur={(e) => { if (e.target.value.length === 6) handlePincodeLookup(e.target.value, true) }} className={`w-full px-4 py-2 border rounded-lg text-sm pr-8 ${billingErrors.zip ? "border-red-400" : "border-gray-200"}`} />
+                        {billingPincodeLoading && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div></div>}
+                      </div>
+                      {billingErrors.zip && <p className="text-xs text-red-500 mt-1">{billingErrors.zip}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Country <span className="text-red-500">*</span></label>
+                      <select value={billingAddress.country} onChange={(e) => { setBillingAddress({ ...billingAddress, country: e.target.value }); if (billingErrors.country) setBillingErrors({ ...billingErrors, country: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${billingErrors.country ? "border-red-400" : "border-gray-200"}`}>
+                        {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      {billingErrors.country && <p className="text-xs text-red-500 mt-1">{billingErrors.country}</p>}
+                    </div>
+                  </div>
+                  {/* Locality dropdown for billing */}
+                  {billingPincodeLocations.length > 0 && (
+                    <div className="mt-2">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Locality / Post Office</label>
+                      <select value={billingAddress.street} onChange={(e) => { setBillingAddress({ ...billingAddress, street: e.target.value }); if (billingErrors.street) setBillingErrors({ ...billingErrors, street: "" }) }} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                        <option value="">Select locality</option>
+                        {billingPincodeLocations.map((loc, i) => (
+                          <option key={i} value={loc.name}>{loc.name} — {loc.district}, {loc.block}</option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">Select your specific area, or type your street address below</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
@@ -403,6 +648,34 @@ export default function CheckoutPage() {
                         <p className="font-medium text-gray-900">Cash on Delivery (COD)</p>
                         <p className="text-xs text-gray-500">Pay when your order arrives</p>
                       </div>
+                    </div>
+                  </label>
+                )}
+
+                {walletCreditInfo && walletCreditInfo.availableCredit > 0 && (
+                  <label
+                    onClick={() => setPaymentMethod("WALLET")}
+                    className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "WALLET" ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <input type="radio" name="payment" checked={paymentMethod === "WALLET"} onChange={() => setPaymentMethod("WALLET")} className="accent-primary-600" />
+                    <div className="flex items-center gap-3">
+                      <Wallet size={20} className="text-gray-600" />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">Pay from Wallet</p>
+                        <p className="text-xs text-gray-500">
+                          Available: {formatPrice(walletCreditInfo.availableCredit)}
+                          {walletCreditInfo.outstanding > 0 && <span className="text-red-500 ml-1">| Outstanding: {formatPrice(walletCreditInfo.outstanding)}</span>}
+                        </p>
+                      </div>
+                      {cart && (
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          cart.totals.total - couponDiscount <= walletCreditInfo.availableCredit
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}>
+                          {cart.totals.total - couponDiscount <= walletCreditInfo.availableCredit ? "Sufficient" : "Insufficient"}
+                        </span>
+                      )}
                     </div>
                   </label>
                 )}
@@ -524,12 +797,6 @@ export default function CheckoutPage() {
                     <span className="font-medium text-green-600">-{formatPrice(couponDiscount)}</span>
                   </div>
                 )}
-                {walletDeduction > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Wallet Credit</span>
-                    <span className="font-medium text-green-600">-{formatPrice(walletDeduction)}</span>
-                  </div>
-                )}
                 {extraCharges.length > 0 && extraCharges.map((ec, i) => (
                   <div key={i} className="flex justify-between">
                     <span className="text-gray-600">{ec.chargeLabel}</span>
@@ -574,36 +841,6 @@ export default function CheckoutPage() {
               </div>
               {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
 
-              {loyalty && (Number(loyalty.walletBalance) > 0 || loyalty.points > 0) && (
-                <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
-                  {Number(loyalty.walletBalance) > 0 && (
-                    <label className="flex items-center gap-3 p-3 bg-green-50 rounded-lg cursor-pointer">
-                      <input type="checkbox" checked={useWallet} onChange={(e) => { setUseWallet(e.target.checked); if (e.target.checked) setWalletAmount(Number(loyalty.walletBalance)) }} className="rounded border-gray-300 accent-green-600" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <Wallet size={14} className="text-green-600" />
-                          <span className="text-sm font-medium text-green-800">Use wallet balance</span>
-                        </div>
-                        <p className="text-xs text-green-600">Available: ₹{Number(loyalty.walletBalance).toFixed(2)}</p>
-                      </div>
-                      {useWallet && (
-                        <input type="number" min={0} max={Number(loyalty.walletBalance)} value={walletAmount} onChange={(e) => setWalletAmount(Number(e.target.value))} className="w-24 px-2 py-1 border border-green-200 rounded text-sm text-right" />
-                      )}
-                    </label>
-                  )}
-                  {loyalty.points > 0 && !usePoints && (
-                    <div className="p-3 bg-primary-50 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2"><Zap size={14} className="text-primary-600" /><span className="text-sm font-medium text-primary-800">Redeem points for credit</span></div>
-                      <p className="text-xs text-primary-600 mb-2">{loyalty.points} points available (1 point = ₹1)</p>
-                      <div className="flex gap-2">
-                        <input type="number" min={1} max={loyalty.points} placeholder="Points to redeem" value={pointsToRedeem || ""} onChange={(e) => setPointsToRedeem(Number(e.target.value))} className="flex-1 px-2 py-1 border border-primary-200 rounded text-sm" />
-                        <button onClick={handleRedeemPoints} disabled={pointsRedeeming || pointsToRedeem <= 0} className="px-3 py-1 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 disabled:opacity-50">{pointsRedeeming ? "..." : "Redeem"}</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               <hr className="my-4" />
               <div className="flex justify-between items-center">
                 <span className="text-lg font-bold">Total</span>
@@ -611,10 +848,10 @@ export default function CheckoutPage() {
               </div>
               <button
                 onClick={placeOrder}
-                disabled={placing || redirectData !== null || isCheckoutBlocked}
-                className={`w-full mt-6 py-3 rounded-lg transition disabled:opacity-50 ${isCheckoutBlocked ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-primary-600 text-white hover:bg-primary-700"}`}
+                disabled={placing || redirectData !== null || isCheckoutBlocked || !!walletInsufficient}
+                className={`w-full mt-6 py-3 rounded-lg transition disabled:opacity-50 ${(isCheckoutBlocked || walletInsufficient) ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-primary-600 text-white hover:bg-primary-700"}`}
               >
-                {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : isCheckoutBlocked ? "Checkout Restricted" : (paymentMethod === "ONLINE" ? "Pay Now" : "Place Order")}
+                {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : isCheckoutBlocked ? "Checkout Restricted" : walletInsufficient ? "Insufficient Wallet Credit" : (paymentMethod === "ONLINE" ? "Pay Now" : paymentMethod === "WALLET" ? "Pay from Wallet" : "Place Order")}
               </button>
               {paymentMethod === "ONLINE" && selectedGateway && (
                 <div className="flex items-center justify-center gap-1.5 mt-3 text-xs text-gray-400">
