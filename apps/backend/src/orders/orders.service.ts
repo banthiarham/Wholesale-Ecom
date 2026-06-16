@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { EmailService } from '../notifications/email.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
+import { RulesEnforcementService } from '../rules/rules-enforcement.service';
+import { CartItemContext } from '../rules/rules-engine.service';
 import { OrderStatus, PaymentStatus, DeliveryStatus } from '@prisma/client';
 
 @Injectable()
@@ -14,6 +16,7 @@ export class OrdersService {
     private inventoryService: InventoryService,
     private emailService: EmailService,
     private loyaltyEarningService: LoyaltyEarningService,
+    private rulesEnforcement: RulesEnforcementService,
   ) {}
 
   async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string; couponCode?: string }) {
@@ -35,7 +38,24 @@ export class OrdersService {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: totalPrice,
+        metadata: item.metadata, // Preserve package composition and pricing data
       };
+    });
+
+    // Enforce dynamic rules before creating the order
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const cartItemsContext: CartItemContext[] = cart.items.map((item) => ({
+      productId: item.productId,
+      categoryId: item.product?.categoryId || undefined,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+    }));
+
+    await this.rulesEnforcement.enforceOrderRules({
+      userId,
+      userRole: (user as any)?.effectiveRole || (user as any)?.roleRel?.name || user?.role || undefined,
+      cartItems: cartItemsContext,
+      subtotal: totalAmount,
     });
 
     // Apply coupon discount if provided
@@ -141,6 +161,20 @@ export class OrdersService {
     if (orderItemsData.length === 0) {
       throw new BadRequestException(`No valid items to order. Errors: ${errors.join('; ')}`);
     }
+
+    // Enforce dynamic rules before creating the order
+    const bulkCartItems: CartItemContext[] = orderItemsData.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    }));
+
+    await this.rulesEnforcement.enforceOrderRules({
+      userId,
+      userRole: (user as any)?.effectiveRole || (user as any)?.roleRel?.name || user?.role || undefined,
+      cartItems: bulkCartItems,
+      subtotal: totalAmount,
+    });
 
     const order = await this.prisma.order.create({
       data: {

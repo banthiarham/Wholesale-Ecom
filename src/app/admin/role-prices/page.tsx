@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { Search, DollarSign, Plus, Trash2, Save, X, Eye, ChevronDown, Edit2, Check } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface Role {
   id: string
@@ -367,18 +368,14 @@ export default function AdminRolePricesPage() {
   // ---- Loading state ----
 
   if (loadingRoles || loadingProducts) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-      </div>
-    )
+    return <SkeletonTable rows={4} cols={5} />
   }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Role-Based Pricing</h1>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Role-Based Pricing</h1>
         {selectedProduct && (
           <button
             onClick={openBulkModal}
@@ -391,11 +388,11 @@ export default function AdminRolePricesPage() {
       </div>
 
       {/* Product Selector */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Select Product</label>
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Product</label>
         <div className="relative" ref={dropdownRef}>
           <div className="relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
               placeholder="Search products by title or SKU..."
@@ -405,7 +402,7 @@ export default function AdminRolePricesPage() {
                 setShowProductDropdown(true)
               }}
               onFocus={() => setShowProductDropdown(true)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             {selectedProduct && (
               <button
@@ -415,16 +412,16 @@ export default function AdminRolePricesPage() {
                   setRolePrices([])
                   setPreviewResult(null)
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <X size={18} />
               </button>
             )}
           </div>
           {showProductDropdown && (
-            <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
               {filteredProducts.length === 0 ? (
-                <div className="px-4 py-3 text-sm text-gray-500">No products found</div>
+                <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No products found</div>
               ) : (
                 filteredProducts.map((p) => (
                   <button
@@ -435,12 +432,12 @@ export default function AdminRolePricesPage() {
                       setShowProductDropdown(false)
                       setPreviewResult(null)
                     }}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-primary-50 transition flex items-center justify-between ${
-                      selectedProduct?.id === p.id ? "bg-primary-50 text-primary-700" : "text-gray-700"
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-primary-50 dark:hover:bg-primary-900/30 transition flex items-center justify-between ${
+                      selectedProduct?.id === p.id ? "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400" : "text-gray-700 dark:text-gray-300"
                     }`}
                   >
                     <span className="font-medium">{p.title}</span>
-                    <span className="text-gray-400 text-xs ml-2">
+                    <span className="text-gray-400 dark:text-gray-500 text-xs ml-2">
                       {p.sku && `SKU: ${p.sku}`}
                       {p.sku && " | "}
                       {formatPrice(p.unitPrice)}
@@ -455,19 +452,19 @@ export default function AdminRolePricesPage() {
 
       {/* Product Info */}
       {selectedProduct && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
           <div className="flex flex-wrap items-center gap-6">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Product</p>
-              <p className="text-base font-semibold text-gray-900">{selectedProduct.title}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">Product</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{selectedProduct.title}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">SKU</p>
-              <p className="text-base text-gray-700">{selectedProduct.sku || "N/A"}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">SKU</p>
+              <p className="text-base text-gray-700 dark:text-gray-300">{selectedProduct.sku || "N/A"}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Base Price</p>
-              <p className="text-base font-semibold text-gray-900">{formatPrice(selectedProduct.unitPrice)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">Base Price</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{formatPrice(selectedProduct.unitPrice)}</p>
             </div>
           </div>
         </div>
@@ -475,25 +472,25 @@ export default function AdminRolePricesPage() {
 
       {/* Role Price Table */}
       {selectedProduct && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
           {loadingPrices ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
             </div>
           ) : roles.length === 0 ? (
-            <div className="p-12 text-center text-gray-500">No roles found. Create roles first.</div>
+            <div className="p-12 text-center text-gray-500 dark:text-gray-400">No roles found. Create roles first.</div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Role</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Price</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Min Qty</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Active</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Role</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Price</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Min Qty</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Active</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {roles.map((role) => {
                   const rp = getRolePrice(role.id)
                   const isActive = activeToggles[role.id] ?? rp?.isActive ?? true
@@ -501,7 +498,7 @@ export default function AdminRolePricesPage() {
                   const isEditingMinQty = editingCell?.rowId === role.id && editingCell?.field === "minQty"
 
                   return (
-                    <tr key={role.id} className="hover:bg-gray-50 transition">
+                    <tr key={role.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                       {/* Role Name + Color Badge */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -509,9 +506,9 @@ export default function AdminRolePricesPage() {
                             className="inline-block w-3 h-3 rounded-full"
                             style={{ backgroundColor: role.color || "#6b7280" }}
                           />
-                          <span className="font-medium text-gray-900">{role.label || role.name}</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{role.label || role.name}</span>
                           {role.isSystem && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium uppercase">
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded font-medium uppercase">
                               System
                             </span>
                           )}
@@ -540,8 +537,8 @@ export default function AdminRolePricesPage() {
                             className="cursor-pointer hover:text-primary-600 flex items-center gap-1"
                             onClick={() => startEditing(role.id, "price")}
                           >
-                            {rp ? formatPrice(rp.price) : <span className="text-gray-400 italic">Not set</span>}
-                            <Edit2 size={12} className="text-gray-300" />
+                            {rp ? formatPrice(rp.price) : <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>}
+                            <Edit2 size={12} className="text-gray-300 dark:text-gray-600" />
                           </span>
                         )}
                       </td>
@@ -567,8 +564,8 @@ export default function AdminRolePricesPage() {
                             className="cursor-pointer hover:text-primary-600 flex items-center gap-1"
                             onClick={() => startEditing(role.id, "minQty")}
                           >
-                            {rp ? rp.minQty : <span className="text-gray-400 italic">1</span>}
-                            <Edit2 size={12} className="text-gray-300" />
+                            {rp ? rp.minQty : <span className="text-gray-400 dark:text-gray-500 italic">1</span>}
+                            <Edit2 size={12} className="text-gray-300 dark:text-gray-600" />
                           </span>
                         )}
                       </td>
@@ -578,7 +575,7 @@ export default function AdminRolePricesPage() {
                         <button
                           onClick={() => handleToggleActive(role.id)}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-                            isActive ? "bg-primary-600" : "bg-gray-200"
+                            isActive ? "bg-primary-600" : "bg-gray-200 dark:bg-gray-700"
                           }`}
                         >
                           <span
@@ -595,7 +592,7 @@ export default function AdminRolePricesPage() {
                           <button
                             onClick={() => handleSaveRow(role.id)}
                             disabled={savingId === role.id}
-                            className="p-1.5 text-primary-600 hover:bg-primary-50 rounded transition disabled:opacity-50"
+                            className="p-1.5 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition disabled:opacity-50"
                             title="Save"
                           >
                             {savingId === role.id ? (
@@ -608,7 +605,7 @@ export default function AdminRolePricesPage() {
                             <button
                               onClick={() => handleDelete(role.id)}
                               disabled={deletingId === role.id}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50"
+                              className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition disabled:opacity-50"
                               title="Delete"
                             >
                               {deletingId === role.id ? (
@@ -631,21 +628,21 @@ export default function AdminRolePricesPage() {
 
       {/* Price Preview */}
       {selectedProduct && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Eye size={18} className="text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Price Preview</h2>
+            <Eye size={18} className="text-primary-600 dark:text-primary-400" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Price Preview</h2>
           </div>
-          <p className="text-sm text-gray-500 mb-4">
-            Select a role and quantity to see the calculated effective price for <span className="font-medium text-gray-700">{selectedProduct.title}</span>.
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Select a role and quantity to see the calculated effective price for <span className="font-medium text-gray-700 dark:text-gray-300">{selectedProduct.title}</span>.
           </p>
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Role</label>
               <select
                 value={previewRoleId}
                 onChange={(e) => setPreviewRoleId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">Select a role</option>
                 {roles.map((r) => (
@@ -656,13 +653,13 @@ export default function AdminRolePricesPage() {
               </select>
             </div>
             <div className="w-32">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Quantity</label>
               <input
                 type="number"
                 min="1"
                 value={previewQty}
                 onChange={(e) => setPreviewQty(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
             <button
@@ -680,21 +677,21 @@ export default function AdminRolePricesPage() {
           </div>
 
           {previewResult && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+            <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-800">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Base Price</p>
-                  <p className="text-lg font-semibold text-gray-900">{formatPrice(previewResult.basePrice)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">Base Price</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{formatPrice(previewResult.basePrice)}</p>
                 </div>
                 {previewResult.rolePrice !== undefined && previewResult.rolePrice !== null && (
                   <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Role Price</p>
-                    <p className="text-lg font-semibold text-primary-700">{formatPrice(previewResult.rolePrice)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">Role Price</p>
+                    <p className="text-lg font-semibold text-primary-700 dark:text-primary-400">{formatPrice(previewResult.rolePrice)}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Effective Price</p>
-                  <p className="text-lg font-bold text-green-700">{formatPrice(previewResult.effectivePrice)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">Effective Price</p>
+                  <p className="text-lg font-bold text-green-700 dark:text-green-400">{formatPrice(previewResult.effectivePrice)}</p>
                 </div>
               </div>
             </div>
@@ -705,27 +702,27 @@ export default function AdminRolePricesPage() {
       {/* Bulk Assignment Modal */}
       {showBulkModal && selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">Set Prices for All Roles</h2>
-              <button onClick={() => setShowBulkModal(false)} className="text-gray-400 hover:text-gray-600">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Set Prices for All Roles</h2>
+              <button onClick={() => setShowBulkModal(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
                 <X size={20} />
               </button>
             </div>
-            <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 text-xs text-gray-500">
-              Product: <span className="font-medium text-gray-700">{selectedProduct.title}</span>
-              {" | "}Base Price: <span className="font-medium text-gray-700">{formatPrice(selectedProduct.unitPrice)}</span>
+            <div className="px-6 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
+              Product: <span className="font-medium text-gray-700 dark:text-gray-300">{selectedProduct.title}</span>
+              {" | "}Base Price: <span className="font-medium text-gray-700 dark:text-gray-300">{formatPrice(selectedProduct.unitPrice)}</span>
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-4">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="pb-2 text-left font-medium text-gray-600">Role</th>
-                    <th className="pb-2 text-left font-medium text-gray-600">Price</th>
-                    <th className="pb-2 text-left font-medium text-gray-600">Min Qty</th>
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <th className="pb-2 text-left font-medium text-gray-600 dark:text-gray-400">Role</th>
+                    <th className="pb-2 text-left font-medium text-gray-600 dark:text-gray-400">Price</th>
+                    <th className="pb-2 text-left font-medium text-gray-600 dark:text-gray-400">Min Qty</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                   {roles.map((role) => (
                     <tr key={role.id}>
                       <td className="py-2.5">
@@ -734,7 +731,7 @@ export default function AdminRolePricesPage() {
                             className="inline-block w-3 h-3 rounded-full"
                             style={{ backgroundColor: role.color || "#6b7280" }}
                           />
-                          <span className="font-medium text-gray-900">{role.label || role.name}</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{role.label || role.name}</span>
                         </div>
                       </td>
                       <td className="py-2.5">
@@ -750,7 +747,7 @@ export default function AdminRolePricesPage() {
                               [role.id]: { ...prev[role.id], price: e.target.value },
                             }))
                           }
-                          className="w-28 px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          className="w-28 px-2 py-1 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       </td>
                       <td className="py-2.5">
@@ -765,7 +762,7 @@ export default function AdminRolePricesPage() {
                               [role.id]: { ...prev[role.id], minQty: e.target.value },
                             }))
                           }
-                          className="w-20 px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          className="w-20 px-2 py-1 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       </td>
                     </tr>
@@ -773,10 +770,10 @@ export default function AdminRolePricesPage() {
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800">
               <button
                 onClick={() => setShowBulkModal(false)}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition"
+                className="px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
               >
                 Cancel
               </button>

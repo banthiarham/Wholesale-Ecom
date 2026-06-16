@@ -2,7 +2,8 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { PricingService } from '../pricing/pricing.service';
-import { OrderStatus, PaymentStatus } from '@prisma/client';
+import { RulesEnforcementService } from '../rules/rules-enforcement.service';
+import { CartItemContext } from '../rules/rules-engine.service';
 
 @Injectable()
 export class CsvOrderParserService {
@@ -10,6 +11,7 @@ export class CsvOrderParserService {
     private prisma: PrismaService,
     private inventoryService: InventoryService,
     private pricingService: PricingService,
+    private rulesEnforcement: RulesEnforcementService,
   ) {}
 
   async parseAndCreateOrder(userId: string, buffer: Buffer, shippingAddress: any, notes?: string) {
@@ -87,6 +89,21 @@ export class CsvOrderParserService {
     if (orderItemsData.length === 0) {
       throw new BadRequestException('No valid items to create order. Errors: ' + errors.join('; '));
     }
+
+    // Enforce dynamic rules before creating the order
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const csvCartItems: CartItemContext[] = orderItemsData.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    }));
+
+    await this.rulesEnforcement.enforceOrderRules({
+      userId,
+      userRole: (user as any)?.effectiveRole || (user as any)?.roleRel?.name || user?.role || undefined,
+      cartItems: csvCartItems,
+      subtotal: totalAmount,
+    });
 
     const order = await this.prisma.order.create({
       data: {

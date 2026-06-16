@@ -7,7 +7,6 @@ import {
   Star,
   ArrowRight,
   Package,
-  Flame,
 } from "lucide-react"
 
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
@@ -27,6 +26,7 @@ import TrustBadgesSection from "@/components/home/TrustBadgesSection"
 import MidPromotionalBanner from "@/components/home/MidPromotionalBanner"
 import ShopByCategoryGrid from "@/components/home/ShopByCategoryGrid"
 import CTABannerSection from "@/components/home/CTABannerSection"
+import NewsletterSection from "@/components/home/NewsletterSection"
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -60,12 +60,33 @@ interface Category {
   children?: Category[]
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+interface SectionConfig {
+  limit?: number
+  productIds?: string[]
+  columns?: number
+  items?: { icon: string; title: string; desc: string }[]
+  text?: string
+  color?: string
+  bgColor?: string
+  imageUrl?: string
+  linkUrl?: string
+  headline?: string
+  subtext?: string
+  ctaText?: string
+  ctaLink?: string
+  ctaText2?: string
+  ctaLink2?: string
+  [key: string]: unknown
+}
+
 interface HomeSection {
   id: string
   type: string
   title: string | null
   subtitle: string | null
-  config: any
+  config: SectionConfig
   rank: number
   isActive: boolean
   categoryId: string | null
@@ -77,10 +98,10 @@ interface HomeSection {
 /* ------------------------------------------------------------------ */
 
 function renderSection(section: HomeSection) {
-  let cfg: any = {}
+  let cfg: SectionConfig = {}
   try {
     cfg = typeof section.config === "string" ? JSON.parse(section.config) : (section.config || {})
-  } catch { cfg = {} }
+  } catch (e) { console.error("Failed to parse section config:", e); cfg = {} }
 
   switch (section.type) {
     case "announcement":
@@ -215,22 +236,22 @@ export default function Home() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <div className="min-h-screen bg-gray-50">
-
-        {/* ── Announcement Bar ── */}
-        <AnnouncementBar />
+      <div className="min-h-screen bg-white">
 
         {hasSections ? (
           /* ── Dynamic section layout from admin config ── */
           <>
+            {/* ── Announcement Bar: show at top only if no announcement section exists in sections ── */}
+            {!homeSections.filter((s) => s.isActive !== false).some((s) => s.type === "announcement") && <AnnouncementBar />}
             {homeSections
               .filter((s) => s.isActive !== false)
               .sort((a, b) => a.rank - b.rank)
               .map((section) => renderSection(section))}
           </>
         ) : (
-          /* ── Default Lotus Electronics-style layout ── */
+          /* ── Default layout ── */
           <>
+            <AnnouncementBar />
 
             {/* ── Hero Banner Carousel (or fallback hero) ── */}
             <HeroBannerCarousel />
@@ -262,6 +283,9 @@ export default function Home() {
 
             {/* ── CTA Banner ── */}
             <CTABannerSection />
+
+            {/* ── Newsletter ── */}
+            <NewsletterSection />
           </>
         )}
       </div>
@@ -294,7 +318,7 @@ function DefaultHeroFallback({
   ruleDiscountMap: Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>
   bogoMap: Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>
   qtyDiscountMap: Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>
-  rolePricingMap: Record<string, any>
+  rolePricingMap: Record<string, { rolePrice: number; appliedRoleName: string | null; savings: number; savingsPercent: number; finalPrice: number }>
   handleAddToCart: (id: string) => void
 }) {
   const heroHeadline = useSetting("heroHeadline", "Bulk Orders. Best Prices. Delivered.")
@@ -304,21 +328,21 @@ function DefaultHeroFallback({
   if (visibleProducts.length === 0) return null
 
   return (
-    <section className="py-10 lg:py-14">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="section-padding">
+      <div className="section-container">
         {/* Section header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="section-header">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{heroHeadline}</h2>
-            <p className="text-gray-500 text-sm mt-1">{heroSubtext}</p>
+            <h2 className="heading-lg">{heroHeadline}</h2>
+            <p className="body-sm mt-1">{heroSubtext}</p>
           </div>
-          <Link href="/products" className="hidden sm:flex items-center gap-1 text-primary-600 font-semibold hover:gap-2 transition-all text-sm">
+          <Link href="/products" className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors">
             View All <ArrowRight size={16} />
           </Link>
         </div>
 
         {/* Product grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 sm:gap-5">
           {visibleProducts.slice(0, 12).map((product) => {
             const isPriceHidden = hiddenPriceProductIds.has(product.id)
             const isNonPurchasable = nonPurchasableProducts.has(product.id)
@@ -327,53 +351,68 @@ function DefaultHeroFallback({
             const productBogo = bogoMap.get(product.id)
             const productQtyDisc = qtyDiscountMap.get(product.id)
             const disc = getProductDiscount(discounts, product.id, product.categoryId || undefined)
+            const comparePrice = product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice)
 
             return (
               <Link
                 key={product.id}
                 href={`/products/${product.handle}`}
-                className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all group"
+                className="card-base overflow-hidden group"
               >
-                <div className="relative h-28 sm:h-36 bg-gray-100">
+                <div className="relative aspect-square bg-gray-50">
                   {product.thumbnail || product.images?.[0] ? (
-                    <img src={product.thumbnail || product.images[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <img src={product.thumbnail || product.images[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-3xl">📦</div>
-                  )}
-                  {disc && <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-orange-500 text-white text-[10px] font-semibold rounded">{discountBadge(disc)}</span>}
-                  {product.tierPrices?.length > 0 && <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-green-500 text-white text-[10px] font-semibold rounded">Bulk</span>}
-                </div>
-                <div className="p-2.5">
-                  <h3 className="font-medium text-gray-900 text-xs sm:text-sm line-clamp-1 group-hover:text-primary-600 transition">{product.title}</h3>
-                  {product.rating > 0 && (
-                    <div className="flex items-center gap-0.5 mt-0.5">
-                      <Star size={10} className="text-amber-400 fill-amber-400" />
-                      <span className="text-[10px] text-gray-500">{product.rating}</span>
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+                      <Package size={32} className="text-gray-200" />
                     </div>
                   )}
-                  <div className="mt-1">
+                  {/* Badges */}
+                  <div className="absolute top-2 left-2 flex flex-col gap-1">
+                    {disc && <span className="badge badge-warning">{discountBadge(disc)}</span>}
+                    {product.tierPrices?.length > 0 && <span className="badge badge-success">Bulk</span>}
+                  </div>
+                  {comparePrice && <span className="absolute bottom-2 left-2 badge badge-danger">Sale</span>}
+                </div>
+                <div className="p-3">
+                  <h3 className="font-medium text-gray-900 text-xs sm:text-sm line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug min-h-[2.25rem]">{product.title}</h3>
+                  {product.rating > 0 && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <div className="flex">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Star key={s} size={10} className={s <= Math.round(product.rating) ? "text-amber-400 fill-amber-400" : "text-gray-200"} />
+                        ))}
+                      </div>
+                      <span className="text-[10px] text-gray-400">({product.reviewCount})</span>
+                    </div>
+                  )}
+                  <div className="mt-1.5">
                     {isPriceHidden ? (
                       <span className="text-xs text-gray-500 italic">Login for price</span>
                     ) : rp ? (
-                      <div>
+                      <div className="flex items-baseline gap-1.5">
                         <span className="font-bold text-primary-700 text-sm">{formatPrice(rp.rolePrice)}</span>
-                        <span className="text-[10px] text-gray-400 line-through ml-1">{formatPrice(product.unitPrice)}</span>
+                        <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
                       </div>
                     ) : ruleDisc ? (
-                      <div>
+                      <div className="flex items-baseline gap-1.5">
                         <span className="font-bold text-primary-700 text-sm">{formatPrice(Number(product.unitPrice) - ruleDisc.discountAmount)}</span>
-                        <span className="text-[10px] text-gray-400 line-through ml-1">{formatPrice(product.unitPrice)}</span>
+                        <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
                       </div>
                     ) : product.tierPrices?.length > 0 ? (
-                      <div>
+                      <div className="flex items-baseline gap-1">
                         <span className="text-[10px] text-green-600 font-semibold">From </span>
                         <span className="font-bold text-gray-900 text-sm">{formatPrice(Number(product.tierPrices[product.tierPrices.length - 1].price))}</span>
+                        {comparePrice && <span className="text-[10px] text-gray-400 line-through ml-1">{formatPrice(product.compareAtPrice)}</span>}
                       </div>
                     ) : (
-                      <span className="font-bold text-gray-900 text-sm">{formatPrice(product.unitPrice)}</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-bold text-gray-900 text-sm">{formatPrice(product.unitPrice)}</span>
+                        {comparePrice && <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.compareAtPrice)}</span>}
+                      </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-0.5 mt-1">
+                  <div className="flex flex-wrap gap-0.5 mt-1.5">
                     <ProductRuleBadge
                       priceHidden={isPriceHidden}
                       nonPurchasable={isNonPurchasable}
@@ -388,10 +427,10 @@ function DefaultHeroFallback({
                   </div>
                   {!isNonPurchasable && (
                     <button
-                      onClick={(e) => { e.preventDefault(); handleAddToCart(product.id) }}
-                      className="mt-1.5 w-full py-1 bg-primary-600 text-white rounded-lg text-[11px] font-medium hover:bg-primary-700 transition"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAddToCart(product.id) }}
+                      className="mt-2.5 w-full py-2 border border-gray-200 text-gray-700 rounded-xl text-[11px] font-semibold hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all duration-200 flex items-center justify-center gap-1.5"
                     >
-                      Add to Cart
+                      <ShoppingCart size={12} /> Add to Cart
                     </button>
                   )}
                 </div>
@@ -400,7 +439,7 @@ function DefaultHeroFallback({
           })}
         </div>
 
-        <Link href="/products" className="sm:hidden flex items-center justify-center gap-1 text-primary-600 font-semibold mt-4 text-sm">
+        <Link href="/products" className="sm:hidden flex items-center justify-center gap-1.5 text-primary-600 font-semibold mt-5 text-sm">
           View All Products <ArrowRight size={16} />
         </Link>
       </div>

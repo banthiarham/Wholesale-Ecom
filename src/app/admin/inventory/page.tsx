@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Search, AlertTriangle, X } from "lucide-react"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface InventoryItem {
   id: string
@@ -95,13 +96,13 @@ export default function AdminInventoryPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={16} />
             <input
               type="text"
               placeholder="Search inventory..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
@@ -111,59 +112,57 @@ export default function AdminInventoryPage() {
               onChange={(e) => setLowStockOnly(e.target.checked)}
               className="rounded border-gray-300"
             />
-            <span className="text-sm text-gray-600">Low stock only (≤10 available)</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">Low stock only (≤10 available)</span>
           </label>
         </div>
-        <span className="text-sm text-gray-500">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-        </div>
+        <SkeletonTable rows={6} cols={8} />
       ) : (
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Product</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">SKU</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Available</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Reserved</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Total</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">MOQ</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600">Action</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Product</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">SKU</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Available</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Reserved</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Total</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">MOQ</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {filtered.map((item) => {
                   const available = item.inventoryQuantity - item.reservedQuantity
                   const isLow = available <= 10
                   return (
-                    <tr key={item.id} className={`hover:bg-gray-50 transition ${isLow ? "bg-red-50" : ""}`}>
+                    <tr key={item.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 transition ${isLow ? "bg-red-50 dark:bg-red-900/20" : ""}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           {isLow && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
-                          <span className="font-medium text-gray-900">{item.title}</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{item.title}</span>
                         </div>
-                        {item.vendorName && <p className="text-xs text-gray-500">{item.vendorName}</p>}
+                        {item.vendorName && <p className="text-xs text-gray-500 dark:text-gray-400">{item.vendorName}</p>}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{item.sku || "—"}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{item.sku || "—"}</td>
                       <td className="px-4 py-3">
                         <span className={`font-medium ${isLow ? "text-red-600" : "text-green-600"}`}>
                           {available}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{item.reservedQuantity}</td>
-                      <td className="px-4 py-3 text-gray-900 font-medium">{item.inventoryQuantity}</td>
-                      <td className="px-4 py-3 text-gray-600">{item.moq}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{item.reservedQuantity}</td>
+                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100 font-medium">{item.inventoryQuantity}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{item.moq}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                          item.status === "PUBLISHED" || item.status === "ACTIVE" ? "bg-green-50 text-green-700" :
-                          item.status === "DRAFT" ? "bg-yellow-50 text-yellow-700" :
-                          "bg-gray-100 text-gray-600"
+                          item.status === "PUBLISHED" || item.status === "ACTIVE" ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                          item.status === "DRAFT" ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
+                          "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                         }`}>
                           {item.status}
                         </span>
@@ -171,7 +170,7 @@ export default function AdminInventoryPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => { setSelected(item); setAdjustment(""); setReason("") }}
-                          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition text-gray-700"
+                          className="px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-gray-700 dark:text-gray-300"
                         >
                           Adjust
                         </button>
@@ -188,48 +187,48 @@ export default function AdminInventoryPage() {
       {/* Stock Adjustment Modal */}
       {selected && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Adjust Stock: {selected.title}</h3>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Adjust Stock: {selected.title}</h3>
+              <button onClick={() => setSelected(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={20} /></button>
             </div>
             <div className="space-y-4">
-              <div className="bg-gray-50 rounded-lg p-3 text-sm">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Current stock:</span>
-                  <span className="font-medium">{selected.inventoryQuantity}</span>
+                  <span className="text-gray-600 dark:text-gray-400">Current stock:</span>
+                  <span className="font-medium dark:text-gray-100">{selected.inventoryQuantity}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Reserved:</span>
-                  <span className="font-medium">{selected.reservedQuantity}</span>
+                  <span className="text-gray-600 dark:text-gray-400">Reserved:</span>
+                  <span className="font-medium dark:text-gray-100">{selected.reservedQuantity}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Available:</span>
-                  <span className="font-medium">{selected.inventoryQuantity - selected.reservedQuantity}</span>
+                  <span className="text-gray-600 dark:text-gray-400">Available:</span>
+                  <span className="font-medium dark:text-gray-100">{selected.inventoryQuantity - selected.reservedQuantity}</span>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Adjustment (+/- quantity)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Adjustment (+/- quantity)</label>
                 <input
                   type="number"
                   value={adjustment}
                   onChange={(e) => setAdjustment(e.target.value)}
                   placeholder="e.g. +50 or -20"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reason *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason *</label>
                 <input
                   type="text"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="e.g. New stock arrival, Damaged goods"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setSelected(null)} className="flex-1 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition text-sm font-medium">Cancel</button>
+                <button onClick={() => setSelected(null)} className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm font-medium dark:text-gray-200">Cancel</button>
                 <button onClick={adjustStock} disabled={adjusting || !adjustment || !reason} className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">
                   {adjusting ? "Adjusting..." : "Save Adjustment"}
                 </button>

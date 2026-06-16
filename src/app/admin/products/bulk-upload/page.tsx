@@ -170,64 +170,64 @@ export default function AdminBulkProductUploadPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/admin/products" className="flex items-center gap-1 text-sm text-gray-500 hover:text-primary-600 mb-2"><ArrowLeft size={14} /> Back to Products</Link>
+          <Link href="/admin/products" className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 mb-2"><ArrowLeft size={14} /> Back to Products</Link>
           <div className="flex items-center gap-3">
-            <FileSpreadsheet size={24} className="text-primary-600" />
-            <h1 className="text-xl font-semibold text-gray-900">Bulk Product Upload</h1>
+            <FileSpreadsheet size={24} className="text-primary-600 dark:text-primary-400" />
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Bulk Product Upload</h1>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Upload Excel to create new products or update existing ones by SKU</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Upload Excel to create new products or update existing ones by SKU</p>
         </div>
       </div>
 
       {/* How it works */}
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-blue-900 mb-3">How it works</h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-blue-800">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-3">How it works</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-blue-800 dark:text-blue-300">
           <div className="flex gap-2">
-            <span className="font-bold text-blue-600">1.</span>
+            <span className="font-bold text-blue-600 dark:text-blue-400">1.</span>
             <div>
               <p className="font-medium">Download Template</p>
-              <p className="text-blue-700 text-xs">Get the Excel template with all columns including images</p>
+              <p className="text-blue-700 dark:text-blue-400 text-xs">Get the Excel template with all columns including images</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <span className="font-bold text-blue-600">2.</span>
+            <span className="font-bold text-blue-600 dark:text-blue-400">2.</span>
             <div>
               <p className="font-medium">Fill Product Data</p>
-              <p className="text-blue-700 text-xs">SKU is the key — existing SKUs get updated, new SKUs create products</p>
+              <p className="text-blue-700 dark:text-blue-400 text-xs">SKU is the key — existing SKUs get updated, new SKUs create products</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <span className="font-bold text-blue-600">3.</span>
+            <span className="font-bold text-blue-600 dark:text-blue-400">3.</span>
             <div>
               <p className="font-medium">Add Images</p>
-              <p className="text-blue-700 text-xs">Paste URLs in the images column, or drop local files named by SKU below</p>
+              <p className="text-blue-700 dark:text-blue-400 text-xs">Paste URLs in the images column, or drop local files named by SKU below</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <span className="font-bold text-blue-600">4.</span>
+            <span className="font-bold text-blue-600 dark:text-blue-400">4.</span>
             <div>
               <p className="font-medium">Upload & Review</p>
-              <p className="text-blue-700 text-xs">See results — products created, updated, and images processed</p>
+              <p className="text-blue-700 dark:text-blue-400 text-xs">See results — products created, updated, and images processed</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Template Download */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Excel Columns Reference</h3>
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Excel Columns Reference</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200">
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Column</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Required</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Description</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Example</th>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Column</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Required</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Description</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Example</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
               {[
                 { col: "sku", req: "Yes", desc: "Unique product SKU — used to match existing products", ex: "WEP-001" },
                 { col: "title", req: "Yes", desc: "Product name", ex: "Power Bank 20000mAh" },
@@ -242,11 +242,11 @@ export default function AdminBulkProductUploadPage() {
                 { col: "tags", req: "No", desc: "Comma-separated tags", ex: "electronics, battery" },
                 { col: "images", req: "No", desc: "Comma-separated image URLs — downloaded and stored automatically", ex: "https://img.host/a.jpg, https://img.host/b.jpg" },
               ].map((r) => (
-                <tr key={r.col} className={`hover:bg-gray-50 ${r.col === "images" ? "bg-amber-50/50" : ""}`}>
-                  <td className="px-3 py-2 font-mono text-xs font-medium text-gray-900">{r.col}</td>
-                  <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${r.req === "Yes" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600"}`}>{r.req}</span></td>
-                  <td className="px-3 py-2 text-gray-600">{r.desc}</td>
-                  <td className="px-3 py-2 text-gray-400 font-mono text-xs">{r.ex}</td>
+                <tr key={r.col} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${r.col === "images" ? "bg-amber-50/50 dark:bg-amber-900/10" : ""}`}>
+                  <td className="px-3 py-2 font-mono text-xs font-medium text-gray-900 dark:text-gray-100">{r.col}</td>
+                  <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${r.req === "Yes" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"}`}>{r.req}</span></td>
+                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.desc}</td>
+                  <td className="px-3 py-2 text-gray-400 dark:text-gray-500 font-mono text-xs">{r.ex}</td>
                 </tr>
               ))}
             </tbody>
@@ -258,38 +258,38 @@ export default function AdminBulkProductUploadPage() {
       </div>
 
       {/* Upload Area */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-5">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6 space-y-5">
         {/* Excel File */}
-        <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center">
+        <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-8 text-center">
           <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" id="product-excel-upload" />
           <label htmlFor="product-excel-upload" className="cursor-pointer">
-            <Upload size={40} className="text-gray-400 mx-auto mb-3" />
-            <p className="text-sm text-gray-600">{file ? file.name : "Click to select Excel file (.xlsx)"}</p>
-            <p className="text-xs text-gray-400 mt-1">SKU column is required — matching SKUs will update existing products</p>
+            <Upload size={40} className="text-gray-400 dark:text-gray-500 mx-auto mb-3" />
+            <p className="text-sm text-gray-600 dark:text-gray-400">{file ? file.name : "Click to select Excel file (.xlsx)"}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">SKU column is required — matching SKUs will update existing products</p>
           </label>
         </div>
 
         {/* Image Drag & Drop Zone */}
-        <div className="border border-amber-200 bg-amber-50/30 rounded-lg p-5">
+        <div className="border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-900/10 rounded-lg p-5">
           <div className="flex items-center gap-2 mb-3">
-            <ImagePlus size={16} className="text-amber-600" />
-            <h3 className="text-sm font-semibold text-gray-900">Product Images (Optional)</h3>
+            <ImagePlus size={16} className="text-amber-600 dark:text-amber-400" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Product Images (Optional)</h3>
           </div>
-          <p className="text-xs text-gray-500 mb-3">
-            Two ways to add images: (1) paste URLs in the <span className="font-mono font-medium text-amber-700">images</span> column of the Excel, or (2) drop local image files below named by SKU.
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Two ways to add images: (1) paste URLs in the <span className="font-mono font-medium text-amber-700 dark:text-amber-400">images</span> column of the Excel, or (2) drop local image files below named by SKU.
           </p>
 
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleImageDrop}
-            className={`border-2 border-dashed rounded-lg p-6 text-center transition ${dragOver ? "border-amber-400 bg-amber-50" : "border-gray-200"}`}
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition ${dragOver ? "border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20" : "border-gray-200 dark:border-gray-700"}`}
           >
             <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleImageSelect} className="hidden" id="image-files-upload" />
             <label htmlFor="image-files-upload" className="cursor-pointer">
-              <ImageIcon size={28} className="text-amber-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-600">Drop image files here or click to browse</p>
-              <p className="text-xs text-gray-400 mt-1">Name files as <span className="font-mono">SKU.jpg</span> or <span className="font-mono">SKU_1.jpg</span> — matched to products by SKU</p>
+              <ImageIcon size={28} className="text-amber-400 dark:text-amber-500 mx-auto mb-2" />
+              <p className="text-sm text-gray-600 dark:text-gray-400">Drop image files here or click to browse</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Name files as <span className="font-mono">SKU.jpg</span> or <span className="font-mono">SKU_1.jpg</span> — matched to products by SKU</p>
             </label>
           </div>
 
@@ -297,7 +297,7 @@ export default function AdminBulkProductUploadPage() {
           {imageFiles.size > 0 && (
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-gray-700">{totalImages} image{totalImages !== 1 ? "s" : ""} for {imageFiles.size} SKU{imageFiles.size !== 1 ? "s" : ""}</p>
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{totalImages} image{totalImages !== 1 ? "s" : ""} for {imageFiles.size} SKU{imageFiles.size !== 1 ? "s" : ""}</p>
                 <button
                   onClick={() => {
                     setImageFiles(new Map())
@@ -309,12 +309,12 @@ export default function AdminBulkProductUploadPage() {
                 </button>
               </div>
               {Array.from(imageFiles.entries()).map(([sku, files]) => (
-                <div key={sku} className="bg-white rounded-lg border border-gray-100 p-3">
-                  <p className="text-xs font-semibold text-gray-800 mb-2">SKU: <span className="font-mono text-primary-600">{sku}</span> <span className="text-gray-400 font-normal">({files.length} image{files.length !== 1 ? "s" : ""})</span></p>
+                <div key={sku} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-3">
+                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-2">SKU: <span className="font-mono text-primary-600 dark:text-primary-400">{sku}</span> <span className="text-gray-400 dark:text-gray-500 font-normal">({files.length} image{files.length !== 1 ? "s" : ""})</span></p>
                   <div className="flex flex-wrap gap-2">
                     {files.map((f, idx) => (
                       <div key={idx} className="relative group">
-                        <div className="w-16 h-16 rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
+                        <div className="w-16 h-16 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-100 dark:bg-gray-800">
                           <img src={imagePreviews.get(sku)?.[idx] || ""} alt={f.name} className="w-full h-full object-cover" />
                         </div>
                         <button
@@ -323,7 +323,7 @@ export default function AdminBulkProductUploadPage() {
                         >
                           <X size={10} />
                         </button>
-                        <p className="text-[10px] text-gray-400 truncate w-16 mt-0.5">{f.name}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate w-16 mt-0.5">{f.name}</p>
                       </div>
                     ))}
                   </div>
@@ -345,66 +345,66 @@ export default function AdminBulkProductUploadPage() {
 
       {/* Results */}
       {result && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Upload Results</h3>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">Upload Results</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
-            <div className="bg-green-50 rounded-lg p-4 text-center">
-              <CheckCircle size={20} className="text-green-500 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-green-700">{result.created}</p>
-              <p className="text-xs text-green-600">Created</p>
+            <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center">
+              <CheckCircle size={20} className="text-green-500 dark:text-green-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-green-700 dark:text-green-400">{result.created}</p>
+              <p className="text-xs text-green-600 dark:text-green-400">Created</p>
             </div>
-            <div className="bg-blue-50 rounded-lg p-4 text-center">
-              <FileSpreadsheet size={20} className="text-blue-500 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-blue-700">{result.updated}</p>
-              <p className="text-xs text-blue-600">Updated</p>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center">
+              <FileSpreadsheet size={20} className="text-blue-500 dark:text-blue-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{result.updated}</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400">Updated</p>
             </div>
-            <div className="bg-red-50 rounded-lg p-4 text-center">
-              <XCircle size={20} className="text-red-500 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-red-700">{result.errors.length}</p>
-              <p className="text-xs text-red-600">Errors</p>
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 text-center">
+              <XCircle size={20} className="text-red-500 dark:text-red-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-red-700 dark:text-red-400">{result.errors.length}</p>
+              <p className="text-xs text-red-600 dark:text-red-400">Errors</p>
             </div>
             {(result.imagesDownloaded > 0 || result.imagesUploaded > 0) && (
               <>
-                <div className="bg-purple-50 rounded-lg p-4 text-center">
-                  <ImagePlus size={20} className="text-purple-500 mx-auto mb-1" />
-                  <p className="text-2xl font-bold text-purple-700">{result.imagesDownloaded}</p>
-                  <p className="text-xs text-purple-600">URLs Downloaded</p>
+                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 text-center">
+                  <ImagePlus size={20} className="text-purple-500 dark:text-purple-400 mx-auto mb-1" />
+                  <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">{result.imagesDownloaded}</p>
+                  <p className="text-xs text-purple-600 dark:text-purple-400">URLs Downloaded</p>
                 </div>
-                <div className="bg-amber-50 rounded-lg p-4 text-center">
-                  <ImageIcon size={20} className="text-amber-500 mx-auto mb-1" />
-                  <p className="text-2xl font-bold text-amber-700">{result.imagesUploaded}</p>
-                  <p className="text-xs text-amber-600">Files Uploaded</p>
+                <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 text-center">
+                  <ImageIcon size={20} className="text-amber-500 dark:text-amber-400 mx-auto mb-1" />
+                  <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">{result.imagesUploaded}</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">Files Uploaded</p>
                 </div>
               </>
             )}
           </div>
 
           {result.errors.length > 0 && (
-            <div className="bg-red-50 border border-red-100 rounded-lg p-4 mb-3">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg p-4 mb-3">
               <div className="flex items-center gap-2 mb-2">
-                <XCircle size={16} className="text-red-500" />
-                <p className="text-sm font-medium text-red-800">Row Errors ({result.errors.length})</p>
+                <XCircle size={16} className="text-red-500 dark:text-red-400" />
+                <p className="text-sm font-medium text-red-800 dark:text-red-400">Row Errors ({result.errors.length})</p>
               </div>
-              <ul className="text-sm text-red-700 list-disc list-inside max-h-40 overflow-y-auto">
+              <ul className="text-sm text-red-700 dark:text-red-400 list-disc list-inside max-h-40 overflow-y-auto">
                 {result.errors.map((e, i) => <li key={i}>{e}</li>)}
               </ul>
             </div>
           )}
 
           {result.imageErrors && result.imageErrors.length > 0 && (
-            <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 mb-3">
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-lg p-4 mb-3">
               <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle size={16} className="text-amber-500" />
-                <p className="text-sm font-medium text-amber-800">Image Warnings ({result.imageErrors.length})</p>
+                <AlertTriangle size={16} className="text-amber-500 dark:text-amber-400" />
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-400">Image Warnings ({result.imageErrors.length})</p>
               </div>
-              <ul className="text-sm text-amber-700 list-disc list-inside max-h-40 overflow-y-auto">
+              <ul className="text-sm text-amber-700 dark:text-amber-400 list-disc list-inside max-h-40 overflow-y-auto">
                 {result.imageErrors.map((e, i) => <li key={i}>{e}</li>)}
               </ul>
             </div>
           )}
 
           {(result.created > 0 || result.updated > 0) && (
-            <Link href="/admin/products" className="inline-flex items-center gap-2 mt-4 text-sm text-primary-600 hover:underline">
+            <Link href="/admin/products" className="inline-flex items-center gap-2 mt-4 text-sm text-primary-600 dark:text-primary-400 hover:underline">
               View All Products →
             </Link>
           )}

@@ -38,6 +38,14 @@ export class CartController {
     return undefined;
   }
 
+  /**
+   * Extract the user's effective role from the JWT user object.
+   */
+  private resolveUserRole(req: any): string | undefined {
+    if (!req.user) return undefined;
+    return req.user.effectiveRole || req.user.roleRel?.name || req.user.role;
+  }
+
   @Get()
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get or create guest/user cart' })
@@ -58,7 +66,7 @@ export class CartController {
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Add a product to the cart (guest or authenticated)' })
   @ApiResponse({ status: 200, description: 'Item added to cart' })
-  @ApiResponse({ status: 400, description: 'Invalid quantity, product not available, or insufficient inventory' })
+  @ApiResponse({ status: 400, description: 'Invalid quantity, product not available, insufficient inventory, or rule violation' })
   @ApiBody({ type: AddCartItemDto })
   @ApiHeader({ name: 'x-session-id', required: false, description: 'Guest cart session identifier' })
   @ApiBearerAuth()
@@ -68,11 +76,15 @@ export class CartController {
   ) {
     const sessionId = dto.sessionId || this.getSessionId(req);
     const resolvedUserId = this.resolveUserId(req, dto.userId);
+    const userRole = this.resolveUserRole(req);
     const cart = await this.cartService.addItem(
       dto.productId,
       dto.quantity,
       resolvedUserId,
       sessionId || undefined,
+      (dto as any).packageGroupId,
+      (dto as any).packageMetadata,
+      userRole,
     );
     const totals = this.cartService.calculateTotals(cart);
     return { cart, totals };
@@ -82,12 +94,13 @@ export class CartController {
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Update quantity of a cart item (guest or authenticated)' })
   @ApiResponse({ status: 200, description: 'Cart item updated' })
-  @ApiResponse({ status: 400, description: 'Invalid quantity or insufficient inventory' })
+  @ApiResponse({ status: 400, description: 'Invalid quantity, insufficient inventory, or rule violation' })
   @ApiBody({ type: UpdateCartItemDto })
   @ApiHeader({ name: 'x-session-id', required: false, description: 'Guest cart session identifier' })
   @ApiBearerAuth()
   async updateItem(@Body() dto: UpdateCartItemDto, @Req() req: any) {
-    const cart = await this.cartService.updateItem(dto.itemId, dto.quantity);
+    const userRole = this.resolveUserRole(req);
+    const cart = await this.cartService.updateItem(dto.itemId, dto.quantity, undefined, userRole);
     const totals = this.cartService.calculateTotals(cart);
     return { cart, totals };
   }

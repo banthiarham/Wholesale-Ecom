@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Plus, Trash2, Edit, X, ChevronRight, ChevronDown, Folder } from "lucide-react"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface CategoryNode {
   id: string
@@ -122,23 +123,23 @@ export default function AdminCategoriesPage() {
           return (
             <div key={node.id}>
               <div
-                className="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 transition"
+                className="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
                 style={{ paddingLeft: `${16 + depth * 24}px` }}
               >
                 {hasChildren ? (
-                  <button onClick={() => toggleExpand(node.id)} className="text-gray-400 hover:text-gray-600">
+                  <button onClick={() => toggleExpand(node.id)} className="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300">
                     {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </button>
                 ) : (
                   <span className="w-4" />
                 )}
                 <Folder size={16} className="text-amber-500" />
-                <span className="flex-1 font-medium text-gray-900">{node.name}</span>
-                <span className="text-xs text-gray-400 mr-4">/{node.handle}</span>
-                <span className="text-xs text-gray-500 mr-4">{node.productCount ?? 0} products</span>
+                <span className="flex-1 font-medium text-gray-900 dark:text-gray-100">{node.name}</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500 mr-4">/{node.handle}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 mr-4">{node.productCount ?? 0} products</span>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => openEdit(node)} className="p-1.5 text-gray-400 hover:text-primary-600 rounded hover:bg-primary-50"><Edit size={14} /></button>
-                  <button onClick={() => handleDelete(node.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"><Trash2 size={14} /></button>
+                  <button onClick={() => openEdit(node)} className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded hover:bg-primary-50 dark:hover:bg-primary-900/20"><Edit size={14} /></button>
+                  <button onClick={() => handleDelete(node.id)} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 size={14} /></button>
                 </div>
               </div>
               {hasChildren && isExpanded && renderTree(node.children || [], depth + 1)}
@@ -152,7 +153,7 @@ export default function AdminCategoriesPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Categories</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Categories</h2>
         <button
           onClick={() => { setShowForm(true); setEditingCategory(null); setForm(emptyForm) }}
           className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm"
@@ -162,23 +163,23 @@ export default function AdminCategoriesPage() {
       </div>
 
       {showForm && (
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">{editingCategory ? "Edit Category" : "New Category"}</h3>
-            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingCategory ? "Edit Category" : "New Category"}</h3>
+            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"><X size={18} /></button>
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-            <input required placeholder="Handle (URL slug)" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-            <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-            <select value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm">
+            <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            <input required placeholder="Handle (URL slug)" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            <select value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm">
               <option value="">No Parent (Root)</option>
               {flatCats.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
             <div className="sm:col-span-2 flex justify-end gap-3">
-              <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-lg text-sm">Cancel</button>
+              <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">Save</button>
             </div>
           </form>
@@ -186,13 +187,11 @@ export default function AdminCategoriesPage() {
       )}
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-        </div>
+        <SkeletonTable />
       ) : (
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm">
           {categories.length === 0 ? (
-            <p className="p-6 text-sm text-gray-500">No categories yet.</p>
+            <p className="p-6 text-sm text-gray-500 dark:text-gray-400">No categories yet.</p>
           ) : (
             renderTree(categories)
           )}

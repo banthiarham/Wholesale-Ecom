@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { RulesService } from './rules.service';
 import { RulesEngineService } from './rules-engine.service';
+import { RulesAuditService } from './rules-audit.service';
 import { CreateRuleDto } from './dto/create-rule.dto';
 import { UpdateRuleDto } from './dto/update-rule.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -27,13 +28,19 @@ export class RulesController {
   constructor(
     private readonly rulesService: RulesService,
     private readonly rulesEngine: RulesEngineService,
+    private readonly auditService: RulesAuditService,
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'List all dynamic rules' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List all dynamic rules (Admin only)' })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'isActive', required: false })
   @ApiResponse({ status: 200, description: 'Rules retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden — Admin only' })
   async findAll(
     @Query('type') type?: string,
     @Query('isActive') isActive?: string,
@@ -44,13 +51,31 @@ export class RulesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get rule by ID' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get rule by ID (Admin only)' })
   @ApiParam({ name: 'id', description: 'Rule UUID' })
   @ApiResponse({ status: 200, description: 'Rule found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden — Admin only' })
   @ApiResponse({ status: 404, description: 'Rule not found' })
   async findById(@Param('id') id: string) {
     const rule = await this.rulesService.findById(id);
     return { rule };
+  }
+
+  @Get(':id/history')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get audit history for a rule (Admin only)' })
+  @ApiParam({ name: 'id', description: 'Rule UUID' })
+  @ApiResponse({ status: 200, description: 'Audit history retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getHistory(@Param('id') id: string) {
+    const history = await this.auditService.getHistory(id);
+    return { history };
   }
 
   @Post()
@@ -59,8 +84,9 @@ export class RulesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a dynamic rule (Admin only)' })
   @ApiResponse({ status: 201, description: 'Rule created' })
-  async create(@Body() dto: CreateRuleDto) {
-    const rule = await this.rulesService.create(dto);
+  @ApiResponse({ status: 400, description: 'Validation error in conditions/actions' })
+  async create(@Body() dto: CreateRuleDto, @CurrentUser() user: any) {
+    const rule = await this.rulesService.create(dto, user?.id, user?.email);
     return { rule };
   }
 
@@ -71,8 +97,9 @@ export class RulesController {
   @ApiOperation({ summary: 'Update a dynamic rule (Admin only)' })
   @ApiParam({ name: 'id', description: 'Rule UUID' })
   @ApiResponse({ status: 200, description: 'Rule updated' })
-  async update(@Param('id') id: string, @Body() dto: UpdateRuleDto) {
-    const rule = await this.rulesService.update(id, dto);
+  @ApiResponse({ status: 400, description: 'Validation error in conditions/actions' })
+  async update(@Param('id') id: string, @Body() dto: UpdateRuleDto, @CurrentUser() user: any) {
+    const rule = await this.rulesService.update(id, dto, user?.id, user?.email);
     return { rule };
   }
 
@@ -83,8 +110,8 @@ export class RulesController {
   @ApiOperation({ summary: 'Delete a dynamic rule (Admin only)' })
   @ApiParam({ name: 'id', description: 'Rule UUID' })
   @ApiResponse({ status: 200, description: 'Rule deleted' })
-  async remove(@Param('id') id: string) {
-    return this.rulesService.remove(id);
+  async remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.rulesService.remove(id, user?.id, user?.email);
   }
 
   @Patch(':id/toggle')
@@ -94,8 +121,8 @@ export class RulesController {
   @ApiOperation({ summary: 'Toggle rule active/inactive (Admin only)' })
   @ApiParam({ name: 'id', description: 'Rule UUID' })
   @ApiResponse({ status: 200, description: 'Rule toggled' })
-  async toggleActive(@Param('id') id: string) {
-    const rule = await this.rulesService.toggleActive(id);
+  async toggleActive(@Param('id') id: string, @CurrentUser() user: any) {
+    const rule = await this.rulesService.toggleActive(id, user?.id, user?.email);
     return { rule };
   }
 

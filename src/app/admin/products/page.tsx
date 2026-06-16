@@ -3,8 +3,11 @@
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Search, Trash2, Edit, Plus, X, Package, ImagePlus, Tag, FolderPlus, FileSpreadsheet } from "lucide-react"
+import { Search, Trash2, Edit, Plus, X, Package, ImagePlus, Tag, FolderPlus, FileSpreadsheet, Download, Upload } from "lucide-react"
+import * as XLSX from "xlsx"
+import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface Product {
   id: string
@@ -48,6 +51,12 @@ function AdminProductsContent() {
   const [tierRows, setTierRows] = useState<{ minQty: string; maxQty: string; price: string }[]>([])
   const [catForm, setCatForm] = useState({ name: "", handle: "", description: "" })
   const [savingCat, setSavingCat] = useState(false)
+
+  // Bulk edit state (CSV download/upload)
+  const [showBulkEdit, setShowBulkEdit] = useState(false)
+  const [bulkUploading, setBulkUploading] = useState(false)
+  const [bulkResult, setBulkResult] = useState<{ updated: number; errors: string[] } | null>(null)
+
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   const emptyForm = {
@@ -281,24 +290,91 @@ function AdminProductsContent() {
     setImagePreviews((prev) => prev.filter((_, i) => i !== index))
   }
 
+  // Bulk edit handlers (CSV download/upload)
+  const handleDownloadCSV = () => {
+    const data = products.map((p) => ({
+      id: p.id,
+      sku: p.sku || "",
+      title: p.title,
+      unitPrice: p.unitPrice,
+      compareAtPrice: p.compareAtPrice ?? "",
+      moq: p.moq,
+      inventoryQuantity: p.inventoryQuantity,
+      status: p.status,
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    ws["!cols"] = [
+      { wch: 36 }, // id
+      { wch: 16 }, // sku
+      { wch: 30 }, // title
+      { wch: 12 }, // unitPrice
+      { wch: 14 }, // compareAtPrice
+      { wch: 6 },  // moq
+      { wch: 10 }, // inventoryQuantity
+      { wch: 12 }, // status
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Products")
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" })
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    saveAs(blob, "products_pricing_edit.xlsx")
+  }
+
+  const handleUploadCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
+    if (!token) {
+      setBulkResult({ updated: 0, errors: ["Please log in to upload files"] })
+      return
+    }
+    setBulkUploading(true)
+    setBulkResult(null)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/products/bulk-update", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || "Upload failed")
+      setBulkResult(data)
+      if ((data as { updated: number; errors: string[] }).updated > 0) loadProducts()
+    } catch (err: unknown) {
+      setBulkResult({ updated: 0, errors: [err instanceof Error ? err.message : "Upload failed"] })
+    } finally {
+      setBulkUploading(false)
+      e.target.value = ""
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={16} />
           <input
             type="text"
             placeholder="Search by title, SKU, or vendor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-72 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm w-72 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
         <div className="flex gap-3">
-          <Link href="/admin/products/bulk-upload" className="flex items-center gap-2 px-4 py-2 border border-green-200 text-green-700 rounded-lg hover:bg-green-50 transition text-sm">
+          <Link href="/admin/products/bulk-upload" className="flex items-center gap-2 px-4 py-2 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition text-sm">
             <FileSpreadsheet size={16} /> Bulk Upload
           </Link>
-          <button onClick={() => setShowCatForm(!showCatForm)} className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm">
+          <button
+            onClick={() => setShowBulkEdit(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition text-sm"
+          >
+            <Download size={16} /> Bulk Edit
+          </button>
+          <button onClick={() => setShowCatForm(!showCatForm)} className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm">
             <FolderPlus size={16} /> Add Category
           </button>
           <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">
@@ -309,16 +385,16 @@ function AdminProductsContent() {
 
       {/* Create Category Form */}
       {showCatForm && (
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Create New Category</h3>
-            <button onClick={() => setShowCatForm(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Create New Category</h3>
+            <button onClick={() => setShowCatForm(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
           </div>
           <form onSubmit={handleSaveCategory} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <input required placeholder="Category Name" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value, handle: catForm.handle || generateHandle(e.target.value) })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-            <input placeholder="URL Handle (auto-generated)" value={catForm.handle} onChange={(e) => setCatForm({ ...catForm, handle: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+            <input required placeholder="Category Name" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value, handle: catForm.handle || generateHandle(e.target.value) })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            <input placeholder="URL Handle (auto-generated)" value={catForm.handle} onChange={(e) => setCatForm({ ...catForm, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
             <div className="flex gap-3">
-              <input placeholder="Description (optional)" value={catForm.description} onChange={(e) => setCatForm({ ...catForm, description: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+              <input placeholder="Description (optional)" value={catForm.description} onChange={(e) => setCatForm({ ...catForm, description: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
               <button type="submit" disabled={savingCat} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50 whitespace-nowrap">
                 {savingCat ? "Saving..." : "Create"}
               </button>
@@ -329,77 +405,77 @@ function AdminProductsContent() {
 
       {/* Product Form */}
       {showForm && (
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">{editingProduct ? "Edit Product" : "New Product"}</h3>
-            <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingProduct ? "Edit Product" : "New Product"}</h3>
+            <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <input required placeholder="Product Title" value={form.title} onChange={(e) => { const t = e.target.value; setForm({ ...form, title: t, handle: editingProduct ? form.handle : generateHandle(t) }) }} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input placeholder="URL Handle" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <input required placeholder="Product Title" value={form.title} onChange={(e) => { const t = e.target.value; setForm({ ...form, title: t, handle: editingProduct ? form.handle : generateHandle(t) }) }} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <input placeholder="URL Handle" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
               <option value="">Select Category</option>
               {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
             </select>
-            <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input required type="number" placeholder="MOQ (Minimum Order Quantity)" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input required type="number" placeholder="Inventory Quantity" value={form.inventoryQuantity} onChange={(e) => setForm({ ...form, inventoryQuantity: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <input required type="number" placeholder="MOQ (Minimum Order Quantity)" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <input required type="number" placeholder="Inventory Quantity" value={form.inventoryQuantity} onChange={(e) => setForm({ ...form, inventoryQuantity: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
               <option value="PUBLISHED">Published</option>
               <option value="DRAFT">Draft</option>
               <option value="ARCHIVED">Archived</option>
             </select>
             <div></div>
-            <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="sm:col-span-2 px-3 py-2 border border-gray-200 rounded-lg text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="sm:col-span-2 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
 
             {/* Tier Pricing */}
             <div className="sm:col-span-2">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-1"><Tag size={14} /> Tier Pricing (Bulk Discounts)</label>
-                <button type="button" onClick={addTierRow} className="text-xs text-primary-600 hover:underline font-medium">+ Add Tier</button>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1"><Tag size={14} /> Tier Pricing (Bulk Discounts)</label>
+                <button type="button" onClick={addTierRow} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">+ Add Tier</button>
               </div>
               {tierRows.length > 0 && (
                 <div className="space-y-2 mb-3">
-                  <div className="grid grid-cols-3 gap-2 text-xs font-medium text-gray-500">
+                  <div className="grid grid-cols-3 gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
                     <span>Min Qty</span><span>Max Qty (optional)</span><span>Price/Unit</span>
                   </div>
                   {tierRows.map((row, i) => (
                     <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
-                      <input type="number" placeholder="e.g. 10" value={row.minQty} onChange={(e) => updateTierRow(i, "minQty", e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                      <input type="number" placeholder="e.g. 49" value={row.maxQty} onChange={(e) => updateTierRow(i, "maxQty", e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                      <input type="number" step="0.01" placeholder="e.g. 950" value={row.price} onChange={(e) => updateTierRow(i, "price", e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                      <button type="button" onClick={() => removeTierRow(i)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+                      <input type="number" placeholder="e.g. 10" value={row.minQty} onChange={(e) => updateTierRow(i, "minQty", e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="number" placeholder="e.g. 49" value={row.maxQty} onChange={(e) => updateTierRow(i, "maxQty", e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="number" step="0.01" placeholder="e.g. 950" value={row.price} onChange={(e) => updateTierRow(i, "price", e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <button type="button" onClick={() => removeTierRow(i)} className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"><Trash2 size={14} /></button>
                     </div>
                   ))}
                 </div>
               )}
-              <p className="text-xs text-gray-400">Add quantity-based pricing tiers. Buyers ordering in bulk get discounted rates.</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Add quantity-based pricing tiers. Buyers ordering in bulk get discounted rates.</p>
             </div>
 
             {/* Images */}
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Product Images (max 5)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Product Images (max 5)</label>
               <div className="flex flex-wrap gap-3 mb-3">
                 {imagePreviews.map((src, i) => (
-                  <div key={i} className="relative w-20 h-20 rounded-lg border border-gray-200 overflow-hidden group">
+                  <div key={i} className="relative w-20 h-20 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden group">
                     <img src={src} alt={`Preview ${i + 1}`} className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => removeImage(i)} className="absolute top-0.5 right-0.5 bg-white rounded-full p-0.5 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shadow-sm"><X size={12} /></button>
+                    <button type="button" onClick={() => removeImage(i)} className="absolute top-0.5 right-0.5 bg-white dark:bg-gray-800 rounded-full p-0.5 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition shadow-sm"><X size={12} /></button>
                   </div>
                 ))}
                 {imagePreviews.length < 5 && (
-                  <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition">
-                    <ImagePlus size={20} className="text-gray-400" />
+                  <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
+                    <ImagePlus size={20} className="text-gray-400 dark:text-gray-500" />
                     <input type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
                   </label>
                 )}
               </div>
-              <p className="text-xs text-gray-500">Click + to add images. Supports JPG, PNG, WebP.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Click + to add images. Supports JPG, PNG, WebP.</p>
             </div>
 
             <div className="sm:col-span-2 flex justify-end gap-3">
-              <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-lg text-sm">Cancel</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
               <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">{uploading ? "Saving..." : editingProduct ? "Save Changes" : "Add Product"}</button>
             </div>
           </form>
@@ -408,77 +484,75 @@ function AdminProductsContent() {
 
       {/* Product List */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-        </div>
+        <SkeletonTable rows={5} cols={8} />
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-100 p-12 text-center">
-          <Package size={48} className="text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-600 mb-2">No products found.</p>
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-12 text-center">
+          <Package size={48} className="text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400 mb-2">No products found.</p>
           <button onClick={openAdd} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">Add Product</button>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Image</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Product</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Category</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Price</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Tiers</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Stock</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Image</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Product</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Category</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Price</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Tiers</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Stock</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {filtered.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50 transition">
+                  <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                     <td className="px-4 py-3">
-                      <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                      <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                         {p.thumbnail || (p.images && p.images.length > 0) ? (
                           <img src={p.thumbnail || p.images[0]} alt={p.title} className="w-full h-full object-cover" />
                         ) : (
-                          <Package size={16} className="text-gray-400" />
+                          <Package size={16} className="text-gray-400 dark:text-gray-500" />
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Link href={`/products/${p.handle}`} className="font-medium text-gray-900 hover:text-primary-600">{p.title}</Link>
-                      {p.vendorName && <p className="text-xs text-gray-500">{p.vendorName}</p>}
+                      <Link href={`/products/${p.handle}`} className="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400">{p.title}</Link>
+                      {p.vendorName && <p className="text-xs text-gray-500 dark:text-gray-400">{p.vendorName}</p>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{p.category?.name || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{p.category?.name || "—"}</td>
                     <td className="px-4 py-3">
-                      <span className="font-medium text-gray-900">{formatPrice(p.unitPrice)}</span>
-                      {p.compareAtPrice && <span className="text-xs text-gray-400 line-through ml-1">{formatPrice(p.compareAtPrice)}</span>}
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{formatPrice(p.unitPrice)}</span>
+                      {p.compareAtPrice && <span className="text-xs text-gray-400 dark:text-gray-500 line-through ml-1">{formatPrice(p.compareAtPrice)}</span>}
                     </td>
                     <td className="px-4 py-3">
                       {p.tierPrices && p.tierPrices.length > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded text-xs font-medium">
                           <Tag size={12} /> {p.tierPrices.length}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">None</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">None</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700">{p.inventoryQuantity - (p.reservedQuantity || 0)}/{p.inventoryQuantity}</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{p.inventoryQuantity - (p.reservedQuantity || 0)}/{p.inventoryQuantity}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                        p.status === "PUBLISHED" || p.status === "ACTIVE" ? "bg-green-50 text-green-700" :
-                        p.status === "DRAFT" ? "bg-yellow-50 text-yellow-700" :
-                        "bg-gray-100 text-gray-600"
+                        p.status === "PUBLISHED" || p.status === "ACTIVE" ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400" :
+                        p.status === "DRAFT" ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
+                        "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                       }`}>
                         {p.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => openEdit(p)} className="p-1.5 text-gray-400 hover:text-primary-600 rounded hover:bg-primary-50" title="Edit"><Edit size={16} /></button>
-                        <button onClick={() => handleDelete(p.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50" title="Delete"><Trash2 size={16} /></button>
+                        <button onClick={() => openEdit(p)} className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 rounded hover:bg-primary-50 dark:hover:bg-primary-900/30" title="Edit"><Edit size={16} /></button>
+                        <button onClick={() => handleDelete(p.id)} className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20" title="Delete"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -488,13 +562,79 @@ function AdminProductsContent() {
           </div>
         </div>
       )}
+
+      {/* Bulk Edit Panel — CSV Download/Upload */}
+      {showBulkEdit && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-lg">Bulk Edit Products</h3>
+              <button onClick={() => { setShowBulkEdit(false); setBulkResult(null) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
+            </div>
+
+            <div className="space-y-5">
+              {/* Instructions */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 text-sm rounded-lg px-4 py-3">
+                <p className="font-medium mb-1">How it works:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Download the current product spreadsheet</li>
+                  <li>Edit pricing, MOQ, stock, or status in the file</li>
+                  <li>Upload the edited file to apply changes</li>
+                </ol>
+              </div>
+
+              {/* Download button */}
+              <button
+                onClick={handleDownloadCSV}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition text-sm font-medium"
+              >
+                <Download size={18} /> Download Products Spreadsheet
+              </button>
+
+              {/* Upload area */}
+              <label className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition text-sm font-medium cursor-pointer">
+                <Upload size={18} />
+                {bulkUploading ? "Uploading..." : "Upload Edited Spreadsheet"}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleUploadCSV}
+                  disabled={bulkUploading}
+                  className="hidden"
+                />
+              </label>
+
+              {/* Results */}
+              {bulkResult && (
+                <div className="space-y-2">
+                  {bulkResult.updated > 0 && (
+                    <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm rounded-lg px-4 py-3">
+                      Successfully updated {bulkResult.updated} product{bulkResult.updated !== 1 ? "s" : ""}.
+                    </div>
+                  )}
+                  {bulkResult.errors.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-sm text-red-700 dark:text-red-400 font-medium">{bulkResult.errors.length} error{bulkResult.errors.length !== 1 ? "s" : ""}:</p>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {bulkResult.errors.map((err, i) => (
+                          <div key={i} className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">{err}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export default function AdminProductsPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div></div>}>
+    <Suspense fallback={<SkeletonTable rows={5} cols={8} />}>
       <AdminProductsContent />
     </Suspense>
   )

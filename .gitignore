@@ -44,3 +44,6 @@ screenshot-*.png
 screenshot.js
 screenshots/
 next-env.d.ts
+
+# User uploads
+apps/backend/uploads/

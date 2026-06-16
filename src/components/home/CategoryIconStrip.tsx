@@ -1,8 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { ChevronRight } from "lucide-react"
+import {
+  Monitor, Laptop, Smartphone, Wind, Refrigerator, WashingMachine,
+  CookingPot, Speaker, Watch, Camera, Droplets, Printer, Gamepad2, Sparkles,
+  ChevronLeft, ChevronRight,
+  type LucideIcon,
+} from "lucide-react"
 
 interface Category {
   id: string
@@ -13,56 +18,91 @@ interface Category {
   children?: Category[]
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  electronics: "🔌", furniture: "🪑", fashion: "👗", food: "🍽️", industrial: "🏭",
-  office: "📁", health: "💊", sports: "⚽", beauty: "💄", toys: "🧸",
-  books: "📚", auto: "🚗", garden: "🌱", pet: "🐾", music: "🎵",
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  electronics: Monitor, "mobile-phones": Smartphone, televisions: Monitor,
+  laptops: Laptop, "air-conditioners": Wind, refrigerators: Refrigerator,
+  "washing-machines": WashingMachine, "kitchen-appliances": CookingPot,
+  "home-entertainment": Speaker, "smart-watches": Watch, cameras: Camera,
+  "water-purifiers": Droplets, printers: Printer, gaming: Gamepad2,
+  "personal-care": Sparkles, fashion: Sparkles, industrial: Monitor,
 }
 
-const FALLBACK_COLORS = [
-  "from-blue-500 to-blue-600", "from-purple-500 to-purple-600", "from-green-500 to-green-600",
-  "from-orange-500 to-orange-600", "from-pink-500 to-pink-600", "from-cyan-500 to-cyan-600",
-  "from-red-500 to-red-600", "from-yellow-500 to-yellow-600", "from-indigo-500 to-indigo-600",
-  "from-teal-500 to-teal-600", "from-rose-500 to-rose-600", "from-amber-500 to-amber-600",
+const COLORS = [
+  "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
+  "bg-violet-50 text-violet-600 group-hover:bg-violet-100",
+  "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100",
+  "bg-orange-50 text-orange-600 group-hover:bg-orange-100",
+  "bg-cyan-50 text-cyan-600 group-hover:bg-cyan-100",
+  "bg-rose-50 text-rose-600 group-hover:bg-rose-100",
+  "bg-amber-50 text-amber-600 group-hover:bg-amber-100",
+  "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
+  "bg-teal-50 text-teal-600 group-hover:bg-teal-100",
+  "bg-sky-50 text-sky-600 group-hover:bg-sky-100",
+  "bg-fuchsia-50 text-fuchsia-600 group-hover:bg-fuchsia-100",
+  "bg-lime-50 text-lime-600 group-hover:bg-lime-100",
+  "bg-pink-50 text-pink-600 group-hover:bg-pink-100",
+  "bg-green-50 text-green-600 group-hover:bg-green-100",
 ]
 
 export default function CategoryIconStrip() {
   const [categories, setCategories] = useState<Category[]>([])
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetch("/api/categories")
       .then((res) => res.json())
       .then((data) => {
         const cats: Category[] = []
-        const walk = (arr: any[]) => { for (const c of arr || []) { cats.push(c); walk(c.children) } }
+        const walk = (arr: Category[]) => { for (const c of arr || []) { cats.push(c); walk(c.children || []) } }
         walk(data.categories || [])
-        setCategories(cats.filter((c) => c.image || true).slice(0, 12))
+        setCategories(cats.slice(0, 14))
       })
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch categories:", err) })
   }, [])
 
   if (categories.length === 0) return null
 
+  const scroll = (dir: number) => {
+    scrollRef.current?.scrollBy({ left: dir * 200, behavior: "smooth" })
+  }
+
   return (
-    <section className="py-6">
+    <section className="py-8 lg:py-10 border-b border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-          {categories.map((cat, i) => (
-            <Link
-              key={cat.id}
-              href={`/categories/${cat.handle}`}
-              className="flex flex-col items-center gap-2 min-w-[80px] group"
-            >
-              <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br ${FALLBACK_COLORS[i % FALLBACK_COLORS.length]} flex items-center justify-center text-2xl sm:text-3xl group-hover:scale-105 transition-transform shadow-sm`}>
-                {cat.image ? (
-                  <img src={cat.image} alt={cat.name} className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
-                ) : (
-                  <span>{CATEGORY_ICONS[cat.handle] || CATEGORY_ICONS[cat.name.toLowerCase()] || "📦"}</span>
-                )}
-              </div>
-              <span className="text-xs sm:text-sm font-medium text-gray-700 group-hover:text-primary-600 transition text-center leading-tight">{cat.name}</span>
-            </Link>
-          ))}
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Browse Categories</h2>
+          <div className="hidden sm:flex gap-1.5">
+            <button onClick={() => scroll(-1)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-300 transition-colors">
+              <ChevronLeft size={16} />
+            </button>
+            <button onClick={() => scroll(1)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-300 transition-colors">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+        <div ref={scrollRef} className="flex gap-5 overflow-x-auto pb-2 scrollbar-hide scroll-smooth">
+          {categories.map((cat, i) => {
+            const Icon = CATEGORY_ICONS[cat.handle] || CATEGORY_ICONS[cat.name.toLowerCase()] || Monitor
+            const colorClass = COLORS[i % COLORS.length]
+            return (
+              <Link
+                key={cat.id}
+                href={`/categories/${cat.handle}`}
+                className="flex flex-col items-center gap-2.5 min-w-[85px] group"
+              >
+                <div className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl flex items-center justify-center transition-all duration-200 shadow-sm ${colorClass}`}>
+                  {cat.image ? (
+                    <img src={cat.image} alt={cat.name} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
+                  ) : (
+                    <Icon size={28} />
+                  )}
+                </div>
+                <span className="text-xs sm:text-sm font-medium text-gray-600 group-hover:text-primary-600 transition-colors text-center leading-tight max-w-[85px]">
+                  {cat.name}
+                </span>
+              </Link>
+            )
+          })}
         </div>
       </div>
     </section>

@@ -25,6 +25,7 @@ import {
   GitCompare,
   Star,
   Shield,
+  Layers,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
@@ -51,7 +52,7 @@ export default function Header() {
     fetch("/api/cart", { headers: { "x-session-id": getCartSessionId() } })
       .then((r) => r.json())
       .then((d) => setCartCount(d.totals?.itemCount ?? 0))
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch cart count:", err) })
   }
 
   useEffect(() => {
@@ -109,7 +110,6 @@ export default function Header() {
       products: t("nav.products"),
       categories: t("nav.categories"),
       rfqs: t("nav.rfqs"),
-      catalogs: t("nav.catalogs"),
       cart: t("nav.cart"),
       orders: t("nav.orders"),
       loyalty: t("nav.loyalty"),
@@ -138,8 +138,8 @@ export default function Header() {
     { href: "/", label: t("nav.home"), icon: Home },
     { href: "/products", label: t("nav.products"), icon: Package },
     { href: "/categories", label: t("nav.categories"), icon: BarChart3 },
+    { href: "/packages", label: "Packages", icon: Layers },
     { href: "/rfqs", label: t("nav.rfqs"), icon: FileText },
-    { href: "/catalogs", label: t("nav.catalogs"), icon: FileText },
     { href: "/orders/bulk-orders", label: "Bulk Orders", icon: FileText },
   ]
 

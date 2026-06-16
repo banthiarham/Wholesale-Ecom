@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 import {
   Truck,
   Plus,
@@ -91,7 +92,7 @@ export default function AdminDeliveryPartnersPage() {
     fetch("/api/delivery-partners/all", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((data) => setPartners(data))
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch delivery partners:", err) })
       .finally(() => setLoading(false))
   }, [])
 
@@ -268,9 +269,7 @@ export default function AdminDeliveryPartnersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-primary-600" size={32} />
-      </div>
+      <SkeletonTable />
     )
   }
 
@@ -278,8 +277,8 @@ export default function AdminDeliveryPartnersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Delivery Partners</h1>
-          <p className="text-sm text-gray-500">Manage courier and logistics partners</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Delivery Partners</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Manage courier and logistics partners</p>
         </div>
         <button onClick={startAdd} className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition">
           <Plus size={16} /> Add Partner
@@ -287,65 +286,65 @@ export default function AdminDeliveryPartnersPage() {
       </div>
 
       {success && (
-        <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-4 py-2 rounded-lg">
+        <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400 px-4 py-2 rounded-lg">
           <CheckCircle size={16} /> {success}
         </div>
       )}
 
       {showForm && (
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{editing ? "Edit Partner" : "Add Partner"}</h2>
-            <button onClick={() => { setShowForm(false); setEditing(null) }} className="p-1 hover:bg-gray-100 rounded"><X size={18} /></button>
+            <button onClick={() => { setShowForm(false); setEditing(null) }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><X size={18} /></button>
           </div>
 
           {/* Basic Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Code</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code</label>
               <input
                 type="text"
                 value={form.code}
                 onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 placeholder="e.g. DELHIVERY"
                 disabled={!!editing}
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tracking URL Template</label>
-              <input type="text" value={form.trackingUrlTemplate} onChange={(e) => setForm({ ...form, trackingUrlTemplate: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="https://example.com/track/{trackingNumber}" />
-              <p className="text-xs text-gray-400 mt-1">Use {"{trackingNumber}"} as placeholder for the actual tracking number</p>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tracking URL Template</label>
+              <input type="text" value={form.trackingUrlTemplate} onChange={(e) => setForm({ ...form, trackingUrlTemplate: e.target.value })} className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="https://example.com/track/{trackingNumber}" />
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Use {"{trackingNumber}"} as placeholder for the actual tracking number</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
-              <input type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact Email</label>
+              <input type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
-              <input type="tel" value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact Phone</label>
+              <input type="tel" value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
           </div>
 
           {/* API Integration Section */}
-          <div className="mt-6 border border-gray-200 rounded-lg overflow-hidden">
+          <div className="mt-6 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
             <button
               type="button"
               onClick={() => setApiSectionOpen(!apiSectionOpen)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition text-left"
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition text-left"
             >
               <div className="flex items-center gap-2">
-                <Plug size={16} className="text-gray-500" />
-                <span className="text-sm font-semibold text-gray-700">API Integration</span>
+                <Plug size={16} className="text-gray-500 dark:text-gray-400" />
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">API Integration</span>
                 {form.apiEnabled && (
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Enabled</span>
+                  <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">Enabled</span>
                 )}
               </div>
-              {apiSectionOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+              {apiSectionOpen ? <ChevronUp size={16} className="text-gray-400 dark:text-gray-500" /> : <ChevronDown size={16} className="text-gray-400 dark:text-gray-500" />}
             </button>
 
             {apiSectionOpen && (
@@ -357,9 +356,9 @@ export default function AdminDeliveryPartnersPage() {
                     id="apiEnabled"
                     checked={form.apiEnabled}
                     onChange={(e) => setForm({ ...form, apiEnabled: e.target.checked })}
-                    className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    className="h-4 w-4 text-primary-600 dark:text-primary-400 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
                   />
-                  <label htmlFor="apiEnabled" className="text-sm font-medium text-gray-700">Enable API Integration</label>
+                  <label htmlFor="apiEnabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable API Integration</label>
                 </div>
 
                 {form.apiEnabled && (
@@ -367,28 +366,28 @@ export default function AdminDeliveryPartnersPage() {
                     {/* Built-in Provider dropdown (only when creating) */}
                     {!editing && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Built-in Provider</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Built-in Provider</label>
                         <select
                           value={form.selectedProvider}
                           onChange={(e) => handleProviderSelect(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                          className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                         >
                           <option value="">-- Select a provider --</option>
                           {BUILTIN_PROVIDERS.map((p) => (
                             <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
                           ))}
                         </select>
-                        <p className="text-xs text-gray-400 mt-1">Selecting a built-in provider auto-fills the code and credential fields</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Selecting a built-in provider auto-fills the code and credential fields</p>
                       </div>
                     )}
 
                     {/* Dynamic Credential Fields */}
                     {activeCredFields.length > 0 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-medium text-gray-700">Credentials</h4>
+                        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Credentials</h4>
                         {activeCredFields.map((field) => (
                           <div key={field.key}>
-                            <label className="block text-sm font-medium text-gray-600 mb-1">
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
                               {field.label}
                               {field.required && <span className="text-red-500 ml-0.5">*</span>}
                             </label>
@@ -402,7 +401,7 @@ export default function AdminDeliveryPartnersPage() {
                                 })
                               }
                               placeholder={editing && form.credentialFields[field.key] ? "Enter new value to replace masked value" : `Enter ${field.label}`}
-                              className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                             />
                           </div>
                         ))}
@@ -416,33 +415,33 @@ export default function AdminDeliveryPartnersPage() {
                         id="testMode"
                         checked={form.testMode}
                         onChange={(e) => setForm({ ...form, testMode: e.target.checked })}
-                        className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        className="h-4 w-4 text-primary-600 dark:text-primary-400 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
                       />
-                      <label htmlFor="testMode" className="text-sm font-medium text-gray-700">Test Mode</label>
-                      <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">Sandbox</span>
+                      <label htmlFor="testMode" className="text-sm font-medium text-gray-700 dark:text-gray-300">Test Mode</label>
+                      <span className="text-xs text-yellow-600 bg-yellow-50 dark:bg-yellow-900/30 dark:text-yellow-400 px-2 py-0.5 rounded-full">Sandbox</span>
                     </div>
 
                     {/* API Base URL */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">API Base URL</label>
                       <input
                         type="text"
                         value={form.apiBaseUrl}
                         onChange={(e) => setForm({ ...form, apiBaseUrl: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                         placeholder="https://api.example.com/v1 (for custom providers)"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Leave empty to use the built-in provider default URL</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Leave empty to use the built-in provider default URL</p>
                     </div>
 
                     {/* Webhook URL */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Webhook URL</label>
                       <input
                         type="text"
                         value={form.webhookUrl}
                         onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                         placeholder="https://your-store.com/api/webhooks/delivery-status"
                       />
                     </div>
@@ -454,13 +453,13 @@ export default function AdminDeliveryPartnersPage() {
                           type="button"
                           onClick={testConnection}
                           disabled={testingConnection}
-                          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+                          className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
                         >
                           {testingConnection ? <Loader2 size={14} className="animate-spin" /> : <Plug size={14} />}
                           Test Connection
                         </button>
                         {testResult && (
-                          <div className={`flex items-center gap-2 mt-2 text-sm px-3 py-2 rounded-lg ${testResult.ok ? "text-green-700 bg-green-50" : "text-red-700 bg-red-50"}`}>
+                          <div className={`flex items-center gap-2 mt-2 text-sm px-3 py-2 rounded-lg ${testResult.ok ? "text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/30" : "text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/30"}`}>
                             {testResult.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
                             {testResult.message}
                           </div>
@@ -474,7 +473,7 @@ export default function AdminDeliveryPartnersPage() {
           </div>
 
           <div className="flex justify-end gap-3 mt-4">
-            <button onClick={() => { setShowForm(false); setEditing(null) }} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button onClick={() => { setShowForm(false); setEditing(null) }} className="px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">Cancel</button>
             <button onClick={savePartner} disabled={saving || !form.name || !form.code} className="flex items-center gap-2 px-5 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition disabled:opacity-50">
               {saving ? <Loader2 size={14} className="animate-spin" /> : null}
               {editing ? "Update" : "Create"}
@@ -483,66 +482,66 @@ export default function AdminDeliveryPartnersPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-800/50">
             <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Partner</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Code</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Tracking URL</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Contact</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Orders</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">API</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Partner</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Code</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Tracking URL</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Contact</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Orders</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">API</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             {partners.map((p) => (
-              <tr key={p.id} className={`hover:bg-gray-50 ${!p.isActive ? "opacity-50" : ""}`}>
+              <tr key={p.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${!p.isActive ? "opacity-50" : ""}`}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Truck size={16} className="text-gray-400" />
-                    <span className="font-medium text-gray-900">{p.name}</span>
+                    <Truck size={16} className="text-gray-400 dark:text-gray-500" />
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{p.name}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.code}</td>
+                <td className="px-4 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">{p.code}</td>
                 <td className="px-4 py-3">
                   {p.trackingUrlTemplate ? (
-                    <span className="text-xs text-gray-500 truncate max-w-[200px] block">{p.trackingUrlTemplate}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px] block">{p.trackingUrlTemplate}</span>
                   ) : (
-                    <span className="text-xs text-gray-400">Not set</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">Not set</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  {p.contactEmail && <p className="text-xs text-gray-600">{p.contactEmail}</p>}
-                  {p.contactPhone && <p className="text-xs text-gray-500">{p.contactPhone}</p>}
+                  {p.contactEmail && <p className="text-xs text-gray-600 dark:text-gray-400">{p.contactEmail}</p>}
+                  {p.contactPhone && <p className="text-xs text-gray-500 dark:text-gray-400">{p.contactPhone}</p>}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600">{p._count?.orders ?? 0}</td>
+                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{p._count?.orders ?? 0}</td>
                 <td className="px-4 py-3">
                   {p.apiEnabled && p.testMode ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-700 bg-yellow-50 px-2 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-700 bg-yellow-50 dark:bg-yellow-900/30 dark:text-yellow-400 px-2 py-0.5 rounded-full">
                       <AlertCircle size={12} /> Test Mode
                     </span>
                   ) : p.apiEnabled && p.credentials ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full">
                       <CheckCircle2 size={12} /> Connected
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 dark:text-gray-400 px-2 py-0.5 rounded-full">
                       Not configured
                     </span>
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <button onClick={() => toggleActive(p)} className="text-gray-500 hover:text-primary-600">
+                  <button onClick={() => toggleActive(p)} className="text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
                     {p.isActive ? <ToggleRight size={20} className="text-green-500" /> : <ToggleLeft size={20} />}
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => startEdit(p)} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded"><Edit3 size={14} /></button>
-                    <button onClick={() => deletePartner(p.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"><Trash2 size={14} /></button>
+                    <button onClick={() => startEdit(p)} className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><Edit3 size={14} /></button>
+                    <button onClick={() => deletePartner(p.id)} className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -550,7 +549,7 @@ export default function AdminDeliveryPartnersPage() {
           </tbody>
         </table>
         {partners.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
+          <div className="text-center py-12 text-gray-400 dark:text-gray-500">
             <Truck size={40} className="mx-auto mb-3" />
             <p>No delivery partners yet</p>
           </div>

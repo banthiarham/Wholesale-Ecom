@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
-import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation, ExternalLink, Circle, Clock } from "lucide-react"
+import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation, ExternalLink, Circle, Clock, Layers } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 
 interface OrderDetail {
@@ -260,22 +260,90 @@ export default function OrderDetailPage() {
           <div className="border-t border-gray-100 pt-6">
             <h2 className="font-semibold text-gray-900 mb-4">Items</h2>
             <div className="space-y-4">
-              {order.items.map((item) => (
-                <div key={item.id} className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                    {item.product.thumbnail ? <img src={item.product.thumbnail} alt={item.product.title} className="w-full h-full object-cover" /> : <Package size={24} className="text-gray-400" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{item.product.title}</p>
-                    {item.product.sku && <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>}
-                    <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900">{formatPrice(Number(item.totalPrice))}</p>
-                    <p className="text-xs text-gray-500">{formatPrice(Number(item.unitPrice))} each</p>
-                  </div>
-                </div>
-              ))}
+              {(() => {
+                const packageGroups = new Map<string, any[]>()
+                const standaloneItems: any[] = []
+
+                for (const item of order.items) {
+                  const meta = (item as any).metadata
+                  const packageId = meta?.packageId
+                  if (packageId) {
+                    if (!packageGroups.has(packageId)) packageGroups.set(packageId, [])
+                    packageGroups.get(packageId)!.push(item)
+                  } else {
+                    standaloneItems.push(item)
+                  }
+                }
+
+                return (
+                  <>
+                    {Array.from(packageGroups.entries()).map(([packageId, items]) => {
+                      const firstMeta = (items[0] as any).metadata
+                      const packageTitle = firstMeta?.packageTitle || "Custom Package"
+                      const selectedComponents = firstMeta?.selectedComponents || []
+                      const groupDiscounts = firstMeta?.groupDiscounts || []
+                      const packageTotal = firstMeta?.packageTotal ?? items.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0)
+
+                      return (
+                        <div key={packageId} className="bg-primary-50 rounded-xl border border-primary-200 overflow-hidden">
+                          <div className="px-4 py-3 bg-primary-100 flex items-center gap-2">
+                            <Layers size={16} className="text-primary-600" />
+                            <span className="font-semibold text-primary-800">{packageTitle}</span>
+                            <span className="text-xs bg-primary-200 text-primary-700 px-2 py-0.5 rounded-full">Package</span>
+                          </div>
+                          <div className="divide-y divide-primary-100">
+                            {selectedComponents.length > 0 ? selectedComponents.map((comp: any) => (
+                              <div key={comp.productId} className="px-4 py-2 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded">{comp.groupName}</span>
+                                  <span className="text-sm font-medium text-gray-900">{comp.productTitle}</span>
+                                </div>
+                                <span className="text-sm text-gray-700">{formatPrice(comp.unitPrice)}</span>
+                              </div>
+                            )) : items.map((item: any) => (
+                              <div key={item.id} className="px-4 py-2 flex items-center gap-3">
+                                {item.product.thumbnail ? <img src={item.product.thumbnail} alt={item.product.title} className="w-10 h-10 rounded object-cover" /> : <Package size={20} className="text-gray-400" />}
+                                <span className="text-sm font-medium text-gray-900 flex-1">{item.product.title}</span>
+                                <span className="text-sm text-gray-700">{formatPrice(Number(item.totalPrice))}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {groupDiscounts.length > 0 && (
+                            <div className="px-4 py-2 bg-green-50">
+                              {groupDiscounts.map((d: any, i: number) => (
+                                <div key={i} className="flex justify-between text-xs text-green-700">
+                                  <span>{d.groupName} discount</span>
+                                  <span>-{formatPrice(d.discountAmount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="px-4 py-2 flex justify-between items-center border-t border-primary-200">
+                            <span className="font-bold text-gray-900">Package Total</span>
+                            <span className="font-bold text-primary-700">{formatPrice(packageTotal)}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {standaloneItems.map((item) => (
+                      <div key={item.id} className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {item.product.thumbnail ? <img src={item.product.thumbnail} alt={item.product.title} className="w-full h-full object-cover" /> : <Package size={24} className="text-gray-400" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{item.product.title}</p>
+                          {item.product.sku && <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>}
+                          <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium text-gray-900">{formatPrice(Number(item.totalPrice))}</p>
+                          <p className="text-xs text-gray-500">{formatPrice(Number(item.unitPrice))} each</p>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )
+              })()}
             </div>
           </div>
 

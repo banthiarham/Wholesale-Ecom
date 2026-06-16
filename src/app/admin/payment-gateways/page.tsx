@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Plus, Search, X, Trash2, Edit2, PlusCircle, MinusCircle } from "lucide-react"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface Gateway {
   id: string
@@ -282,11 +283,7 @@ export default function AdminPaymentGatewaysPage() {
   }
 
   if (loading)
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-      </div>
-    )
+    return <SkeletonTable />
 
   const currentCredFields = form.providerType === "custom"
     ? form.customCredFields
@@ -297,7 +294,7 @@ export default function AdminPaymentGatewaysPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Payment Gateways</h1>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Payment Gateways</h1>
         <button
           onClick={() => {
             resetForm()
@@ -312,24 +309,24 @@ export default function AdminPaymentGatewaysPage() {
       <div className="relative">
         <Search
           size={18}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
         />
         <input
           type="text"
           placeholder="Search gateways..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
       {showForm && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               {editing ? "Edit Gateway" : "Add Gateway"}
             </h2>
-            <button onClick={resetForm} className="text-gray-400 hover:text-gray-600">
+            <button onClick={resetForm} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400">
               <X size={20} />
             </button>
           </div>
@@ -338,7 +335,7 @@ export default function AdminPaymentGatewaysPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {!editing && (
                 <div className="col-span-full">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Gateway Type</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gateway Type</label>
                   <div className="flex gap-4">
                     <label className="flex items-center gap-2">
                       <input
@@ -348,7 +345,7 @@ export default function AdminPaymentGatewaysPage() {
                         onChange={() => setForm((prev) => ({ ...prev, providerType: "builtin", credentials: {}, customCredFields: [] }))}
                         className="accent-primary-600"
                       />
-                      <span className="text-sm text-gray-700">Built-in Provider</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Built-in Provider</span>
                     </label>
                     <label className="flex items-center gap-2">
                       <input
@@ -358,7 +355,7 @@ export default function AdminPaymentGatewaysPage() {
                         onChange={() => setForm((prev) => ({ ...prev, providerType: "custom", credentials: {}, customCredFields: [{ key: "", label: "", required: true }] }))}
                         className="accent-primary-600"
                       />
-                      <span className="text-sm text-gray-700">Custom Gateway</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Custom Gateway</span>
                     </label>
                   </div>
                 </div>
@@ -370,7 +367,7 @@ export default function AdminPaymentGatewaysPage() {
                   value={form.provider}
                   onChange={(e) => handleProviderChange(e.target.value)}
                   disabled={!!editing}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                  className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:text-gray-500 dark:disabled:text-gray-500"
                 >
                   {BUILTIN_PROVIDERS.map((p) => (
                     <option key={p} value={p}>
@@ -388,7 +385,7 @@ export default function AdminPaymentGatewaysPage() {
                   value={form.customProviderName}
                   onChange={(e) => setForm({ ...form, customProviderName: e.target.value })}
                   disabled={!!editing}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                  className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:text-gray-500 dark:disabled:text-gray-500"
                 />
               )}
 
@@ -397,25 +394,25 @@ export default function AdminPaymentGatewaysPage() {
                 placeholder="Label (e.g. Razorpay Test)"
                 value={form.label}
                 onChange={(e) => setForm({ ...form, label: e.target.value })}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <input
                 placeholder="Description (optional)"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
 
             {/* Custom gateway: credential field builder */}
             {isCustom && (
-              <div className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+              <div className="border border-gray-100 dark:border-gray-800 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
                 <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-gray-700">Credential Fields</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Credential Fields</label>
                   <button
                     type="button"
                     onClick={addCustomCredField}
-                    className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
+                    className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700"
                   >
                     <PlusCircle size={14} /> Add Field
                   </button>
@@ -428,16 +425,16 @@ export default function AdminPaymentGatewaysPage() {
                         placeholder="Field key (e.g. apiKey)"
                         value={field.key}
                         onChange={(e) => updateCustomCredField(idx, "key", e.target.value)}
-                        className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 px-2 py-1.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                       <input
                         required
                         placeholder="Label (e.g. API Key)"
                         value={field.label}
                         onChange={(e) => updateCustomCredField(idx, "label", e.target.value)}
-                        className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 px-2 py-1.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
-                      <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap">
+                      <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
                         <input
                           type="checkbox"
                           checked={field.required}
@@ -449,14 +446,14 @@ export default function AdminPaymentGatewaysPage() {
                       <button
                         type="button"
                         onClick={() => removeCustomCredField(idx)}
-                        className="text-red-400 hover:text-red-600"
+                        className="text-red-400 hover:text-red-600 dark:hover:text-red-400"
                       >
                         <MinusCircle size={16} />
                       </button>
                     </div>
                   ))}
                   {form.customCredFields.length === 0 && (
-                    <p className="text-xs text-gray-400">No credential fields defined. Add at least one.</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">No credential fields defined. Add at least one.</p>
                   )}
                 </div>
               </div>
@@ -470,13 +467,13 @@ export default function AdminPaymentGatewaysPage() {
                   placeholder="Gateway URL (e.g. https://pay.example.com/initiate)"
                   value={form.gatewayUrl}
                   onChange={(e) => setForm({ ...form, gatewayUrl: e.target.value })}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <input
                   placeholder="Webhook URL (optional, e.g. https://pay.example.com/callback)"
                   value={form.webhookUrl}
                   onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             )}
@@ -491,7 +488,7 @@ export default function AdminPaymentGatewaysPage() {
                   placeholder={`${field.label}${field.required ? " *" : ""}`}
                   value={form.credentials[field.key] || ""}
                   onChange={(e) => updateCredential(field.key, e.target.value)}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               ))}
             </div>
@@ -505,7 +502,7 @@ export default function AdminPaymentGatewaysPage() {
                   onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
                   className="rounded border-gray-300 accent-primary-600"
                 />
-                <span className="text-sm text-gray-700">Active</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Active</span>
               </label>
               <label className="flex items-center gap-2 px-3 py-2">
                 <input
@@ -514,7 +511,7 @@ export default function AdminPaymentGatewaysPage() {
                   onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
                   className="rounded border-gray-300 accent-primary-600"
                 />
-                <span className="text-sm text-gray-700">Default Gateway</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Default Gateway</span>
               </label>
               <label className="flex items-center gap-2 px-3 py-2">
                 <input
@@ -523,7 +520,7 @@ export default function AdminPaymentGatewaysPage() {
                   onChange={(e) => setForm({ ...form, testMode: e.target.checked })}
                   className="rounded border-gray-300 accent-primary-600"
                 />
-                <span className="text-sm text-gray-700">Test Mode</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Test Mode</span>
               </label>
             </div>
 
@@ -531,7 +528,7 @@ export default function AdminPaymentGatewaysPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50"
               >
                 Cancel
               </button>
@@ -548,38 +545,38 @@ export default function AdminPaymentGatewaysPage() {
       )}
 
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-100 p-12 text-center">
-          <p className="text-gray-600">No payment gateways configured.</p>
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-12 text-center">
+          <p className="text-gray-600 dark:text-gray-400">No payment gateways configured.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Provider</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Label</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Mode</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Credentials</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Gateway URL</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Provider</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Label</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Mode</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Credentials</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Gateway URL</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
               {filtered.map((g) => {
                 const isBuiltin = BUILTIN_PROVIDERS.includes(g.provider as any)
                 return (
-                  <tr key={g.id} className="hover:bg-gray-50 transition">
+                  <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${isBuiltin ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${isBuiltin ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400" : "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"}`}>
                         {PROVIDER_LABELS[g.provider] || g.provider}
                         {!isBuiltin && <span className="ml-1 text-[10px]">(custom)</span>}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{g.label}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{g.label}</div>
                       {g.description && (
-                        <div className="text-xs text-gray-500">{g.description}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{g.description}</div>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -587,14 +584,14 @@ export default function AdminPaymentGatewaysPage() {
                         <span
                           className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                             g.isActive
-                              ? "bg-green-50 text-green-700"
-                              : "bg-gray-100 text-gray-600"
+                              ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                              : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                           }`}
                         >
                           {g.isActive ? "Active" : "Inactive"}
                         </span>
                         {g.isDefault && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                             Default
                           </span>
                         )}
@@ -604,8 +601,8 @@ export default function AdminPaymentGatewaysPage() {
                       <span
                         className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                           g.testMode
-                            ? "bg-yellow-50 text-yellow-700"
-                            : "bg-purple-50 text-purple-700"
+                            ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                            : "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                         }`}
                       >
                         {g.testMode ? "Test" : "Live"}
@@ -615,43 +612,43 @@ export default function AdminPaymentGatewaysPage() {
                       {g.credentials && typeof g.credentials === "object" && Object.keys(g.credentials).length > 0 ? (
                         <div className="space-y-0.5">
                           {Object.entries(g.credentials).slice(0, showCreds[g.id] ? undefined : 2).map(([k, v]) => (
-                            <div key={k} className="text-xs text-gray-500">
-                              <span className="font-medium text-gray-600">{k}:</span>{" "}
+                            <div key={k} className="text-xs text-gray-500 dark:text-gray-400">
+                              <span className="font-medium text-gray-600 dark:text-gray-400">{k}:</span>{" "}
                               <span className="font-mono">{showCreds[g.id] ? v : "••••••••"}</span>
                             </div>
                           ))}
                           {Object.keys(g.credentials).length > 2 && !showCreds[g.id] && (
-                            <div className="text-xs text-gray-400">+{Object.keys(g.credentials).length - 2} more</div>
+                            <div className="text-xs text-gray-400 dark:text-gray-500">+{Object.keys(g.credentials).length - 2} more</div>
                           )}
                           <button
                             onClick={() => toggleCredVisibility(g.id)}
-                            className="text-xs text-primary-600 hover:underline"
+                            className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
                           >
                             {showCreds[g.id] ? "Hide" : "Show"}
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       {g.gatewayUrl ? (
-                        <span className="text-xs font-mono text-gray-500 truncate max-w-[200px] block" title={g.gatewayUrl}>{g.gatewayUrl}</span>
+                        <span className="text-xs font-mono text-gray-500 dark:text-gray-400 truncate max-w-[200px] block" title={g.gatewayUrl}>{g.gatewayUrl}</span>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEdit(g)}
-                          className="p-1.5 text-gray-400 hover:text-primary-600 rounded hover:bg-primary-50"
+                          className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 rounded hover:bg-primary-50 dark:hover:bg-primary-900/20"
                         >
                           <Edit2 size={14} />
                         </button>
                         <button
                           onClick={() => handleDelete(g.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
+                          className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                           <Trash2 size={14} />
                         </button>

@@ -116,7 +116,7 @@ export default function CheckoutPage() {
       fetch("/api/loyalty/me", { headers: { Authorization: `Bearer ${token}` } })
         .then((res) => res.json())
         .then((data) => { if (data.points !== undefined) setLoyalty(data) })
-        .catch(() => {})
+        .catch((err) => { console.error("Failed to fetch loyalty data:", err) })
     }
     fetch("/api/payment-gateways/enabled")
       .then((res) => res.json())
@@ -128,7 +128,7 @@ export default function CheckoutPage() {
           setSelectedProvider(defaultGw?.provider || list[0].provider)
         }
       })
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch payment gateways:", err) })
   }, [])
 
   useEffect(() => {

@@ -14,7 +14,6 @@ import { PricingModule } from './pricing/pricing.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { RfqsModule } from './rfqs/rfqs.module';
 import { VendorModule } from './vendor/vendor.module';
-import { CatalogsModule } from './catalogs/catalogs.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -33,6 +32,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { BannersModule } from './banners/banners.module';
 import { HomeSectionsModule } from './home-sections/home-sections.module';
 import { BulkOrdersModule } from './bulk-orders/bulk-orders.module';
+import { PackagesModule } from './packages/packages.module';
 
 @Module({
   imports: [
@@ -53,7 +53,6 @@ import { BulkOrdersModule } from './bulk-orders/bulk-orders.module';
     InventoryModule,
     RfqsModule,
     VendorModule,
-    CatalogsModule,
     LoyaltyModule,
     NotificationsModule,
     AnalyticsModule,
@@ -72,6 +71,7 @@ import { BulkOrdersModule } from './bulk-orders/bulk-orders.module';
     BannersModule,
     HomeSectionsModule,
     BulkOrdersModule,
+    PackagesModule,
   ],
   controllers: [AppController],
 })

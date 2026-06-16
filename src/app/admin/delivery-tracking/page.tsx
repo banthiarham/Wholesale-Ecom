@@ -16,15 +16,16 @@ import {
   RefreshCw,
   Send,
 } from "lucide-react"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 
 const DELIVERY_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  PENDING: { label: "Pending", color: "text-yellow-700", bg: "bg-yellow-50" },
-  PICKED_UP: { label: "Picked Up", color: "text-blue-700", bg: "bg-blue-50" },
-  IN_TRANSIT: { label: "In Transit", color: "text-indigo-700", bg: "bg-indigo-50" },
-  OUT_FOR_DELIVERY: { label: "Out for Delivery", color: "text-orange-700", bg: "bg-orange-50" },
-  DELIVERED: { label: "Delivered", color: "text-green-700", bg: "bg-green-50" },
-  FAILED: { label: "Failed", color: "text-red-700", bg: "bg-red-50" },
-  RETURNED: { label: "Returned", color: "text-gray-700", bg: "bg-gray-100" },
+  PENDING: { label: "Pending", color: "text-yellow-700 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/30" },
+  PICKED_UP: { label: "Picked Up", color: "text-blue-700 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20" },
+  IN_TRANSIT: { label: "In Transit", color: "text-indigo-700 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/20" },
+  OUT_FOR_DELIVERY: { label: "Out for Delivery", color: "text-orange-700 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/20" },
+  DELIVERED: { label: "Delivered", color: "text-green-700 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/30" },
+  FAILED: { label: "Failed", color: "text-red-700 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20" },
+  RETURNED: { label: "Returned", color: "text-gray-700 dark:text-gray-400", bg: "bg-gray-100 dark:bg-gray-800" },
 }
 
 interface ShipmentOrder {
@@ -77,7 +78,7 @@ export default function AdminDeliveryTrackingPage() {
       setShipments(withDelivery.length > 0 ? withDelivery : allOrders.filter((o: ShipmentOrder) => o.status === "SHIPPED" || o.status === "PROCESSING" || o.status === "DELIVERED"))
       setPartners(Array.isArray(pData) ? pData : [])
       if (sData) setStats(sData)
-    }).catch(() => {}).finally(() => setLoading(false))
+    }).catch((err) => { console.error("Failed to fetch shipment data:", err) }).finally(() => setLoading(false))
   }, [])
 
   const filtered = shipments.filter((s) => {
@@ -185,19 +186,15 @@ export default function AdminDeliveryTrackingPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-primary-600" size={32} />
-      </div>
-    )
+    return <SkeletonTable />
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Shipment Tracking</h1>
-          <p className="text-sm text-gray-500">Monitor all deliveries and tracking updates</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Shipment Tracking</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Monitor all deliveries and tracking updates</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -209,7 +206,7 @@ export default function AdminDeliveryTrackingPage() {
             Sync All Tracking
           </button>
           {syncAllResult && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
               Synced: {syncAllResult.synced ?? 0}, Failed: {syncAllResult.failed ?? 0}
             </span>
           )}
@@ -219,19 +216,19 @@ export default function AdminDeliveryTrackingPage() {
       {/* Stats cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Total Shipments", value: stats?.totalShipments ?? shipments.length, icon: PackageCheck, color: "bg-blue-50 text-blue-600" },
-          { label: "In Transit", value: stats?.byStatus?.IN_TRANSIT ?? 0, icon: Truck, color: "bg-indigo-50 text-indigo-600" },
-          { label: "Delivered", value: stats?.byStatus?.DELIVERED ?? 0, icon: CheckCircle2, color: "bg-green-50 text-green-600" },
-          { label: "Failed", value: (stats?.byStatus?.FAILED ?? 0) + (stats?.byStatus?.RETURNED ?? 0), icon: X, color: "bg-red-50 text-red-600" },
+          { label: "Total Shipments", value: stats?.totalShipments ?? shipments.length, icon: PackageCheck, color: "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400" },
+          { label: "In Transit", value: stats?.byStatus?.IN_TRANSIT ?? 0, icon: Truck, color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400" },
+          { label: "Delivered", value: stats?.byStatus?.DELIVERED ?? 0, icon: CheckCircle2, color: "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400" },
+          { label: "Failed", value: (stats?.byStatus?.FAILED ?? 0) + (stats?.byStatus?.RETURNED ?? 0), icon: X, color: "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400" },
         ].map((s) => (
-          <div key={s.label} className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
+          <div key={s.label} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-4">
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${s.color}`}>
                 <s.icon size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{s.value}</p>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{s.value}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
               </div>
             </div>
           </div>
@@ -245,13 +242,13 @@ export default function AdminDeliveryTrackingPage() {
           placeholder="Search order or tracking #..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-64"
+          className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-64"
         />
-        <select value={filterPartner} onChange={(e) => setFilterPartner(e.target.value)} className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+        <select value={filterPartner} onChange={(e) => setFilterPartner(e.target.value)} className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">All Partners</option>
           {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">All Statuses</option>
           {Object.entries(DELIVERY_STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
           <option value="NONE">No Tracking</option>
@@ -259,61 +256,61 @@ export default function AdminDeliveryTrackingPage() {
       </div>
 
       {/* Shipments table */}
-      <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-800/50">
             <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Order #</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Customer</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Partner</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">API</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Tracking #</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Delivery Status</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Location</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Order #</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Customer</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Partner</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">API</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Tracking #</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Delivery Status</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Location</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             {filtered.map((s) => {
               const ds = s.deliveryTracking?.status
               const cfg = ds ? DELIVERY_STATUS_CONFIG[ds] : null
               return (
-                <tr key={s.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.orderNumber?.slice(0, 8)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{s.user ? `${s.user.firstName} ${s.user.lastName}` : "-"}</td>
+                <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{s.orderNumber?.slice(0, 8)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{s.user ? `${s.user.firstName} ${s.user.lastName}` : "-"}</td>
                   <td className="px-4 py-3">
                     {s.deliveryPartner ? (
                       <div className="flex items-center gap-2">
-                        <Truck size={14} className="text-gray-400" />
-                        <span className="text-sm text-gray-700">{s.deliveryPartner.name}</span>
+                        <Truck size={14} className="text-gray-400 dark:text-gray-500" />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{s.deliveryPartner.name}</span>
                       </div>
                     ) : (
-                      <span className="text-sm text-gray-400">{s.carrier || "None"}</span>
+                      <span className="text-sm text-gray-400 dark:text-gray-500">{s.carrier || "None"}</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     {s.deliveryPartner?.apiEnabled ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400">
                         <span className="w-2 h-2 rounded-full bg-green-500" />
                         API
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 font-mono">{s.trackingNumber || "-"}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 font-mono">{s.trackingNumber || "-"}</td>
                   <td className="px-4 py-3">
                     {cfg ? (
                       <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
                     ) : (
-                      <span className="text-xs text-gray-400">No tracking</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">No tracking</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{s.deliveryTracking?.currentLocation || "-"}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{s.deliveryTracking?.currentLocation || "-"}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       {getTrackingUrl(s) && (
-                        <a href={getTrackingUrl(s)!} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded"><ExternalLink size={14} /></a>
+                        <a href={getTrackingUrl(s)!} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><ExternalLink size={14} /></a>
                       )}
-                      <button onClick={() => { setDetailOrder(s); setShowEventForm(false) }} className="px-3 py-1.5 text-xs font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50">View</button>
+                      <button onClick={() => { setDetailOrder(s); setShowEventForm(false) }} className="px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20">View</button>
                     </div>
                   </td>
                 </tr>
@@ -322,7 +319,7 @@ export default function AdminDeliveryTrackingPage() {
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
+          <div className="text-center py-12 text-gray-400 dark:text-gray-500">
             <PackageCheck size={40} className="mx-auto mb-3" />
             <p>No shipments found</p>
           </div>
@@ -332,40 +329,40 @@ export default function AdminDeliveryTrackingPage() {
       {/* Detail modal */}
       {detailOrder && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setDetailOrder(null)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Shipment Details</h2>
-              <button onClick={() => setDetailOrder(null)} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Shipment Details</h2>
+              <button onClick={() => setDetailOrder(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><X size={20} /></button>
             </div>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-gray-400">Order #</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Order #</p>
                   <p className="text-sm font-medium">{detailOrder.orderNumber?.slice(0, 8)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Partner</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Partner</p>
                   <p className="text-sm font-medium">{detailOrder.deliveryPartner?.name || detailOrder.carrier || "None"}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Tracking #</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Tracking #</p>
                   <p className="text-sm font-mono">{detailOrder.trackingNumber || "Not assigned"}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Current Status</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Current Status</p>
                   {(() => {
                     const ds = detailOrder.deliveryTracking?.status
                     const cfg = ds ? DELIVERY_STATUS_CONFIG[ds] : null
                     return cfg ? (
                       <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
-                    ) : <span className="text-xs text-gray-400">No tracking</span>
+                    ) : <span className="text-xs text-gray-400 dark:text-gray-500">No tracking</span>
                   })()}
                 </div>
               </div>
 
               {getTrackingUrl(detailOrder) && (
-                <a href={getTrackingUrl(detailOrder)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 w-fit">
+                <a href={getTrackingUrl(detailOrder)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 w-fit">
                   <ExternalLink size={14} /> Track on {detailOrder.deliveryPartner?.name}
                 </a>
               )}
@@ -373,7 +370,7 @@ export default function AdminDeliveryTrackingPage() {
               {/* Timeline */}
               {detailOrder.deliveryTracking?.events && detailOrder.deliveryTracking.events.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Tracking Timeline</h3>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Tracking Timeline</h3>
                   <div className="space-y-0">
                     {detailOrder.deliveryTracking.events.map((event, i) => {
                       const cfg = DELIVERY_STATUS_CONFIG[event.status]
@@ -381,14 +378,14 @@ export default function AdminDeliveryTrackingPage() {
                       return (
                         <div key={event.id} className="flex gap-3">
                           <div className="flex flex-col items-center">
-                            {isLast ? <Circle size={16} className="text-primary-600 fill-primary-600" /> : <Circle size={16} className="text-gray-300" />}
-                            {i < detailOrder.deliveryTracking!.events.length - 1 && <div className="w-0.5 h-8 bg-gray-200" />}
+                            {isLast ? <Circle size={16} className="text-primary-600 fill-primary-600" /> : <Circle size={16} className="text-gray-300 dark:text-gray-600" />}
+                            {i < detailOrder.deliveryTracking!.events.length - 1 && <div className="w-0.5 h-8 bg-gray-200 dark:bg-gray-700" />}
                           </div>
                           <div className="pb-4">
-                            <p className={`text-sm font-medium ${isLast ? "text-gray-900" : "text-gray-500"}`}>{cfg?.label || event.status}</p>
-                            {event.location && <p className="text-xs text-gray-400 flex items-center gap-1"><MapPin size={10} />{event.location}</p>}
-                            {event.notes && <p className="text-xs text-gray-400">{event.notes}</p>}
-                            <p className="text-xs text-gray-400 flex items-center gap-1"><Clock size={10} />{new Date(event.occurredAt).toLocaleString()}</p>
+                            <p className={`text-sm font-medium ${isLast ? "text-gray-900 dark:text-gray-100" : "text-gray-500 dark:text-gray-400"}`}>{cfg?.label || event.status}</p>
+                            {event.location && <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1"><MapPin size={10} />{event.location}</p>}
+                            {event.notes && <p className="text-xs text-gray-400 dark:text-gray-500">{event.notes}</p>}
+                            <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1"><Clock size={10} />{new Date(event.occurredAt).toLocaleString()}</p>
                           </div>
                         </div>
                       )
@@ -412,7 +409,7 @@ export default function AdminDeliveryTrackingPage() {
                 <button
                   onClick={syncTracking}
                   disabled={syncTrackingLoading}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50"
                 >
                   {syncTrackingLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                   Sync from {detailOrder.deliveryPartner.name}
@@ -420,26 +417,26 @@ export default function AdminDeliveryTrackingPage() {
               )}
 
               {/* Add event */}
-              <div className="border-t border-gray-100 pt-4">
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
                 {showEventForm ? (
                   <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-gray-700">Add Tracking Event</h3>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Add Tracking Event</h3>
                     <div className="grid grid-cols-1 gap-3">
-                      <select value={eventForm.status} onChange={(e) => setEventForm({ ...eventForm, status: e.target.value })} className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                      <select value={eventForm.status} onChange={(e) => setEventForm({ ...eventForm, status: e.target.value })} className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
                         {Object.entries(DELIVERY_STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
                       </select>
-                      <input type="text" value={eventForm.location} onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })} placeholder="Current location" className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                      <input type="text" value={eventForm.notes} onChange={(e) => setEventForm({ ...eventForm, notes: e.target.value })} placeholder="Notes" className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="text" value={eventForm.location} onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })} placeholder="Current location" className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="text" value={eventForm.notes} onChange={(e) => setEventForm({ ...eventForm, notes: e.target.value })} placeholder="Notes" className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => setShowEventForm(false)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                      <button onClick={() => setShowEventForm(false)} className="px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">Cancel</button>
                       <button onClick={addTrackingEvent} disabled={addingEvent} className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 disabled:opacity-50">
                         {addingEvent ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add Event
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <button onClick={() => setShowEventForm(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50">
+                  <button onClick={() => setShowEventForm(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20">
                     <Plus size={14} /> Add Tracking Event
                   </button>
                 )}

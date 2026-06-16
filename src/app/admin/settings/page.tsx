@@ -15,6 +15,7 @@ import {
   ImageIcon,
 } from "lucide-react"
 import { generateShades } from "@/lib/settings/color-utils"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 
 const GOOGLE_FONTS = [
   "Inter",
@@ -134,7 +135,7 @@ export default function AdminSettingsPage() {
           })
         }
       })
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch settings:", err) })
       .finally(() => setLoading(false))
   }, [])
 
@@ -199,19 +200,15 @@ export default function AdminSettingsPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-primary-600" size={32} />
-      </div>
-    )
+    return <SkeletonTable rows={6} cols={3} />
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Site Settings</h1>
-          <p className="text-sm text-gray-500">Customize your store&apos;s appearance and content</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Site Settings</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Customize your store&apos;s appearance and content</p>
         </div>
         <div className="flex items-center gap-3">
           {success && (
@@ -236,7 +233,7 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto">
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -244,7 +241,7 @@ export default function AdminSettingsPage() {
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
               activeTab === tab.key
                 ? "border-primary-600 text-primary-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
             }`}
           >
             <tab.icon size={16} />
@@ -254,33 +251,33 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* Tab Content */}
-      <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
         {activeTab === "branding" && (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Site Name</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Site Name</label>
               <input
                 type="text"
                 value={settings.siteName}
                 onChange={(e) => update("siteName", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tagline</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tagline</label>
               <input
                 type="text"
                 value={settings.tagline}
                 onChange={(e) => update("tagline", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Logo</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Logo</label>
               <div className="flex items-center gap-4">
                 {settings.logoUrl ? (
                   <div className="relative">
-                    <img src={settings.logoUrl} alt="Logo" className="h-16 w-auto object-contain border border-gray-200 rounded-lg p-1" />
+                    <img src={settings.logoUrl} alt="Logo" className="h-16 w-auto object-contain border border-gray-200 dark:border-gray-700 rounded-lg p-1" />
                     <button
                       onClick={() => update("logoUrl", "")}
                       className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
@@ -289,7 +286,7 @@ export default function AdminSettingsPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="h-16 w-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400">
+                  <div className="h-16 w-24 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500">
                     <ImageIcon size={24} />
                   </div>
                 )}
@@ -303,7 +300,7 @@ export default function AdminSettingsPage() {
                   />
                   <button
                     onClick={() => logoInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
                   >
                     <Upload size={14} /> Upload Logo
                   </button>
@@ -311,11 +308,11 @@ export default function AdminSettingsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Favicon</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Favicon</label>
               <div className="flex items-center gap-4">
                 {settings.faviconUrl ? (
                   <div className="relative">
-                    <img src={settings.faviconUrl} alt="Favicon" className="h-8 w-8 object-contain border border-gray-200 rounded" />
+                    <img src={settings.faviconUrl} alt="Favicon" className="h-8 w-8 object-contain border border-gray-200 dark:border-gray-700 rounded" />
                     <button
                       onClick={() => update("faviconUrl", "")}
                       className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
@@ -324,7 +321,7 @@ export default function AdminSettingsPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="h-8 w-8 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400">
+                  <div className="h-8 w-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded flex items-center justify-center text-gray-400 dark:text-gray-500">
                     <ImageIcon size={14} />
                   </div>
                 )}
@@ -338,7 +335,7 @@ export default function AdminSettingsPage() {
                   />
                   <button
                     onClick={() => faviconInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
                   >
                     <Upload size={14} /> Upload Favicon
                   </button>
@@ -358,29 +355,29 @@ export default function AdminSettingsPage() {
               <div key={key}>
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">{label}</label>
-                    <p className="text-xs text-gray-400">{desc}</p>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">{desc}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
                       value={settings[key]}
                       onChange={(e) => update(key, e.target.value)}
-                      className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                      className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer"
                     />
                     <input
                       type="text"
                       value={settings[key]}
                       onChange={(e) => update(key, e.target.value)}
-                      className="w-24 px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-mono text-center"
+                      className="w-24 px-2 py-1.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm font-mono text-center"
                     />
                   </div>
                 </div>
                 <div className="flex gap-2 mt-2">
                   {Object.entries(generateShades(settings[key])).map(([shade, hex]) => (
                     <div key={shade} className="text-center">
-                      <div className="w-10 h-10 rounded-lg border border-gray-200" style={{ backgroundColor: hex }} />
-                      <span className="text-[10px] text-gray-400">{shade}</span>
+                      <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-700" style={{ backgroundColor: hex }} />
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">{shade}</span>
                     </div>
                   ))}
                 </div>
@@ -392,11 +389,11 @@ export default function AdminSettingsPage() {
         {activeTab === "typography" && (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Heading Font</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Heading Font</label>
               <select
                 value={settings.headingFont}
                 onChange={(e) => update("headingFont", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               >
                 {GOOGLE_FONTS.map((f) => (
                   <option key={f} value={f}>{f}</option>
@@ -407,11 +404,11 @@ export default function AdminSettingsPage() {
               </p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Body Font</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Body Font</label>
               <select
                 value={settings.bodyFont}
                 onChange={(e) => update("bodyFont", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               >
                 {GOOGLE_FONTS.map((f) => (
                   <option key={f} value={f}>{f}</option>
@@ -423,25 +420,25 @@ export default function AdminSettingsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Heading Font Size (px)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Heading Font Size (px)</label>
                 <input
                   type="number"
                   value={settings.headingFontSize}
                   onChange={(e) => update("headingFontSize", e.target.value)}
                   min="20"
                   max="72"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Body Font Size (px)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Body Font Size (px)</label>
                 <input
                   type="number"
                   value={settings.bodyFontSize}
                   onChange={(e) => update("bodyFontSize", e.target.value)}
                   min="12"
                   max="24"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
             </div>
@@ -451,11 +448,11 @@ export default function AdminSettingsPage() {
         {activeTab === "homepage" && (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hero Banner Image</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Hero Banner Image</label>
               <div className="flex items-center gap-4">
                 {settings.heroBannerUrl ? (
                   <div className="relative">
-                    <img src={settings.heroBannerUrl} alt="Hero Banner" className="h-24 w-40 object-cover border border-gray-200 rounded-lg" />
+                    <img src={settings.heroBannerUrl} alt="Hero Banner" className="h-24 w-40 object-cover border border-gray-200 dark:border-gray-700 rounded-lg" />
                     <button
                       onClick={() => update("heroBannerUrl", "")}
                       className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
@@ -464,7 +461,7 @@ export default function AdminSettingsPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="h-24 w-40 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 text-sm">
+                  <div className="h-24 w-40 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm">
                     Default gradient
                   </div>
                 )}
@@ -478,7 +475,7 @@ export default function AdminSettingsPage() {
                   />
                   <button
                     onClick={() => bannerInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
                   >
                     <Upload size={14} /> Upload Banner
                   </button>
@@ -486,30 +483,30 @@ export default function AdminSettingsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hero Headline</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hero Headline</label>
               <input
                 type="text"
                 value={settings.heroHeadline}
                 onChange={(e) => update("heroHeadline", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hero Subtext</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hero Subtext</label>
               <textarea
                 value={settings.heroSubtext}
                 onChange={(e) => update("heroSubtext", e.target.value)}
                 rows={3}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hero CTA Button Text</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hero CTA Button Text</label>
               <input
                 type="text"
                 value={settings.heroCtaText}
                 onChange={(e) => update("heroCtaText", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
           </div>
@@ -518,38 +515,38 @@ export default function AdminSettingsPage() {
         {activeTab === "header_footer" && (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact Email</label>
               <input
                 type="email"
                 value={settings.contactEmail}
                 onChange={(e) => update("contactEmail", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 placeholder="support@example.com"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact Phone</label>
               <input
                 type="tel"
                 value={settings.contactPhone}
                 onChange={(e) => update("contactPhone", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 placeholder="+91 12345 67890"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Social Links</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Social Links</label>
               <div className="space-y-3">
                 {(["facebook", "twitter", "instagram", "linkedin"] as const).map((platform) => (
                   <div key={platform} className="flex items-center gap-3">
-                    <span className="w-24 text-sm text-gray-500 capitalize">{platform}</span>
+                    <span className="w-24 text-sm text-gray-500 dark:text-gray-400 capitalize">{platform}</span>
                     <input
                       type="url"
                       value={settings.socialLinks[platform]}
                       onChange={(e) =>
                         update("socialLinks", { ...settings.socialLinks, [platform]: e.target.value })
                       }
-                      className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       placeholder={`https://${platform}.com/yourpage`}
                     />
                   </div>
@@ -557,12 +554,12 @@ export default function AdminSettingsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Copyright Text</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Copyright Text</label>
               <input
                 type="text"
                 value={settings.copyrightText}
                 onChange={(e) => update("copyrightText", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
           </div>

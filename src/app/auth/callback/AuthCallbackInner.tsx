@@ -26,10 +26,10 @@ export default function AuthCallbackInner() {
                 body: JSON.stringify({ sessionId }),
               })
                 .then(() => localStorage.removeItem("cart_session"))
-                .catch(() => {})
+                .catch((err) => { console.error("Cart merge failed:", err) })
             }
           })
-          .catch(() => {})
+          .catch((err) => { console.error("Auth operation failed:", err) })
       } else {
         // No cart to merge, but still dispatch auth-change
         window.dispatchEvent(new CustomEvent("auth-change", { detail: null }))

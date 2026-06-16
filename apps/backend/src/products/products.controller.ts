@@ -102,6 +102,56 @@ export class ProductsController {
     return { product };
   }
 
+  // ── Static POST routes BEFORE parameterized ones ──
+
+  @Post('bulk-upload-excel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk upload/edit products via Excel file with optional images (Admin only)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'file', maxCount: 1 },
+    { name: 'images', maxCount: 50 },
+  ]))
+  async bulkUploadExcel(
+    @UploadedFiles() files: { file?: Express.Multer.File[]; images?: Express.Multer.File[] },
+    @Body('imageMapping') imageMappingStr?: string,
+  ) {
+    const excelBuffer = files.file?.[0]?.buffer;
+    if (!excelBuffer) {
+      throw new BadRequestException('Excel file is required');
+    }
+    let imageMapping: Record<string, string> = {};
+    if (imageMappingStr) {
+      try { imageMapping = JSON.parse(imageMappingStr); } catch { /* ignore */ }
+    }
+    const result = await this.productsService.bulkUploadFromExcel(
+      excelBuffer,
+      files.images || [],
+      imageMapping,
+    );
+    return result;
+  }
+
+  @Post('bulk-update')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk update products from an edited Excel/CSV file (Admin only)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async bulkUpdate(
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('File is required');
+    }
+    return this.productsService.bulkUpdateFromExcel(file.buffer);
+  }
+
+  // ── Parameterized routes ──
+
   @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.VENDOR)
@@ -178,35 +228,5 @@ export class ProductsController {
     const urls = files.map((f) => `/uploads/products/${f.filename}`);
     const product = await this.productsService.addImages(id, urls);
     return { product, uploaded: urls };
-  }
-
-  @Post('bulk-upload-excel')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk upload/edit products via Excel file with optional images (Admin only)' })
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileFieldsInterceptor([
-    { name: 'file', maxCount: 1 },
-    { name: 'images', maxCount: 50 },
-  ]))
-  async bulkUploadExcel(
-    @UploadedFiles() files: { file?: Express.Multer.File[]; images?: Express.Multer.File[] },
-    @Body('imageMapping') imageMappingStr?: string,
-  ) {
-    const excelBuffer = files.file?.[0]?.buffer;
-    if (!excelBuffer) {
-      throw new BadRequestException('Excel file is required');
-    }
-    let imageMapping: Record<string, string> = {};
-    if (imageMappingStr) {
-      try { imageMapping = JSON.parse(imageMappingStr); } catch { /* ignore */ }
-    }
-    const result = await this.productsService.bulkUploadFromExcel(
-      excelBuffer,
-      files.images || [],
-      imageMapping,
-    );
-    return result;
   }
 }

@@ -66,7 +66,7 @@ export class AuthController {
     @Res() res: Response,
   ): Promise<void> {
     const result = await this.authService.googleAuth(req.user);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
     res.redirect(`${frontendUrl}/auth/callback?token=${result.accessToken}`);
   }
 

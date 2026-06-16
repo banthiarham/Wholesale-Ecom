@@ -2,6 +2,8 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { PricingService } from '../pricing/pricing.service';
+import { RulesEnforcementService } from '../rules/rules-enforcement.service';
+import { CartItemContext } from '../rules/rules-engine.service';
 
 @Injectable()
 export class ExcelOrderParserService {
@@ -9,6 +11,7 @@ export class ExcelOrderParserService {
     private prisma: PrismaService,
     private inventoryService: InventoryService,
     private pricingService: PricingService,
+    private rulesEnforcement: RulesEnforcementService,
   ) {}
 
   async parseAndCreateOrder(userId: string, buffer: Buffer, shippingAddress: any, notes?: string) {
@@ -79,6 +82,21 @@ export class ExcelOrderParserService {
     if (orderItemsData.length === 0) {
       throw new BadRequestException('No valid items to create order. Errors: ' + errors.join('; '));
     }
+
+    // Enforce dynamic rules before creating the order
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const excelCartItems: CartItemContext[] = orderItemsData.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    }));
+
+    await this.rulesEnforcement.enforceOrderRules({
+      userId,
+      userRole: (user as any)?.effectiveRole || (user as any)?.roleRel?.name || user?.role || undefined,
+      cartItems: excelCartItems,
+      subtotal: totalAmount,
+    });
 
     const order = await this.prisma.order.create({
       data: {

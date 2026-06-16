@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { ShieldCheck, ShieldAlert, ShieldX, Clock, User, ChevronRight, X, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
+import { SkeletonTable } from "@/components/admin/Skeleton"
 
 type RequestStatus = "PENDING" | "APPROVED" | "REJECTED"
 
@@ -31,9 +32,9 @@ interface RoleChangeRequest {
 }
 
 const statusConfig: Record<RequestStatus, { label: string; color: string; icon: React.ReactNode }> = {
-  PENDING: { label: "Pending", color: "bg-yellow-100 text-yellow-700", icon: <Clock size={12} /> },
-  APPROVED: { label: "Approved", color: "bg-green-100 text-green-700", icon: <CheckCircle2 size={12} /> },
-  REJECTED: { label: "Rejected", color: "bg-red-100 text-red-700", icon: <XCircle size={12} /> },
+  PENDING: { label: "Pending", color: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400", icon: <Clock size={12} /> },
+  APPROVED: { label: "Approved", color: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400", icon: <CheckCircle2 size={12} /> },
+  REJECTED: { label: "Rejected", color: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400", icon: <XCircle size={12} /> },
 }
 
 const roleIconMap: Record<string, React.ReactNode> = {
@@ -145,8 +146,8 @@ export default function AdminRoleRequestsPage() {
   }, [toast])
 
   const renderRoleBadge = (role: RoleChangeRequest["role"]) => {
-    if (!role) return <span className="text-gray-400 text-sm">Unknown</span>
-    const bgColor = role.color ? `${role.color}` : "bg-gray-100"
+    if (!role) return <span className="text-gray-400 dark:text-gray-500 text-sm">Unknown</span>
+    const bgColor = role.color ? `${role.color}` : "bg-gray-100 dark:bg-gray-800"
     return (
       <span
         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${bgColor}`}
@@ -171,30 +172,30 @@ export default function AdminRoleRequestsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Role Change Requests</h1>
-        <span className="text-sm text-gray-500">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Role Change Requests</h1>
+        <span className="text-sm text-gray-500 dark:text-gray-400">
           {requests.length} request{requests.length !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* Status Filter Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition ${
               activeTab === tab.key
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
+                ? "bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm"
+                : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
             }`}
           >
             {tab.label}
             <span
               className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${
                 activeTab === tab.key
-                  ? "bg-primary-100 text-primary-700"
-                  : "bg-gray-200 text-gray-600"
+                  ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400"
+                  : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
               }`}
             >
               {counts[tab.key]}
@@ -205,63 +206,61 @@ export default function AdminRoleRequestsPage() {
 
       {/* Loading */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-        </div>
+        <SkeletonTable rows={4} cols={7} />
       ) : requests.length === 0 ? (
         /* Empty state */
-        <div className="bg-white rounded-lg border border-gray-100 p-12 text-center">
-          <ShieldCheck size={48} className="text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-600">No {activeTab.toLowerCase()} role requests found.</p>
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-12 text-center">
+          <ShieldCheck size={48} className="text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">No {activeTab.toLowerCase()} role requests found.</p>
         </div>
       ) : (
         /* Requests Table */
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">User</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Requested Role</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Reason</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Submitted</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Reviewed By</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">User</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Requested Role</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Reason</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Submitted</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Reviewed By</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {requests.map((req) => (
                   <tr
                     key={req.id}
-                    className="hover:bg-gray-50 transition cursor-pointer"
+                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition cursor-pointer"
                     onClick={() => setDetailRequest(req)}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold">
+                        <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 flex items-center justify-center text-xs font-bold">
                           {req.user?.firstName?.[0]}{req.user?.lastName?.[0]}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
                             {req.user?.firstName} {req.user?.lastName}
                           </p>
-                          <p className="text-xs text-gray-500">{req.user?.email}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{req.user?.email}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">{renderRoleBadge(req.role)}</td>
                     <td className="px-4 py-3">
-                      <p className="text-gray-600 max-w-[200px] truncate">
-                        {req.reason || <span className="text-gray-400 italic">No reason provided</span>}
+                      <p className="text-gray-600 dark:text-gray-400 max-w-[200px] truncate">
+                        {req.reason || <span className="text-gray-400 dark:text-gray-500 italic">No reason provided</span>}
                       </p>
                     </td>
                     <td className="px-4 py-3">{renderStatusBadge(req.status)}</td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
                       {new Date(req.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
-                      {req.reviewedBy ? req.reviewedBy : <span className="text-gray-300">&mdash;</span>}
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+                      {req.reviewedBy ? req.reviewedBy : <span className="text-gray-300 dark:text-gray-600">&mdash;</span>}
                     </td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       {req.status === "PENDING" ? (
@@ -284,7 +283,7 @@ export default function AdminRoleRequestsPage() {
                           </button>
                         </div>
                       ) : (
-                        <span className="text-gray-300">&mdash;</span>
+                        <span className="text-gray-300 dark:text-gray-600">&mdash;</span>
                       )}
                     </td>
                   </tr>
@@ -298,12 +297,12 @@ export default function AdminRoleRequestsPage() {
       {/* Detail Modal */}
       {detailRequest && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900">Request Details</h3>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Request Details</h3>
               <button
                 onClick={() => setDetailRequest(null)}
-                className="text-gray-400 hover:text-gray-600 transition"
+                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition"
               >
                 <X size={20} />
               </button>
@@ -312,70 +311,70 @@ export default function AdminRoleRequestsPage() {
             <div className="p-5 space-y-4">
               {/* User Info */}
               <div>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">User</h4>
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">User</h4>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-bold">
+                  <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 flex items-center justify-center text-sm font-bold">
                     {detailRequest.user?.firstName?.[0]}{detailRequest.user?.lastName?.[0]}
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
                       {detailRequest.user?.firstName} {detailRequest.user?.lastName}
                     </p>
-                    <p className="text-sm text-gray-500">{detailRequest.user?.email}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{detailRequest.user?.email}</p>
                   </div>
                 </div>
               </div>
 
               {/* Requested Role */}
               <div>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Requested Role</h4>
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Requested Role</h4>
                 {renderRoleBadge(detailRequest.role)}
               </div>
 
               {/* Reason */}
               <div>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Reason</h4>
-                <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Reason</h4>
+                <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
                   {detailRequest.reason || (
-                    <span className="text-gray-400 italic">No reason provided</span>
+                    <span className="text-gray-400 dark:text-gray-500 italic">No reason provided</span>
                   )}
                 </p>
               </div>
 
               {/* Status */}
               <div>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Status</h4>
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Status</h4>
                 {renderStatusBadge(detailRequest.status)}
               </div>
 
               {/* Review History */}
               <div>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Review History</h4>
-                <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Review History</h4>
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-sm space-y-1">
                   <p>
-                    <span className="text-gray-500">Submitted:</span>{" "}
-                    <span className="text-gray-900">
+                    <span className="text-gray-500 dark:text-gray-400">Submitted:</span>{" "}
+                    <span className="text-gray-900 dark:text-gray-100">
                       {new Date(detailRequest.createdAt).toLocaleString()}
                     </span>
                   </p>
                   {detailRequest.reviewedBy && (
                     <p>
-                      <span className="text-gray-500">Reviewed by:</span>{" "}
-                      <span className="text-gray-900">{detailRequest.reviewedBy}</span>
+                      <span className="text-gray-500 dark:text-gray-400">Reviewed by:</span>{" "}
+                      <span className="text-gray-900 dark:text-gray-100">{detailRequest.reviewedBy}</span>
                     </p>
                   )}
                   {detailRequest.reviewedAt && (
                     <p>
-                      <span className="text-gray-500">Reviewed at:</span>{" "}
-                      <span className="text-gray-900">
+                      <span className="text-gray-500 dark:text-gray-400">Reviewed at:</span>{" "}
+                      <span className="text-gray-900 dark:text-gray-100">
                         {new Date(detailRequest.reviewedAt).toLocaleString()}
                       </span>
                     </p>
                   )}
                   {detailRequest.updatedAt !== detailRequest.createdAt && (
                     <p>
-                      <span className="text-gray-500">Last updated:</span>{" "}
-                      <span className="text-gray-900">
+                      <span className="text-gray-500 dark:text-gray-400">Last updated:</span>{" "}
+                      <span className="text-gray-900 dark:text-gray-100">
                         {new Date(detailRequest.updatedAt).toLocaleString()}
                       </span>
                     </p>
@@ -386,7 +385,7 @@ export default function AdminRoleRequestsPage() {
 
             {/* Modal Actions */}
             {detailRequest.status === "PENDING" && (
-              <div className="flex gap-3 p-5 border-t border-gray-100">
+              <div className="flex gap-3 p-5 border-t border-gray-100 dark:border-gray-800">
                 <button
                   onClick={() => {
                     handleAction(detailRequest.id, "approve")

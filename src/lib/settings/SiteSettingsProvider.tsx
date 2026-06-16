@@ -59,7 +59,7 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
           setSettings((prev) => ({ ...prev, ...data.settings }))
         }
       })
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch site settings:", err) })
       .finally(() => setLoaded(true))
   }, [])
 

@@ -22,7 +22,6 @@ export class AppController {
         inventory: '/api/v1/inventory',
         rfqs: '/api/v1/rfqs',
         vendor: '/api/v1/vendor',
-        catalogs: '/api/v1/catalogs',
       },
     };
   }

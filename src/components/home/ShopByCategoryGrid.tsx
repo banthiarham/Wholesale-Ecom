@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Package } from "lucide-react"
 
 interface Category {
   id: string
@@ -17,6 +17,21 @@ interface ShopByCategoryGridProps {
   columns?: number
 }
 
+const GRID_MAP: Record<number, string> = {
+  2: "grid-cols-2",
+  3: "sm:grid-cols-3",
+  4: "lg:grid-cols-4",
+  5: "lg:grid-cols-5",
+  6: "lg:grid-cols-6",
+}
+
+const COLORS = [
+  "from-blue-500 to-blue-600", "from-violet-500 to-violet-600", "from-emerald-500 to-emerald-600",
+  "from-orange-500 to-orange-600", "from-cyan-500 to-cyan-600", "from-rose-500 to-rose-600",
+  "from-amber-500 to-amber-600", "from-indigo-500 to-indigo-600", "from-teal-500 to-teal-600",
+  "from-sky-500 to-sky-600", "from-fuchsia-500 to-fuchsia-600", "from-lime-500 to-lime-600",
+]
+
 export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridProps) {
   const [categories, setCategories] = useState<Category[]>([])
 
@@ -27,42 +42,51 @@ export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridPr
         const roots: Category[] = data.categories || []
         setCategories(roots)
       })
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch categories:", err) })
   }, [])
 
   if (categories.length === 0) return null
 
-  const gridCols = `grid-cols-2 sm:grid-cols-${Math.min(columns, 3)} lg:grid-cols-${columns}`
+  const smCols = GRID_MAP[Math.min(columns, 3)] || "sm:grid-cols-3"
+  const lgCols = GRID_MAP[columns] || "lg:grid-cols-4"
 
   return (
-    <section className="py-12 lg:py-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-8">
+    <section className="section-padding bg-gray-50/50">
+      <div className="section-container">
+        <div className="section-header">
           <div>
-            <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-1">Shop by Category</h2>
-            <p className="text-gray-500">Browse products by industry</p>
+            <h2 className="heading-lg">Shop by Category</h2>
+            <p className="body-sm mt-1">Browse products by industry</p>
           </div>
-          <Link href="/categories" className="hidden sm:flex items-center gap-1 text-primary-600 font-semibold hover:gap-2 transition-all text-sm">
+          <Link href="/categories" className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors">
             All Categories <ArrowRight size={16} />
           </Link>
         </div>
-        <div className={`grid ${gridCols} gap-4 sm:gap-6`}>
-          {categories.slice(0, columns * 2).map((cat) => (
+        <div className={`grid grid-cols-2 ${smCols} ${lgCols} gap-4 sm:gap-5`}>
+          {categories.slice(0, columns * 2).map((cat, i) => (
             <Link
               key={cat.id}
               href={`/categories/${cat.handle}`}
-              className="group bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all"
+              className="group card-base overflow-hidden"
             >
-              <div className="h-32 sm:h-40 bg-gray-100 relative overflow-hidden">
+              <div className="h-36 sm:h-44 relative overflow-hidden">
                 {cat.image ? (
-                  <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-4xl">{cat.name[0]}</div>
+                  <div className={`w-full h-full bg-gradient-to-br ${COLORS[i % COLORS.length]} flex items-center justify-center`}>
+                    <Package size={44} className="text-white/70" />
+                  </div>
                 )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+                <div className="absolute bottom-3 left-4 right-4">
+                  <span className="text-white font-bold text-base drop-shadow-md">{cat.name}</span>
+                </div>
               </div>
-              <div className="p-3">
-                <h3 className="font-semibold text-gray-900 text-sm group-hover:text-primary-600 transition">{cat.name}</h3>
-                {cat._count && <p className="text-xs text-gray-500 mt-0.5">{cat._count.products} products</p>}
+              <div className="p-3.5 flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900 text-sm group-hover:text-primary-600 transition-colors">{cat.name}</h3>
+                {cat._count && (
+                  <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">{cat._count.products} products</span>
+                )}
               </div>
             </Link>
           ))}

@@ -136,7 +136,6 @@ export class ProductsService {
       await tx.rfqItem.deleteMany({ where: { productId: id } });
       await tx.stockAdjustment.deleteMany({ where: { productId: id } });
       await tx.inventoryLog.deleteMany({ where: { productId: id } });
-      await tx.catalogItem.deleteMany({ where: { productId: id } });
       await tx.contractPrice.deleteMany({ where: { productId: id } });
       await tx.seasonalDiscount.deleteMany({ where: { productId: id } });
       await tx.tierPrice.deleteMany({ where: { productId: id } });
@@ -349,5 +348,68 @@ export class ProductsService {
     }
 
     return results;
+  }
+
+  async bulkUpdateFromExcel(buffer: Buffer): Promise<{ updated: number; errors: string[] }> {
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (rows.length === 0) {
+      throw new BadRequestException('File is empty or has no data rows');
+    }
+
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        const id = String(row.id || row.ID || '').trim();
+        const sku = String(row.sku || row.SKU || '').trim();
+
+        if (!id && !sku) {
+          errors.push(`Row ${i + 2}: No id or sku provided`);
+          continue;
+        }
+
+        // Find existing product by id (preferred) or sku
+        let product: any;
+        if (id) {
+          product = await this.prisma.product.findUnique({ where: { id } });
+        }
+        if (!product && sku) {
+          product = await this.prisma.product.findUnique({ where: { sku } });
+        }
+
+        if (!product) {
+          errors.push(`Row ${i + 2}: Product not found (${id || sku})`);
+          continue;
+        }
+
+        const data: Record<string, any> = {};
+        const unitPrice = row.unitPrice !== undefined && row.unitPrice !== '' ? Number(row.unitPrice) : undefined;
+        const compareAtPrice = row.compareAtPrice !== undefined && row.compareAtPrice !== '' ? Number(row.compareAtPrice) : undefined;
+        const moq = row.moq !== undefined && row.moq !== '' ? Number(row.moq) : undefined;
+        const inventoryQuantity = row.inventoryQuantity !== undefined && row.inventoryQuantity !== '' ? Number(row.inventoryQuantity) : undefined;
+        const status = (row.status || row.Status || '').toString().trim().toUpperCase();
+
+        if (unitPrice !== undefined && !isNaN(unitPrice)) data.unitPrice = unitPrice;
+        if (compareAtPrice !== undefined && !isNaN(compareAtPrice)) data.compareAtPrice = compareAtPrice;
+        if (moq !== undefined && !isNaN(moq) && moq > 0) data.moq = moq;
+        if (inventoryQuantity !== undefined && !isNaN(inventoryQuantity)) data.inventoryQuantity = inventoryQuantity;
+        if (status && ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status)) data.status = status;
+
+        if (Object.keys(data).length === 0) continue; // No changes for this row
+
+        await this.prisma.product.update({ where: { id: product.id }, data });
+        updated++;
+      } catch (err: any) {
+        errors.push(`Row ${i + 2}: ${err.message || 'Unknown error'}`);
+      }
+    }
+
+    return { updated, errors };
   }
 }

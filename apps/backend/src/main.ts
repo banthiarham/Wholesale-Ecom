@@ -43,7 +43,6 @@ async function bootstrap() {
       '- **Inventory** — Stock adjustments, reservation, release, logs\n' +
       '- **RFQ** — Request for Quote lifecycle with vendor quotes\n' +
       '- **Vendor Dashboard** — Stats, products, orders, sales analytics\n' +
-      '- **Catalogs** — Digital catalogs with PDF generation\n' +
       '- **Bulk CSV Upload** — Upload orders via CSV\n\n' +
       '## Authentication\n\n' +
       '1. Register → `POST /auth/register`\n' +

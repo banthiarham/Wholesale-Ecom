@@ -52,12 +52,12 @@ export default function LoyaltyPage() {
     fetch("/api/loyalty/rules", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => setEarningRules(data.rules || []))
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch loyalty rules:", err) })
     // Fetch referral code
     fetch("/api/loyalty/referral-code", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => setReferralCode(data.referralCode || ""))
-      .catch(() => {})
+      .catch((err) => { console.error("Failed to fetch referral code:", err) })
   }, [])
 
   const handleApplyReferral = async () => {

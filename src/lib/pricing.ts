@@ -104,8 +104,8 @@ export async function fetchPaymentOffers(
   }
 }
 
-export function getProductDiscount(discounts: SeasonalDiscount[], productId: string, categoryId?: string): SeasonalDiscount | null {
-  if (!discounts.length) return null
+export function getProductDiscount(discounts: SeasonalDiscount[], productId: string, categoryId?: string): SeasonalDiscount | undefined {
+  if (!discounts.length) return undefined
   const productMatch = discounts.find((d) => d.productId === productId)
   if (productMatch) return productMatch
   if (categoryId) {
@@ -113,7 +113,7 @@ export function getProductDiscount(discounts: SeasonalDiscount[], productId: str
     if (categoryMatch) return categoryMatch
   }
   const globalMatch = discounts.find((d) => !d.productId && !d.categoryId)
-  return globalMatch || null
+  return globalMatch || undefined
 }
 
 export function discountBadge(discount: SeasonalDiscount): string {
