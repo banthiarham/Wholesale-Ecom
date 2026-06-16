@@ -141,7 +141,6 @@ export default function Header() {
     { href: "/categories", label: t("nav.categories"), icon: BarChart3 },
     { href: "/packages", label: "Packages", icon: Layers },
     { href: "/rfqs", label: t("nav.rfqs"), icon: FileText },
-<<<<<<< HEAD
     { href: "/orders/bulk-orders", label: "Bulk Orders", icon: FileText },
   ]
 
