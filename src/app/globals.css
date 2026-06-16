@@ -50,6 +50,17 @@
   --color-accent-600: 251 191 36;
 }
 
+/* Dark mode: ensure primary buttons remain visible with white text */
+.dark .bg-primary-600 {
+  background-color: rgb(37 99 235) !important;
+}
+.dark .hover\:bg-primary-700:hover {
+  background-color: rgb(29 78 216) !important;
+}
+.dark .active\:bg-primary-800:active {
+  background-color: rgb(30 64 175) !important;
+}
+
 html {
   scroll-behavior: smooth;
 }

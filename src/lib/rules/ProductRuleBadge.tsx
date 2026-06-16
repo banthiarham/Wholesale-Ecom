@@ -1,6 +1,7 @@
 "use client"
 
 import { Lock, EyeOff, ShieldCheck, Gift, Layers, PlusCircle, Truck, Percent } from "lucide-react"
+import { getContrastTextColor } from "@/lib/utils"
 
 interface ProductRuleBadgeProps {
   /** Whether the product's price should be hidden */
@@ -78,8 +79,8 @@ export default function ProductRuleBadge({
     <div className="flex flex-wrap items-center gap-1">
       {hasRolePrice && roleLabel && (
         <span
-          className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full font-medium text-white`}
-          style={{ backgroundColor: roleColor || "#7c3aed" }}
+          className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full font-medium`}
+          style={{ backgroundColor: roleColor || "#7c3aed", color: getContrastTextColor(roleColor || "#7c3aed") }}
         >
           <ShieldCheck size={iconSize} />
           {roleLabel} Price

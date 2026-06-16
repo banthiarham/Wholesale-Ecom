@@ -32,7 +32,7 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { useAuth, usePermissions } from "@/lib/auth"
-import { getCartSessionId } from "@/lib/utils"
+import { getCartSessionId, getContrastTextColor } from "@/lib/utils"
 
 export default function Header() {
   const { user, role, loading: authLoading, logout: authLogout } = useAuth()
@@ -280,7 +280,7 @@ export default function Header() {
                     <div className="px-4 py-2 border-b border-gray-100">
                       <p className="text-sm font-medium text-gray-900">{user.firstName} {user.lastName}</p>
                       <p className="text-xs text-gray-400">{user.email}</p>
-                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold uppercase rounded text-white" style={{ backgroundColor: role?.color || '#6B7280' }}>
+                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold uppercase rounded" style={{ backgroundColor: role?.color || '#6B7280', color: getContrastTextColor(role?.color || '#6B7280') }}>
                         {role?.label || user.role}
                       </span>
                     </div>

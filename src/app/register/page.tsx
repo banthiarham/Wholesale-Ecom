@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { getContrastTextColor } from "@/lib/utils"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, Mail, Lock, User, Phone, Shield, Check } from "lucide-react"
@@ -169,8 +170,8 @@ export default function RegisterPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <div
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-white flex-shrink-0"
-                            style={{ backgroundColor: role.color || "#6B7280" }}
+                            className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: role.color || "#6B7280", color: getContrastTextColor(role.color || "#6B7280") }}
                           >
                             <Shield size={14} />
                           </div>

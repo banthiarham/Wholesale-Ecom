@@ -56,3 +56,13 @@ export const COUNTRIES = [
   "China", "Thailand", "Malaysia", "Indonesia", "Australia", "Germany",
   "France", "Japan", "South Korea", "Canada", "Brazil",
 ]
+
+/** Returns "white" or "black" text color for contrast against a hex background */
+export function getContrastTextColor(hexColor: string): string {
+  const hex = hexColor.replace("#", "")
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  return luminance > 0.55 ? "#000000" : "#ffffff"
+}
