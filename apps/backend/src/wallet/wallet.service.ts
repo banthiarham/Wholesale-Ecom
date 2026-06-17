@@ -21,7 +21,7 @@ export class WalletService {
   async findAll() {
     return this.prisma.wallet.findMany({
       include: {
-        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
       },
       orderBy: { createdAt: 'desc' },
     });

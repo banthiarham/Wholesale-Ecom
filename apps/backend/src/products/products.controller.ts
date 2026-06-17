@@ -27,6 +27,7 @@ import { UserRole } from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
 import { diskStorage } from 'multer';
+import sharp from 'sharp';
 
 @ApiTags('Products')
 @Controller('products')
@@ -211,6 +212,7 @@ export class ProductsController {
           cb(null, unique);
         },
       }),
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max per file
     }),
   )
   async uploadImages(
@@ -225,8 +227,33 @@ export class ProductsController {
         throw new ForbiddenException('You can only upload images for your own products');
       }
     }
-    const urls = files.map((f) => `/uploads/products/${f.filename}`);
-    const product = await this.productsService.addImages(id, urls);
-    return { product, uploaded: urls };
+
+    // Resize uploaded images to max 1200px width, WebP format for optimization
+    const resizedUrls: string[] = [];
+    for (const file of files) {
+      const originalPath = file.path;
+      const ext = path.extname(file.originalname).toLowerCase();
+      const baseName = path.basename(file.filename, ext);
+      const resizedFilename = `${baseName}.webp`;
+      const resizedPath = path.join(path.dirname(originalPath), resizedFilename);
+
+      try {
+        await sharp(originalPath)
+          .resize(1200, null, { withoutEnlargement: true, fit: 'inside' })
+          .webp({ quality: 80 })
+          .toFile(resizedPath);
+
+        // Remove the original file after successful resize
+        fs.unlinkSync(originalPath);
+        resizedUrls.push(`/uploads/products/${resizedFilename}`);
+      } catch (err) {
+        console.error('Image resize failed, using original:', err);
+        // Fall back to original if resize fails
+        resizedUrls.push(`/uploads/products/${file.filename}`);
+      }
+    }
+
+    const product = await this.productsService.addImages(id, resizedUrls);
+    return { product, uploaded: resizedUrls };
   }
 }

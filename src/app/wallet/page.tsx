@@ -43,7 +43,6 @@ export default function WalletPage() {
   const loadWallet = async () => {
     setLoading(true)
     try {
-      // Load wallet + credit info in parallel
       const [walletRes, creditRes] = await Promise.all([
         fetch("/api/wallets/me", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/wallets/me/credit-info", { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),

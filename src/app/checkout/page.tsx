@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck } from "lucide-react"
-import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { formatPrice, getCartSessionId, COUNTRIES } from "@/lib/utils"
+import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
 import { useStorefrontRules } from "@/lib/rules"
 
 interface CartItem {
@@ -45,14 +46,32 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   PAYU: "Cards, UPI, NetBanking",
 }
 
-type PaymentMethod = "COD" | "ONLINE"
+type PaymentMethod = "COD" | "ONLINE" | "WALLET"
+
+interface WalletCreditInfo {
+  walletId: string
+  balance: number
+  creditLimit: number
+  availableCredit: number
+  outstanding: number
+  limitReached: boolean
+}
 
 export default function CheckoutPage() {
   const router = useRouter()
   const [cart, setCart] = useState<CartData | null>(null)
   const [loading, setLoading] = useState(true)
   const [placing, setPlacing] = useState(false)
-  const [address, setAddress] = useState({ street: "", city: "", state: "", zip: "", country: "India" })
+  const [address, setAddress] = useState({ fullName: "", phone: "", email: "", street: "", apartment: "", landmark: "", city: "", state: "", zip: "", country: "India" })
+  const [billingSameAsShipping, setBillingSameAsShipping] = useState(true)
+  const [billingAddress, setBillingAddress] = useState({ fullName: "", phone: "", email: "", street: "", apartment: "", landmark: "", city: "", state: "", zip: "", country: "India" })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [billingErrors, setBillingErrors] = useState<Record<string, string>>({})
+  const [pincodeLoading, setPincodeLoading] = useState(false)
+  const [billingPincodeLoading, setBillingPincodeLoading] = useState(false)
+  const [pincodeLocations, setPincodeLocations] = useState<{ name: string; district: string; state: string; block: string }[]>([])
+  const [billingPincodeLocations, setBillingPincodeLocations] = useState<{ name: string; district: string; state: string; block: string }[]>([])
+  const [walletCreditInfo, setWalletCreditInfo] = useState<WalletCreditInfo | null>(null)
   const [couponCode, setCouponCode] = useState("")
   const [couponDiscount, setCouponDiscount] = useState(0)
   const [couponError, setCouponError] = useState("")
@@ -129,6 +148,13 @@ export default function CheckoutPage() {
         }
       })
       .catch((err) => { console.error("Failed to fetch payment gateways:", err) })
+    // Load wallet credit info if logged in
+    if (token) {
+      fetch("/api/wallets/me/credit-info", { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data?.creditInfo) setWalletCreditInfo(data.creditInfo) })
+        .catch(() => {})
+    }
   }, [])
 
   useEffect(() => {
@@ -186,10 +212,66 @@ export default function CheckoutPage() {
     document.body.appendChild(script)
   }
 
+  const validateAddress = (addr: typeof address): Record<string, string> => {
+    const errs: Record<string, string> = {}
+    if (!addr.fullName.trim()) errs.fullName = "Full name is required"
+    if (!addr.phone.trim()) errs.phone = "Phone number is required"
+    else if (!/^\+?[\d\s-]{7,15}$/.test(addr.phone.trim())) errs.phone = "Enter a valid phone number"
+    if (addr.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr.email)) errs.email = "Enter a valid email"
+    if (!addr.street.trim()) errs.street = "Street address is required"
+    if (!addr.city.trim()) errs.city = "City is required"
+    if (!addr.state.trim()) errs.state = "State is required"
+    if (!addr.zip.trim()) errs.zip = "ZIP/Postal code is required"
+    else if (!/^[\dA-Za-z\s-]{3,10}$/.test(addr.zip.trim())) errs.zip = "Enter a valid ZIP/Postal code"
+    if (!addr.country.trim()) errs.country = "Country is required"
+    return errs
+  }
+
+  const handlePincodeLookup = async (pincode: string, isBilling: boolean) => {
+    if (!/^\d{6}$/.test(pincode)) return
+    if ((isBilling ? billingAddress : address).country !== "India") return
+    const setLoading = isBilling ? setBillingPincodeLoading : setPincodeLoading
+    const setLocations = isBilling ? setBillingPincodeLocations : setPincodeLocations
+    setLoading(true)
+    setLocations([])
+    try {
+      const result = await lookupPincode(pincode)
+      if (result) {
+        setLocations(result.locations)
+        if (isBilling) {
+          setBillingAddress((prev) => ({ ...prev, city: result.district, state: result.state }))
+        } else {
+          setAddress((prev) => ({ ...prev, city: result.district, state: result.state }))
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const walletInsufficient = paymentMethod === "WALLET" && cart && walletCreditInfo && (cart.totals.total - couponDiscount) > walletCreditInfo.availableCredit
+
   const placeOrder = async () => {
     if (!cart) return
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
+
+    const shippingErrors = validateAddress(address)
+    if (Object.keys(shippingErrors).length > 0) {
+      setErrors(shippingErrors)
+      setPlacing(false)
+      return
+    }
+    if (!billingSameAsShipping) {
+      const bErrors = validateAddress(billingAddress)
+      if (Object.keys(bErrors).length > 0) {
+        setBillingErrors(bErrors)
+        setPlacing(false)
+        return
+      }
+    }
+    setErrors({})
+    setBillingErrors({})
 
     setPlacing(true)
     try {
@@ -199,6 +281,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           cartId: cart.cart.id,
           shippingAddress: address,
+          billingAddress: billingSameAsShipping ? undefined : billingAddress,
           couponCode: couponCode || undefined,
         }),
       })
@@ -210,6 +293,35 @@ export default function CheckoutPage() {
       }
 
       const orderId = data.order.id
+
+      if (paymentMethod === "WALLET") {
+        // Pay from wallet — debit the wallet and record payment
+        const total = cart.totals.total - couponDiscount
+        const walletRes = await fetch("/api/wallets/debit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            walletId: walletCreditInfo!.walletId,
+            amount: total,
+            description: `Payment for order ${data.order.orderNumber || orderId}`,
+            referenceId: orderId,
+          }),
+        })
+        if (!walletRes.ok) {
+          const walletErr = await walletRes.json()
+          alert(walletErr.message || "Wallet payment failed. Please try another payment method.")
+          setPlacing(false)
+          return
+        }
+        // Record wallet payment
+        await fetch(`/api/payments/initiate/${orderId}?provider=WALLET&returnUrl=${encodeURIComponent(`${window.location.origin}/orders/${orderId}`)}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {})
+        alert("Order placed and paid from wallet!")
+        router.push(`/orders/${orderId}`)
+        return
+      }
 
       if (paymentMethod === "COD") {
         alert("Order placed successfully!")
@@ -299,6 +411,7 @@ export default function CheckoutPage() {
   // Checkout restriction enforcement
   const hasCheckoutRestriction = checkoutRestrictions.some(cr => cr.restricted)
   const isCheckoutBlocked = hasCheckoutRestriction
+    || walletInsufficient
     || minimumOrderQuantities.some(m => {
       const item = cart?.cart.items.find(ci => ci.product.id === m.productId)
       return item && item.quantity < m.minQty
@@ -377,12 +490,188 @@ export default function CheckoutPage() {
                 <MapPin className="text-primary-600" size={20} />
                 <h2 className="font-semibold">Shipping Address</h2>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input type="text" placeholder="Street" value={address.street} onChange={(e) => setAddress({ ...address, street: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg" />
-                <input type="text" placeholder="City" value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg" />
-                <input type="text" placeholder="State" value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg" />
-                <input type="text" placeholder="ZIP Code" value={address.zip} onChange={(e) => setAddress({ ...address, zip: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg" />
+              <div className="space-y-4">
+                {/* Contact Info */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="John Doe" value={address.fullName} onChange={(e) => { setAddress({ ...address, fullName: e.target.value }); if (errors.fullName) setErrors({ ...errors, fullName: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.fullName ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.fullName && <p className="text-xs text-red-500 mt-1">{errors.fullName}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
+                    <input type="tel" placeholder="+91 98765 43210" value={address.phone} onChange={(e) => { setAddress({ ...address, phone: e.target.value }); if (errors.phone) setErrors({ ...errors, phone: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.phone ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-gray-400">(optional)</span></label>
+                  <input type="email" placeholder="john@example.com" value={address.email} onChange={(e) => { setAddress({ ...address, email: e.target.value }); if (errors.email) setErrors({ ...errors, email: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.email ? "border-red-400" : "border-gray-200"}`} />
+                  {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+                </div>
+
+                {/* Address Lines */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Street Address <span className="text-red-500">*</span></label>
+                  <input type="text" placeholder="123 Main Street" value={address.street} onChange={(e) => { setAddress({ ...address, street: e.target.value }); if (errors.street) setErrors({ ...errors, street: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.street ? "border-red-400" : "border-gray-200"}`} />
+                  {errors.street && <p className="text-xs text-red-500 mt-1">{errors.street}</p>}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Apartment / Suite <span className="text-gray-400">(optional)</span></label>
+                    <input type="text" placeholder="Apt 4B" value={address.apartment} onChange={(e) => setAddress({ ...address, apartment: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Landmark / Area <span className="text-gray-400">(optional)</span></label>
+                    <input type="text" placeholder="Near City Mall" value={address.landmark} onChange={(e) => setAddress({ ...address, landmark: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                  </div>
+                </div>
+
+                {/* City / State / PIN / Country */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">City <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="Mumbai" value={address.city} onChange={(e) => { setAddress({ ...address, city: e.target.value }); if (errors.city) setErrors({ ...errors, city: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.city ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.city && <p className="text-xs text-red-500 mt-1">{errors.city}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">State <span className="text-red-500">*</span></label>
+                    {address.country === "India" ? (
+                      <select value={address.state} onChange={(e) => { setAddress({ ...address, state: e.target.value }); if (errors.state) setErrors({ ...errors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${errors.state ? "border-red-400" : "border-gray-200"}`}>
+                        <option value="">Select State</option>
+                        {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      <input type="text" placeholder="State" value={address.state} onChange={(e) => { setAddress({ ...address, state: e.target.value }); if (errors.state) setErrors({ ...errors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.state ? "border-red-400" : "border-gray-200"}`} />
+                    )}
+                    {errors.state && <p className="text-xs text-red-500 mt-1">{errors.state}</p>}
+                  </div>
+                  <div className="relative">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">PIN Code <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <input type="text" placeholder="400001" maxLength={6} value={address.zip} onChange={(e) => { setAddress({ ...address, zip: e.target.value }); if (errors.zip) setErrors({ ...errors, zip: "" }) }} onBlur={(e) => { if (e.target.value.length === 6) handlePincodeLookup(e.target.value, false) }} className={`w-full px-4 py-2 border rounded-lg text-sm pr-8 ${errors.zip ? "border-red-400" : "border-gray-200"}`} />
+                      {pincodeLoading && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div></div>}
+                    </div>
+                    {errors.zip && <p className="text-xs text-red-500 mt-1">{errors.zip}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Country <span className="text-red-500">*</span></label>
+                    <select value={address.country} onChange={(e) => { setAddress({ ...address, country: e.target.value }); if (errors.country) setErrors({ ...errors, country: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${errors.country ? "border-red-400" : "border-gray-200"}`}>
+                      {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {errors.country && <p className="text-xs text-red-500 mt-1">{errors.country}</p>}
+                  </div>
+                </div>
+                {/* Locality dropdown from PIN code */}
+                {pincodeLocations.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Locality / Post Office</label>
+                    <select value={address.street} onChange={(e) => { setAddress({ ...address, street: e.target.value }); if (errors.street) setErrors({ ...errors, street: "" }) }} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                      <option value="">Select locality</option>
+                      {pincodeLocations.map((loc, i) => (
+                        <option key={i} value={loc.name}>{loc.name} — {loc.district}, {loc.block}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-400 mt-1">Select your specific area, or type your street address in the Street field above</p>
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* Billing Address */}
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="text-primary-600" size={20} />
+                  <h2 className="font-semibold">Billing Address</h2>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input type="checkbox" checked={billingSameAsShipping} onChange={(e) => setBillingSameAsShipping(e.target.checked)} className="rounded border-gray-300 accent-primary-600" />
+                  Same as shipping
+                </label>
+              </div>
+              {!billingSameAsShipping && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
+                      <input type="text" placeholder="John Doe" value={billingAddress.fullName} onChange={(e) => { setBillingAddress({ ...billingAddress, fullName: e.target.value }); if (billingErrors.fullName) setBillingErrors({ ...billingErrors, fullName: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.fullName ? "border-red-400" : "border-gray-200"}`} />
+                      {billingErrors.fullName && <p className="text-xs text-red-500 mt-1">{billingErrors.fullName}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
+                      <input type="tel" placeholder="+91 98765 43210" value={billingAddress.phone} onChange={(e) => { setBillingAddress({ ...billingAddress, phone: e.target.value }); if (billingErrors.phone) setBillingErrors({ ...billingErrors, phone: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.phone ? "border-red-400" : "border-gray-200"}`} />
+                      {billingErrors.phone && <p className="text-xs text-red-500 mt-1">{billingErrors.phone}</p>}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-gray-400">(optional)</span></label>
+                    <input type="email" placeholder="billing@example.com" value={billingAddress.email} onChange={(e) => { setBillingAddress({ ...billingAddress, email: e.target.value }); if (billingErrors.email) setBillingErrors({ ...billingErrors, email: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.email ? "border-red-400" : "border-gray-200"}`} />
+                    {billingErrors.email && <p className="text-xs text-red-500 mt-1">{billingErrors.email}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Street Address <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="123 Main Street" value={billingAddress.street} onChange={(e) => { setBillingAddress({ ...billingAddress, street: e.target.value }); if (billingErrors.street) setBillingErrors({ ...billingErrors, street: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.street ? "border-red-400" : "border-gray-200"}`} />
+                    {billingErrors.street && <p className="text-xs text-red-500 mt-1">{billingErrors.street}</p>}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Apartment / Suite <span className="text-gray-400">(optional)</span></label>
+                      <input type="text" placeholder="Apt 4B" value={billingAddress.apartment} onChange={(e) => setBillingAddress({ ...billingAddress, apartment: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Landmark / Area <span className="text-gray-400">(optional)</span></label>
+                      <input type="text" placeholder="Near City Mall" value={billingAddress.landmark} onChange={(e) => setBillingAddress({ ...billingAddress, landmark: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">City <span className="text-red-500">*</span></label>
+                      <input type="text" placeholder="Mumbai" value={billingAddress.city} onChange={(e) => { setBillingAddress({ ...billingAddress, city: e.target.value }); if (billingErrors.city) setBillingErrors({ ...billingErrors, city: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.city ? "border-red-400" : "border-gray-200"}`} />
+                      {billingErrors.city && <p className="text-xs text-red-500 mt-1">{billingErrors.city}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">State <span className="text-red-500">*</span></label>
+                      {billingAddress.country === "India" ? (
+                        <select value={billingAddress.state} onChange={(e) => { setBillingAddress({ ...billingAddress, state: e.target.value }); if (billingErrors.state) setBillingErrors({ ...billingErrors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${billingErrors.state ? "border-red-400" : "border-gray-200"}`}>
+                          <option value="">Select State</option>
+                          {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <input type="text" placeholder="State" value={billingAddress.state} onChange={(e) => { setBillingAddress({ ...billingAddress, state: e.target.value }); if (billingErrors.state) setBillingErrors({ ...billingErrors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.state ? "border-red-400" : "border-gray-200"}`} />
+                      )}
+                      {billingErrors.state && <p className="text-xs text-red-500 mt-1">{billingErrors.state}</p>}
+                    </div>
+                    <div className="relative">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">PIN Code <span className="text-red-500">*</span></label>
+                      <div className="relative">
+                        <input type="text" placeholder="400001" maxLength={6} value={billingAddress.zip} onChange={(e) => { setBillingAddress({ ...billingAddress, zip: e.target.value }); if (billingErrors.zip) setBillingErrors({ ...billingErrors, zip: "" }) }} onBlur={(e) => { if (e.target.value.length === 6) handlePincodeLookup(e.target.value, true) }} className={`w-full px-4 py-2 border rounded-lg text-sm pr-8 ${billingErrors.zip ? "border-red-400" : "border-gray-200"}`} />
+                        {billingPincodeLoading && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div></div>}
+                      </div>
+                      {billingErrors.zip && <p className="text-xs text-red-500 mt-1">{billingErrors.zip}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Country <span className="text-red-500">*</span></label>
+                      <select value={billingAddress.country} onChange={(e) => { setBillingAddress({ ...billingAddress, country: e.target.value }); if (billingErrors.country) setBillingErrors({ ...billingErrors, country: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${billingErrors.country ? "border-red-400" : "border-gray-200"}`}>
+                        {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      {billingErrors.country && <p className="text-xs text-red-500 mt-1">{billingErrors.country}</p>}
+                    </div>
+                  </div>
+                  {billingPincodeLocations.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Locality / Post Office</label>
+                      <select value={billingAddress.street} onChange={(e) => { setBillingAddress({ ...billingAddress, street: e.target.value }); if (billingErrors.street) setBillingErrors({ ...billingErrors, street: "" }) }} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                        <option value="">Select locality</option>
+                        {billingPincodeLocations.map((loc, i) => (
+                          <option key={i} value={loc.name}>{loc.name} — {loc.district}, {loc.block}</option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">Select your specific area, or type your street address in the Street field above</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
@@ -402,6 +691,28 @@ export default function CheckoutPage() {
                       <div>
                         <p className="font-medium text-gray-900">Cash on Delivery (COD)</p>
                         <p className="text-xs text-gray-500">Pay when your order arrives</p>
+                      </div>
+                    </div>
+                  </label>
+                )}
+
+                {walletCreditInfo && (
+                  <label
+                    onClick={() => setPaymentMethod("WALLET")}
+                    className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "WALLET" ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <input type="radio" name="payment" checked={paymentMethod === "WALLET"} onChange={() => setPaymentMethod("WALLET")} className="accent-primary-600" />
+                    <div className="flex items-center gap-3">
+                      <Wallet size={20} className="text-gray-600" />
+                      <div>
+                        <p className="font-medium text-gray-900">Pay from Wallet</p>
+                        <p className="text-xs text-gray-500">Available credit: {formatPrice(walletCreditInfo.availableCredit)}</p>
+                        {walletCreditInfo.outstanding > 0 && (
+                          <p className="text-xs text-amber-600">Outstanding: {formatPrice(walletCreditInfo.outstanding)}</p>
+                        )}
+                        {walletInsufficient && (
+                          <p className="text-xs text-red-600">Insufficient wallet credit for this order</p>
+                        )}
                       </div>
                     </div>
                   </label>
@@ -614,7 +925,7 @@ export default function CheckoutPage() {
                 disabled={placing || redirectData !== null || isCheckoutBlocked}
                 className={`w-full mt-6 py-3 rounded-lg transition disabled:opacity-50 ${isCheckoutBlocked ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-primary-600 text-white hover:bg-primary-700"}`}
               >
-                {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : isCheckoutBlocked ? "Checkout Restricted" : (paymentMethod === "ONLINE" ? "Pay Now" : "Place Order")}
+                {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : walletInsufficient ? "Insufficient Wallet Credit" : isCheckoutBlocked ? "Checkout Restricted" : (paymentMethod === "ONLINE" ? "Pay Now" : paymentMethod === "WALLET" ? "Pay from Wallet" : "Place Order")}
               </button>
               {paymentMethod === "ONLINE" && selectedGateway && (
                 <div className="flex items-center justify-center gap-1.5 mt-3 text-xs text-gray-400">
