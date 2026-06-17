@@ -27,7 +27,7 @@ import { UserRole } from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
 import { diskStorage } from 'multer';
-import * as sharp from 'sharp';
+import sharp from 'sharp';
 
 @ApiTags('Products')
 @Controller('products')
