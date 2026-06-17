@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
-import { adjustColor, generateShades } from "./color-utils"
+import { adjustColor, generateShades, hexToRgb } from "./color-utils"
 
 const DEFAULTS: Record<string, string> = {
   siteName: "WholesaleX Pro",
@@ -67,25 +67,37 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
     if (!mounted || !loaded) return
     const root = document.documentElement
 
+    // Convert hex shades to space-separated RGB format for CSS variables
+    // e.g., "#2563EB" → "37 99 235" so that rgb(var(--color-primary-600) / 1) works
+    const toRgbStr = (hex: string): string => {
+      const { r, g, b } = hexToRgb(hex)
+      return `${r} ${g} ${b}`
+    }
+
     const primary = settings.primaryColor || DEFAULTS.primaryColor
     const primaryShades = generateShades(primary)
-    root.style.setProperty("--color-primary-50", primaryShades[50])
-    root.style.setProperty("--color-primary-100", primaryShades[100])
-    root.style.setProperty("--color-primary-500", primaryShades[500])
-    root.style.setProperty("--color-primary-600", primaryShades[600])
-    root.style.setProperty("--color-primary-700", primaryShades[700])
+    root.style.setProperty("--color-primary-50", toRgbStr(primaryShades[50]))
+    root.style.setProperty("--color-primary-100", toRgbStr(primaryShades[100]))
+    root.style.setProperty("--color-primary-200", toRgbStr(primaryShades[200]))
+    root.style.setProperty("--color-primary-300", toRgbStr(primaryShades[300]))
+    root.style.setProperty("--color-primary-400", toRgbStr(primaryShades[400]))
+    root.style.setProperty("--color-primary-500", toRgbStr(primaryShades[500]))
+    root.style.setProperty("--color-primary-600", toRgbStr(primaryShades[600]))
+    root.style.setProperty("--color-primary-700", toRgbStr(primaryShades[700]))
+    root.style.setProperty("--color-primary-800", toRgbStr(primaryShades[800]))
+    root.style.setProperty("--color-primary-900", toRgbStr(primaryShades[900]))
 
     const secondary = settings.secondaryColor || DEFAULTS.secondaryColor
     const secondaryShades = generateShades(secondary)
-    root.style.setProperty("--color-secondary-50", secondaryShades[50])
-    root.style.setProperty("--color-secondary-500", secondaryShades[500])
-    root.style.setProperty("--color-secondary-600", secondaryShades[600])
+    root.style.setProperty("--color-secondary-50", toRgbStr(secondaryShades[50]))
+    root.style.setProperty("--color-secondary-500", toRgbStr(secondaryShades[500]))
+    root.style.setProperty("--color-secondary-600", toRgbStr(secondaryShades[600]))
 
     const accent = settings.accentColor || DEFAULTS.accentColor
     const accentShades = generateShades(accent)
-    root.style.setProperty("--color-accent-50", accentShades[50])
-    root.style.setProperty("--color-accent-500", accentShades[500])
-    root.style.setProperty("--color-accent-600", accentShades[600])
+    root.style.setProperty("--color-accent-50", toRgbStr(accentShades[50]))
+    root.style.setProperty("--color-accent-500", toRgbStr(accentShades[500]))
+    root.style.setProperty("--color-accent-600", toRgbStr(accentShades[600]))
 
     if (settings.bodyFontSize) {
       root.style.setProperty("--font-size-body", settings.bodyFontSize + "px")
