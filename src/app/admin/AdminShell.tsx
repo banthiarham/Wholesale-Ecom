@@ -303,12 +303,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         {/* Brand + toggle */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-100 dark:border-gray-800">
           {!collapsed && (
-            <Link href="/admin" className="text-lg font-bold text-primary-700 dark:text-primary-600">
+            <Link href="/admin" className="text-lg font-bold text-primary-700 dark:text-primary-400">
               Admin
             </Link>
           )}
           {collapsed && (
-            <Link href="/admin" className="text-lg font-bold text-primary-700 dark:text-primary-600 mx-auto">
+            <Link href="/admin" className="text-lg font-bold text-primary-700 dark:text-primary-400 mx-auto">
               A
             </Link>
           )}

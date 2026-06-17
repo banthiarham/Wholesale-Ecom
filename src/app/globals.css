@@ -38,10 +38,11 @@
   --color-primary-300: 96 165 250;
   --color-primary-400: 147 197 253;
   --color-primary-500: 59 130 246;
-  --color-primary-600: 96 165 250;
-  --color-primary-700: 147 187 253;
-  --color-primary-800: 165 200 253;
-  --color-primary-900: 196 215 253;
+  /* 600-900 use DARK blues so bg-primary-600 text-white buttons are visible */
+  --color-primary-600: 37 99 235;
+  --color-primary-700: 29 78 216;
+  --color-primary-800: 30 64 175;
+  --color-primary-900: 29 58 138;
   --color-secondary-50: 30 41 59;
   --color-secondary-500: 148 163 184;
   --color-secondary-600: 203 213 225;
@@ -50,15 +51,39 @@
   --color-accent-600: 251 191 36;
 }
 
-/* Dark mode: ensure primary buttons remain visible with white text */
-.dark .bg-primary-600 {
-  background-color: rgb(37 99 235) !important;
-}
-.dark .hover\:bg-primary-700:hover {
-  background-color: rgb(29 78 216) !important;
-}
-.dark .active\:bg-primary-800:active {
-  background-color: rgb(30 64 175) !important;
+/*
+ * In dark mode, text-primary-600/700 resolve to dark blues (for buttons).
+ * These overrides make text readable on dark backgrounds by using lighter shades,
+ * while still allowing explicit dark:text-primary-* variants to take priority.
+ */
+@layer utilities {
+  .dark .text-primary-600 {
+    color: rgb(96 165 250);
+  }
+  .dark .text-primary-700 {
+    color: rgb(147 197 253);
+  }
+  .dark .text-primary-800 {
+    color: rgb(165 200 253);
+  }
+  .dark .hover\:text-primary-600:hover {
+    color: rgb(96 165 250);
+  }
+  .dark .hover\:text-primary-700:hover {
+    color: rgb(147 197 253);
+  }
+  .dark .border-primary-600 {
+    border-color: rgb(96 165 250);
+  }
+  .dark .border-primary-500 {
+    border-color: rgb(59 130 246);
+  }
+  .dark .border-primary-700 {
+    border-color: rgb(147 197 253);
+  }
+  .dark .border-primary-800 {
+    border-color: rgb(96 165 250);
+  }
 }
 
 html {
@@ -68,6 +93,11 @@ html {
 ::selection {
   background-color: rgb(var(--color-primary-100));
   color: rgb(var(--color-primary-700));
+}
+
+.dark ::selection {
+  background-color: rgb(var(--color-primary-300) / 0.3);
+  color: rgb(147 197 253);
 }
 
 body {
