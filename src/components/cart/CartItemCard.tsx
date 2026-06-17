@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Minus, Plus, Trash2, Link as LinkIcon, Tag, Gift, Layers, AlertTriangle, Loader2 } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { formatPrice, getContrastTextColor } from "@/lib/utils"
 
 interface TierPrice { minQty: number; maxQty: number | null; price: string }
@@ -85,9 +86,9 @@ export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleP
       <div className="flex gap-4 p-5">
         {/* Thumbnail */}
         <Link href={`/products/${item.product.handle}`} className="shrink-0">
-          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gray-50 rounded-xl overflow-hidden">
+          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gray-50 rounded-xl overflow-hidden relative">
             {item.product.thumbnail ? (
-              <img src={item.product.thumbnail} alt={item.product.title} className="w-full h-full object-cover" />
+              <Image src={item.product.thumbnail} alt={item.product.title} fill className="object-cover" sizes="112px" />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
                 <span className="text-2xl font-bold text-gray-200">{item.product.title[0]}</span>

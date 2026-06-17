@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Search, Layers, ChevronRight, Package } from "lucide-react"
+import Image from "next/image"
 import { formatPrice } from "@/lib/utils"
 
 interface PackageGroup {
@@ -115,7 +116,7 @@ export default function PackagesPage() {
                   {/* Image area */}
                   <div className="relative h-48 bg-gradient-to-br from-primary-500 to-primary-700 overflow-hidden">
                     {image ? (
-                      <img src={image} alt={pkg.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <Image src={image} alt={pkg.title} fill className="object-cover group-hover:scale-105 transition-transform duration-300" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <Layers size={48} className="text-white/30" />

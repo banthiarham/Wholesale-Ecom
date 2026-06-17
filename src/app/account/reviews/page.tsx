@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Star, Trash2, MessageSquare, Package } from "lucide-react"
+import Image from "next/image"
 
 interface Review {
   id: string
@@ -81,9 +82,9 @@ export default function MyReviewsPage() {
             <div key={review.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
               <div className="flex items-start gap-4">
                 <Link href={`/products/${review.product.handle}`} className="shrink-0">
-                  <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden">
+                  <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden relative">
                     {review.product.thumbnail ? (
-                      <img src={review.product.thumbnail} alt={review.product.title} className="w-full h-full object-cover" />
+                      <Image src={review.product.thumbnail} alt={review.product.title} fill className="object-cover" sizes="56px" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center"><Package size={20} className="text-gray-400" /></div>
                     )}

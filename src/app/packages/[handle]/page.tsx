@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { ChevronRight, Package, Layers } from "lucide-react"
+import Image from "next/image"
 import { formatPrice } from "@/lib/utils"
 import dynamic from "next/dynamic"
 
@@ -90,9 +91,9 @@ export default function PackageDetailPage() {
           {/* Left: Images & Info */}
           <div className="space-y-6">
             {/* Main image */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden relative h-96">
               {mainImage ? (
-                <img src={mainImage} alt={pkg.title} className="w-full h-96 object-cover" />
+                <Image src={mainImage} alt={pkg.title} fill className="object-cover" sizes="(max-width: 1024px) 100vw, 50vw" priority />
               ) : (
                 <div className="w-full h-96 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
                   <Layers size={64} className="text-white/30" />
@@ -104,9 +105,9 @@ export default function PackageDetailPage() {
                     <button
                       key={idx}
                       onClick={() => setMainImage(img)}
-                      className={`flex-shrink-0 w-20 h-20 rounded-lg border-2 overflow-hidden ${mainImage === img ? "border-primary-600" : "border-transparent"}`}
+                      className={`flex-shrink-0 w-20 h-20 rounded-lg border-2 overflow-hidden relative ${mainImage === img ? "border-primary-600" : "border-transparent"}`}
                     >
-                      <img src={img} alt={`${pkg.title} ${idx + 1}`} className="w-full h-full object-cover" />
+                      <Image src={img} alt={`${pkg.title} ${idx + 1}`} fill className="object-cover" sizes="80px" />
                     </button>
                   ))}
                 </div>

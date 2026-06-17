@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   Monitor, Laptop, Smartphone, Wind, Refrigerator, WashingMachine,
   CookingPot, Speaker, Watch, Camera, Droplets, Printer, Gamepad2, Sparkles,
@@ -92,7 +93,7 @@ export default function CategoryIconStrip() {
               >
                 <div className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl flex items-center justify-center transition-all duration-200 shadow-sm ${colorClass}`}>
                   {cat.image ? (
-                    <img src={cat.image} alt={cat.name} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
+                    <Image src={cat.image} alt={cat.name} width={40} height={40} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" sizes="40px" />
                   ) : (
                     <Icon size={28} />
                   )}

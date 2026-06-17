@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation, ExternalLink, Circle, Clock, Layers } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
@@ -302,7 +303,7 @@ export default function OrderDetailPage() {
                               </div>
                             )) : items.map((item: any) => (
                               <div key={item.id} className="px-4 py-2 flex items-center gap-3">
-                                {item.product.thumbnail ? <img src={item.product.thumbnail} alt={item.product.title} className="w-10 h-10 rounded object-cover" /> : <Package size={20} className="text-gray-400" />}
+                                {item.product.thumbnail ? <div className="w-10 h-10 relative rounded overflow-hidden"><Image src={item.product.thumbnail} alt={item.product.title} fill className="object-cover" sizes="40px" /></div> : <Package size={20} className="text-gray-400" />}
                                 <span className="text-sm font-medium text-gray-900 flex-1">{item.product.title}</span>
                                 <span className="text-sm text-gray-700">{formatPrice(Number(item.totalPrice))}</span>
                               </div>
@@ -327,8 +328,8 @@ export default function OrderDetailPage() {
                     })}
                     {standaloneItems.map((item) => (
                       <div key={item.id} className="flex items-center gap-4">
-                        <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                          {item.product.thumbnail ? <img src={item.product.thumbnail} alt={item.product.title} className="w-full h-full object-cover" /> : <Package size={24} className="text-gray-400" />}
+                        <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 relative">
+                          {item.product.thumbnail ? <Image src={item.product.thumbnail} alt={item.product.title} fill className="object-cover" sizes="64px" /> : <Package size={24} className="text-gray-400" />}
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-gray-900">{item.product.title}</p>

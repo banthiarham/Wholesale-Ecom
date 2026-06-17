@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { ArrowRight, Package } from "lucide-react"
 
 interface Category {
@@ -71,7 +72,7 @@ export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridPr
             >
               <div className="h-36 sm:h-44 relative overflow-hidden">
                 {cat.image ? (
-                  <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <Image src={cat.image} alt={cat.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" />
                 ) : (
                   <div className={`w-full h-full bg-gradient-to-br ${COLORS[i % COLORS.length]} flex items-center justify-center`}>
                     <Package size={44} className="text-white/70" />

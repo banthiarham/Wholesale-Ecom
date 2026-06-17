@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import { ShoppingCart, Star, ArrowRight } from "lucide-react"
+import Image from "next/image"
+import { ShoppingCart, Star, ArrowRight, Package } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useStorefrontRules } from "@/lib/rules"
 import { useAuth } from "@/lib/auth"
@@ -123,7 +124,7 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
                 <Link href={`/products/${product.handle}`}>
                   <div className="relative aspect-square bg-gray-50 overflow-hidden">
                     {product.thumbnail || product.images?.[0] ? (
-                      <img src={product.thumbnail || product.images[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                      <Image src={product.thumbnail || product.images[0]} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 260px" loading="lazy" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
                         <ShoppingCart size={32} className="text-gray-200" />

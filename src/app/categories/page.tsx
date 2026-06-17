@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   ChevronRight,
   Cpu,
@@ -128,7 +129,7 @@ export default function CategoriesPage() {
                     <div className="relative flex items-start justify-between">
                       <div className={`w-14 h-14 ${meta.accent} backdrop-blur-sm rounded-2xl flex items-center justify-center`}>
                         {cat.image ? (
-                          <img src={cat.image} alt={cat.name} className="w-full h-full object-cover rounded-2xl" />
+                          <Image src={cat.image} alt={cat.name} fill className="object-cover rounded-2xl" sizes="56px" />
                         ) : (
                           <Icon size={26} className="text-white" />
                         )}

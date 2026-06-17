@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { RotateCcw, Package, ArrowLeft, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react"
+import Image from "next/image"
 import { formatPrice } from "@/lib/utils"
 
 interface ReturnItem {
@@ -106,9 +107,9 @@ export default function ReturnsPage() {
                   <div className="space-y-2">
                     {ret.items.map((item) => (
                       <div key={item.id} className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center overflow-hidden shrink-0">
+                        <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center overflow-hidden shrink-0 relative">
                           {item.orderItem.product.thumbnail ? (
-                            <img src={item.orderItem.product.thumbnail} alt="" className="w-full h-full object-cover" />
+                            <Image src={item.orderItem.product.thumbnail} alt="" fill className="object-cover" sizes="40px" />
                           ) : (
                             <Package size={16} className="text-gray-400" />
                           )}
