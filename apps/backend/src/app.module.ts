@@ -33,6 +33,7 @@ import { HomeSectionsModule } from './home-sections/home-sections.module';
 import { BulkOrdersModule } from './bulk-orders/bulk-orders.module';
 import { PackagesModule } from './packages/packages.module';
 import { WalletModule } from './wallet/wallet.module';
+import { BulkRoleDiscountsModule } from './bulk-role-discounts/bulk-role-discounts.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { WalletModule } from './wallet/wallet.module';
     BulkOrdersModule,
     PackagesModule,
     WalletModule,
+    BulkRoleDiscountsModule,
   ],
   controllers: [AppController],
 })

@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { Search, DollarSign, Plus, Trash2, Save, X, Eye, ChevronDown, Edit2, Check } from "lucide-react"
+import { Search, DollarSign, Plus, Trash2, Save, X, Eye, ChevronDown, Edit2, Check, ArrowRight } from "lucide-react"
+import Link from "next/link"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 
@@ -373,6 +374,14 @@ export default function AdminRolePricesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="flex gap-2">
+        <span className="px-4 py-2 text-sm font-semibold bg-primary-600 text-white rounded-lg">Per-Product Pricing</span>
+        <Link href="/admin/bulk-role-discounts" className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 border border-gray-200 rounded-lg transition flex items-center gap-1">
+          Bulk Discounts <ArrowRight size={14} />
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Role-Based Pricing</h1>

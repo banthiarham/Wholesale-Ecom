@@ -14,6 +14,8 @@ export class PricingService {
     tierPrice: number;
     rolePrice: number | null;
     appliedRoleName: string | null;
+    bulkDiscountPercent: number | null;
+    bulkDiscountLabel: string | null;
     contractPrice: number | null;
     seasonalDiscount: number;
     finalPrice: number;
@@ -42,6 +44,8 @@ export class PricingService {
     // 2. Role-based price
     let rolePrice: number | null = null;
     let appliedRoleName: string | null = null;
+    let bulkDiscountPercent: number | null = null;
+    let bulkDiscountLabel: string | null = null;
     if (userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -52,8 +56,19 @@ export class PricingService {
           where: { productId_roleId: { productId, roleId: user.roleId } },
         });
         if (rolePriceRecord && rolePriceRecord.isActive && quantity >= rolePriceRecord.minQty) {
+          // Per-product role price takes priority
           rolePrice = Number(rolePriceRecord.price);
           appliedRoleName = user.roleRel?.label || user.roleRel?.name || null;
+        } else {
+          // No per-product role price — check for bulk role discount
+          const bulkDiscount = await this.prisma.bulkRoleDiscount.findUnique({
+            where: { roleId: user.roleId },
+          });
+          if (bulkDiscount && bulkDiscount.isActive) {
+            bulkDiscountPercent = Number(bulkDiscount.discountPercent);
+            bulkDiscountLabel = bulkDiscount.label || `${user.roleRel?.label || user.roleRel?.name} Discount`;
+            appliedRoleName = user.roleRel?.label || user.roleRel?.name || null;
+          }
         }
       }
     }
@@ -78,7 +93,13 @@ export class PricingService {
     const candidates = [tierPrice];
     if (rolePrice !== null) candidates.push(rolePrice);
     if (contractPrice !== null) candidates.push(contractPrice);
-    const currentPrice = Math.min(...candidates);
+    let currentPrice = Math.min(...candidates);
+
+    // Apply bulk role discount (percentage off current best price)
+    // Only applies when no per-product role price exists for this product+role
+    if (bulkDiscountPercent !== null) {
+      currentPrice = Math.max(0, currentPrice * (1 - bulkDiscountPercent / 100));
+    }
 
     // 4. Seasonal discount
     let seasonalDiscount = 0;
@@ -103,6 +124,9 @@ export class PricingService {
     if (rolePrice !== null && rolePrice < tierPrice) {
       appliedDiscounts.push(`Role (${appliedRoleName}): ₹${rolePrice.toLocaleString('en-IN')}`);
     }
+    if (bulkDiscountPercent !== null) {
+      appliedDiscounts.push(`Bulk ${bulkDiscountLabel}: ${bulkDiscountPercent}% off`);
+    }
     if (contractPrice !== null && contractPrice < tierPrice) {
       appliedDiscounts.push(`Contract: ₹${contractPrice.toLocaleString('en-IN')}`);
     }
@@ -125,6 +149,8 @@ export class PricingService {
       tierPrice,
       rolePrice,
       appliedRoleName,
+      bulkDiscountPercent,
+      bulkDiscountLabel,
       contractPrice,
       seasonalDiscount,
       finalPrice,
@@ -147,6 +173,8 @@ export class PricingService {
     tierPrice: number;
     rolePrice: number | null;
     appliedRoleName: string | null;
+    bulkDiscountPercent: number | null;
+    bulkDiscountLabel: string | null;
     seasonalDiscount: number;
     finalPrice: number;
     discountAmount: number;
@@ -173,6 +201,8 @@ export class PricingService {
     // Role price
     let rolePrice: number | null = null;
     let appliedRoleName: string | null = null;
+    let bulkDiscountPercent: number | null = null;
+    let bulkDiscountLabel: string | null = null;
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     const rolePriceRecord = await this.prisma.rolePrice.findUnique({
       where: { productId_roleId: { productId, roleId } },
@@ -180,12 +210,27 @@ export class PricingService {
     if (rolePriceRecord && rolePriceRecord.isActive && quantity >= rolePriceRecord.minQty) {
       rolePrice = Number(rolePriceRecord.price);
       appliedRoleName = role?.label || role?.name || null;
+    } else {
+      // No per-product role price — check for bulk role discount
+      const bulkDiscount = await this.prisma.bulkRoleDiscount.findUnique({
+        where: { roleId },
+      });
+      if (bulkDiscount && bulkDiscount.isActive) {
+        bulkDiscountPercent = Number(bulkDiscount.discountPercent);
+        bulkDiscountLabel = bulkDiscount.label || `${role?.label || role?.name} Discount`;
+        appliedRoleName = role?.label || role?.name || null;
+      }
     }
 
     // Best price
     const candidates = [tierPrice];
     if (rolePrice !== null) candidates.push(rolePrice);
-    const currentPrice = Math.min(...candidates);
+    let currentPrice = Math.min(...candidates);
+
+    // Apply bulk role discount
+    if (bulkDiscountPercent !== null) {
+      currentPrice = Math.max(0, currentPrice * (1 - bulkDiscountPercent / 100));
+    }
 
     // Seasonal discount
     let seasonalDiscount = 0;
@@ -221,6 +266,8 @@ export class PricingService {
       tierPrice,
       rolePrice,
       appliedRoleName,
+      bulkDiscountPercent,
+      bulkDiscountLabel,
       seasonalDiscount,
       finalPrice,
       discountAmount,

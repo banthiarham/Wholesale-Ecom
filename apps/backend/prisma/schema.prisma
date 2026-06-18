@@ -884,6 +884,7 @@ model Role {
   users              User[]
   rolePermissions    RolePermission[]
   rolePrices         RolePrice[]
+  bulkDiscount       BulkRoleDiscount?
   roleChangeRequests RoleChangeRequest[]
 
   @@index([name])
@@ -933,6 +934,20 @@ model RolePrice {
   @@unique([productId, roleId])
   @@index([productId])
   @@index([roleId])
+  @@index([isActive])
+}
+
+model BulkRoleDiscount {
+  id              String   @id @default(uuid())
+  roleId          String   @unique
+  role            Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  discountPercent Decimal  @db.Decimal(5, 2)   // e.g. 15.00 = 15% off
+  label           String?                       // optional display name, e.g. "Distributor Volume Discount"
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
   @@index([isActive])
 }
 

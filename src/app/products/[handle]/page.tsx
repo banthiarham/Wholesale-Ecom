@@ -427,6 +427,12 @@ export default function ProductDetailPage() {
                       {pricing?.rolePrice != null && pricing.rolePrice < pricing.basePrice && (
                         <p className="text-sm text-purple-700 font-medium">Your {pricing.appliedRoleName} Price: {formatPrice(pricing.rolePrice)}/unit <span className="font-normal text-purple-500">(saved {formatPrice(pricing.basePrice - pricing.rolePrice)}/unit)</span></p>
                       )}
+                      {pricing?.bulkDiscountPercent && (
+                        <p className="text-sm text-indigo-700 font-medium">
+                          {pricing.bulkDiscountLabel || 'Bulk Discount'}: {pricing.bulkDiscountPercent}% off
+                          <span className="font-normal text-indigo-500"> (applied to all products for your role)</span>
+                        </p>
+                      )}
                       {pricing?.contractPrice != null && pricing.contractPrice < pricing.basePrice && (
                         <p className="text-sm text-blue-700 font-medium">Contract Price: {formatPrice(pricing.contractPrice)}/unit <span className="font-normal text-blue-500">(saved {formatPrice(pricing.basePrice - pricing.contractPrice)}/unit)</span></p>
                       )}

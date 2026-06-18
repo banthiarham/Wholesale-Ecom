@@ -102,6 +102,7 @@ const navGroups: NavGroup[] = [
     title: "Pricing",
     items: [
       { label: "Role Pricing", href: "/admin/role-prices", icon: DollarSign },
+      { label: "Bulk Discounts", href: "/admin/bulk-role-discounts", icon: Percent },
       { label: "Contract Prices", href: "/admin/contract-prices", icon: Scale },
     ],
   },

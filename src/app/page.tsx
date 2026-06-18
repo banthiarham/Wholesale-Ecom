@@ -391,9 +391,14 @@ function DefaultHeroFallback({
                     {isPriceHidden ? (
                       <span className="text-xs text-gray-500 italic">Login for price</span>
                     ) : rp ? (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-bold text-primary-700 text-sm">{formatPrice(rp.rolePrice)}</span>
-                        <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="font-bold text-primary-700 text-sm">{formatPrice(rp.rolePrice)}</span>
+                          <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
+                        </div>
+                        {rp.bulkDiscountLabel && (
+                          <span className="text-[10px] text-purple-600 font-medium">{rp.bulkDiscountLabel}</span>
+                        )}
                       </div>
                     ) : ruleDisc ? (
                       <div className="flex items-baseline gap-1.5">

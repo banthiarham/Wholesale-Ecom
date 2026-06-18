@@ -10,6 +10,8 @@ interface RolePricingInfo {
   savings: number
   savingsPercent: number
   finalPrice: number
+  bulkDiscountPercent: number | null
+  bulkDiscountLabel: string | null
 }
 
 type RolePricingMap = Record<string, RolePricingInfo>
@@ -19,7 +21,7 @@ type RolePricingMap = Record<string, RolePricingInfo>
  * Only fetches for authenticated users.
  * Returns a map of productId → role pricing info.
  *
- * IMPORTANT: Pass a stable reference for `products` (use useMemo in the parent)
+ * IMPORTANT: Pass a stable reference for `products` (useMemo in the parent)
  * to avoid infinite re-renders.
  */
 export function useRolePricing(
@@ -48,7 +50,7 @@ export function useRolePricing(
       fetchPricing(p.id, quantity, user.id)
         .then((result) => {
           if (!result) return null
-          // Only include if there's a meaningful role price that's lower than base
+          // Per-product role price takes priority
           if (result.rolePrice && result.rolePrice < result.basePrice) {
             return {
               productId: p.id,
@@ -58,10 +60,27 @@ export function useRolePricing(
                 savings: result.basePrice - result.rolePrice,
                 savingsPercent: result.discountPercent,
                 finalPrice: result.finalPrice,
+                bulkDiscountPercent: null,
+                bulkDiscountLabel: null,
               } as RolePricingInfo,
             }
           }
-          // Even without a role price, if there's a final price different from base, include it
+          // Bulk role discount case
+          if (result.bulkDiscountPercent && result.finalPrice < result.basePrice) {
+            return {
+              productId: p.id,
+              info: {
+                rolePrice: result.finalPrice,
+                appliedRoleName: result.appliedRoleName,
+                savings: result.basePrice - result.finalPrice,
+                savingsPercent: Math.round(result.bulkDiscountPercent),
+                finalPrice: result.finalPrice,
+                bulkDiscountPercent: result.bulkDiscountPercent,
+                bulkDiscountLabel: result.bulkDiscountLabel,
+              } as RolePricingInfo,
+            }
+          }
+          // Other discounts (seasonal, contract, etc.)
           if (result.finalPrice < result.basePrice) {
             return {
               productId: p.id,
@@ -71,6 +90,8 @@ export function useRolePricing(
                 savings: result.basePrice - result.finalPrice,
                 savingsPercent: Math.round(((result.basePrice - result.finalPrice) / result.basePrice) * 100),
                 finalPrice: result.finalPrice,
+                bulkDiscountPercent: result.bulkDiscountPercent,
+                bulkDiscountLabel: result.bulkDiscountLabel,
               } as RolePricingInfo,
             }
           }

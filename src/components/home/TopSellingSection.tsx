@@ -158,9 +158,14 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
                     {isPriceHidden ? (
                       <span className="text-xs text-gray-500 italic">Login for pricing</span>
                     ) : rp ? (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-lg font-bold text-primary-700">{formatPrice(rp.rolePrice)}</span>
-                        <span className="text-xs text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-lg font-bold text-primary-700">{formatPrice(rp.rolePrice)}</span>
+                          <span className="text-xs text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
+                        </div>
+                        {rp.bulkDiscountLabel && (
+                          <span className="text-[11px] text-purple-600 font-medium">{rp.bulkDiscountLabel}</span>
+                        )}
                       </div>
                     ) : ruleDisc ? (
                       <div className="flex items-baseline gap-1.5">
