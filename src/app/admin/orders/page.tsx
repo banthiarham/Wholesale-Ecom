@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Search, ChevronDown, ChevronUp, Eye, Truck, X, ExternalLink, Plug, Layers } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 interface Order {
   id: string
@@ -410,10 +411,13 @@ export default function AdminOrdersPage() {
                   {showTracking && (
                     <div className="space-y-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
                       <div className="flex items-center gap-2">
-                        <select value={selectedPartnerId} onChange={(e) => setSelectedPartnerId(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                          <option value="">Select Delivery Partner (optional)</option>
-                          {partners.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
-                        </select>
+                        <SearchableSelect
+                          options={partners.map((p) => ({ value: p.id, label: p.name, subtitle: p.code }))}
+                          value={selectedPartnerId}
+                          onChange={(value) => setSelectedPartnerId(value)}
+                          placeholder="Select Delivery Partner (optional)"
+                          className="flex-1 focus:ring-2 focus:ring-primary-500"
+                        />
                         {selectedPartnerId && (() => {
                           const partner = partners.find((p) => p.id === selectedPartnerId)
                           return partner?.apiEnabled ? (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Plus, Search, X, Trash2, Edit2 } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 import { formatPrice } from "@/lib/utils"
 
 interface PaymentOffer {
@@ -183,10 +184,14 @@ export default function AdminPaymentOffersPage() {
 
             {form.offerType === "BANK" && (
               <>
-                <select value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                  <option value="">Select Bank</option>
-                  {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
+                <SearchableSelect
+                  options={BANKS.map((b) => ({ value: b, label: b }))}
+                  value={form.bankName}
+                  onChange={(value) => setForm({ ...form, bankName: value })}
+                  placeholder="Select Bank"
+                  searchPlaceholder="Search banks..."
+                  emptyText="No bank found"
+                />
                 <select value={form.cardType} onChange={(e) => setForm({ ...form, cardType: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
                   <option value="BOTH">Both Cards</option>
                   <option value="CREDIT">Credit Card Only</option>
@@ -202,14 +207,22 @@ export default function AdminPaymentOffersPage() {
               </select>
             )}
 
-            <select value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value, categoryId: e.target.value ? "" : form.categoryId })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">All Products</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-            </select>
-            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value, productId: e.target.value ? "" : form.productId })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">All Categories</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <SearchableSelect
+              options={products.map((p) => ({ value: p.id, label: p.title }))}
+              value={form.productId}
+              onChange={(value) => setForm({ ...form, productId: value, categoryId: value ? "" : form.categoryId })}
+              placeholder="All Products"
+              searchPlaceholder="Search products..."
+              emptyText="No product found"
+            />
+            <SearchableSelect
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+              value={form.categoryId}
+              onChange={(value) => setForm({ ...form, categoryId: value, productId: value ? "" : form.productId })}
+              placeholder="All Categories"
+              searchPlaceholder="Search categories..."
+              emptyText="No category found"
+            />
             <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <textarea placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />

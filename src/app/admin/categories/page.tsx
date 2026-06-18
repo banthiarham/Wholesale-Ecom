@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Plus, Trash2, Edit, X, ChevronRight, ChevronDown, Folder } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 interface CategoryNode {
   id: string
@@ -172,12 +173,12 @@ export default function AdminCategoriesPage() {
             <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
             <input required placeholder="Handle (URL slug)" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
             <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
-            <select value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm">
-              <option value="">No Parent (Root)</option>
-              {flatCats.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              options={flatCats.map((c) => ({ value: c.id, label: c.name }))}
+              value={form.parentId}
+              onChange={(value) => setForm({ ...form, parentId: value })}
+              placeholder="No Parent (Root)"
+            />
             <div className="sm:col-span-2 flex justify-end gap-3">
               <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">Save</button>

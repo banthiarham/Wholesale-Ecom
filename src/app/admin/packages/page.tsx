@@ -15,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 interface PackageGroup {
   id?: string
@@ -420,12 +421,12 @@ export default function AdminPackagesPage() {
                     </div>
                     <div>
                       <label className="text-xs text-gray-500 dark:text-gray-400">Category</label>
-                      <select value={group.categoryId || ""} onChange={(e) => updateGroup(index, { categoryId: e.target.value || undefined, productIds: e.target.value ? undefined : group.productIds })} className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-sm dark:bg-gray-800 dark:text-gray-100">
-                        <option value="">— Select category —</option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+                      <SearchableSelect
+                        options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                        value={group.categoryId || ""}
+                        onChange={(value) => updateGroup(index, { categoryId: value || undefined, productIds: value ? undefined : group.productIds })}
+                        placeholder="— Select category —"
+                      />
                     </div>
                   </div>
 

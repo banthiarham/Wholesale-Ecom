@@ -8,6 +8,7 @@ import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 interface Product {
   id: string
@@ -414,10 +415,13 @@ function AdminProductsContent() {
             <input required placeholder="Product Title" value={form.title} onChange={(e) => { const t = e.target.value; setForm({ ...form, title: t, handle: editingProduct ? form.handle : generateHandle(t) }) }} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input placeholder="URL Handle" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">Select Category</option>
-              {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-            </select>
+            <SearchableSelect
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+              value={form.categoryId}
+              onChange={(value) => setForm({ ...form, categoryId: value })}
+              placeholder="Select Category"
+              className="focus:ring-2 focus:ring-primary-500"
+            />
             <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input required type="number" placeholder="MOQ (Minimum Order Quantity)" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />

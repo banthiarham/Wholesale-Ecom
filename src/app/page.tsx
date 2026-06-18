@@ -319,7 +319,7 @@ function DefaultHeroFallback({
   ruleDiscountMap: Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>
   bogoMap: Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>
   qtyDiscountMap: Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>
-  rolePricingMap: Record<string, { rolePrice: number; appliedRoleName: string | null; savings: number; savingsPercent: number; finalPrice: number }>
+  rolePricingMap: Record<string, { rolePrice: number; appliedRoleName: string | null; savings: number; savingsPercent: number; finalPrice: number; bulkDiscountLabel: string | null }>
   handleAddToCart: (id: string) => void
 }) {
   const heroHeadline = useSetting("heroHeadline", "Bulk Orders. Best Prices. Delivered.")

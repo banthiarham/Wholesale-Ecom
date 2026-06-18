@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Bell, Send, X } from "lucide-react"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 interface SentNotification {
   type: string
@@ -93,10 +94,7 @@ export default function AdminNotificationsPage() {
                 {loading ? "Loading..." : "Load Users"}
               </button>
             ) : (
-              <select required value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="">Select a user...</option>
-                {users.map((u: any) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email}) — {u.role}</option>)}
-              </select>
+              <SearchableSelect options={users.map((u: any) => ({ value: u.id, label: `${u.firstName} ${u.lastName}`, subtitle: u.email }))} value={form.userId} onChange={(value) => setForm({ ...form, userId: value })} placeholder="Select User" />
             )}
           </div>
 

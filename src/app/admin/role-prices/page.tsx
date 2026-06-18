@@ -5,6 +5,7 @@ import { Search, DollarSign, Plus, Trash2, Save, X, Eye, ChevronDown, Edit2, Che
 import Link from "next/link"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 interface Role {
   id: string
@@ -648,18 +649,12 @@ export default function AdminRolePricesPage() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex-1 min-w-[200px]">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Role</label>
-              <select
+              <SearchableSelect
+                options={roles.map((r) => ({ value: r.id, label: r.label || r.name }))}
                 value={previewRoleId}
-                onChange={(e) => setPreviewRoleId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">Select a role</option>
-                {roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label || r.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setPreviewRoleId(value)}
+                placeholder="Select a role"
+              />
             </div>
             <div className="w-32">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Quantity</label>

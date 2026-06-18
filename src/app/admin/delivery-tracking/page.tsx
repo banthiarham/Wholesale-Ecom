@@ -17,6 +17,7 @@ import {
   Send,
 } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 const DELIVERY_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   PENDING: { label: "Pending", color: "text-yellow-700 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/30" },
@@ -244,10 +245,13 @@ export default function AdminDeliveryTrackingPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-64"
         />
-        <select value={filterPartner} onChange={(e) => setFilterPartner(e.target.value)} className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-          <option value="">All Partners</option>
-          {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <SearchableSelect
+          options={partners.map((p) => ({ value: p.id, label: p.name }))}
+          value={filterPartner}
+          onChange={(value) => setFilterPartner(value)}
+          placeholder="All Partners"
+          className="focus:ring-2 focus:ring-primary-500"
+        />
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">All Statuses</option>
           {Object.entries(DELIVERY_STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}

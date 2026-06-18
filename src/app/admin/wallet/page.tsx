@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Search, Plus, Minus, Eye, X, Wallet, CreditCard, ShieldCheck } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 interface WalletData {
   id: string
@@ -222,10 +223,7 @@ export default function AdminWalletPage() {
             <button onClick={resetForm} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"><X size={20} /></button>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); showTopup ? handleTopup() : handleDeduct() }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <select required value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">Select user</option>
-              {wallets.map((w) => <option key={w.userId} value={w.userId}>{w.user?.firstName} {w.user?.lastName} ({w.user?.email})</option>)}
-            </select>
+            <SearchableSelect options={wallets.map(w => ({ value: w.userId, label: `${w.user?.firstName ?? ""} ${w.user?.lastName ?? ""}`, subtitle: w.user?.email ?? "" }))} value={form.userId} onChange={(value) => setForm({ ...form, userId: value })} placeholder="Select User" />
             <input required type="number" step="0.01" min="0.01" placeholder="Amount (₹)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <div className="flex gap-3">

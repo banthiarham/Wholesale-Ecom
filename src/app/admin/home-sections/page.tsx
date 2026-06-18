@@ -6,6 +6,7 @@ import {
   Image as ImageIcon, Search, GripVertical, ChevronDown, Eye, EyeOff,
 } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 /* ── Types ── */
 
@@ -608,10 +609,12 @@ export default function AdminHomeSectionsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category *</label>
-                    <select value={sectionForm.categoryId} onChange={(e) => setSectionForm({ ...sectionForm, categoryId: e.target.value })} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm">
-                      <option value="">Select category...</option>
-                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    <SearchableSelect
+                      options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                      value={sectionForm.categoryId}
+                      onChange={(value) => setSectionForm({ ...sectionForm, categoryId: value })}
+                      placeholder="Select category..."
+                    />
                   </div>
                 </div>
                 <div>

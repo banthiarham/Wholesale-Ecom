@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Plus, Search, X, Trash2, Edit2 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 interface ContractPrice {
   id: string
@@ -72,8 +73,8 @@ export default function AdminContractPricesPage() {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editing ? "Edit Contract Price" : "Add Contract Price"}</h2><button onClick={resetForm} className="text-gray-400 dark:text-gray-500 hover:text-gray-600"><X size={20} /></button></div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <select required value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="">Select Product</option>{products.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
-            <select required value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="">Select Buyer</option>{users.filter((u: any) => u.role === "BUYER").map((u: any) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>)}</select>
+            <SearchableSelect required value={form.productId} onChange={(value: string) => setForm({ ...form, productId: value })} placeholder="Select Product" options={products.map((p: any) => ({ value: p.id, label: p.title, subtitle: formatPrice(p.unitPrice) }))} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <SearchableSelect required value={form.userId} onChange={(value: string) => setForm({ ...form, userId: value })} placeholder="Select Buyer" options={users.filter((u: any) => u.role === "BUYER").map((u: any) => ({ value: u.id, label: `${u.firstName} ${u.lastName} (${u.email})` }))} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input required type="number" step="0.01" placeholder="Price per unit" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input type="number" placeholder="Min Qty (default 1)" value={form.minQty} onChange={(e) => setForm({ ...form, minQty: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />

@@ -281,7 +281,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className="min-h-screen flex bg-gray-50 dark:bg-gray-950">
+    <div className="h-screen overflow-hidden flex bg-gray-50 dark:bg-gray-950">
       {/* ── Mobile overlay ── */}
       {mobileOpen && (
         <div

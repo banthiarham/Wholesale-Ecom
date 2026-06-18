@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { Percent, Plus, Pencil, Check, X, ToggleLeft, ToggleRight, ArrowLeft, Info } from "lucide-react"
 import { useAuth, usePermissions } from "@/lib/auth"
+import SearchableSelect from "@/components/admin/SearchableSelect"
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -228,18 +229,12 @@ export default function BulkRoleDiscountsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                <select
+                <SearchableSelect
+                  options={availableRoles.map((r) => ({ value: r.id, label: r.label || r.name }))}
                   value={addRoleId}
-                  onChange={(e) => setAddRoleId(e.target.value)}
-                  className="input-base"
-                >
-                  <option value="">Select a role</option>
-                  {availableRoles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.label || r.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setAddRoleId(value)}
+                  placeholder="Select a role"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Discount %</label>
