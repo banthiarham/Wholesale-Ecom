@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
-import { adjustColor, generateShades } from "./color-utils"
+import { adjustColor, generateShades, hexToRgb } from "./color-utils"
 
 const DEFAULTS: Record<string, string> = {
   siteName: "WholesaleX Pro",
@@ -67,25 +67,37 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
     if (!mounted || !loaded) return
     const root = document.documentElement
 
+    // CSS variables must be space-separated R G B values (no rgb() wrapper)
+    // because Tailwind uses: rgb(var(--color-primary-600) / <alpha-value>)
+    const toRgbTriplet = (hex: string): string => {
+      const { r, g, b } = hexToRgb(hex)
+      return `${r} ${g} ${b}`
+    }
+
     const primary = settings.primaryColor || DEFAULTS.primaryColor
     const primaryShades = generateShades(primary)
-    root.style.setProperty("--color-primary-50", primaryShades[50])
-    root.style.setProperty("--color-primary-100", primaryShades[100])
-    root.style.setProperty("--color-primary-500", primaryShades[500])
-    root.style.setProperty("--color-primary-600", primaryShades[600])
-    root.style.setProperty("--color-primary-700", primaryShades[700])
+    root.style.setProperty("--color-primary-50",  toRgbTriplet(primaryShades[50]))
+    root.style.setProperty("--color-primary-100", toRgbTriplet(primaryShades[100]))
+    root.style.setProperty("--color-primary-200", toRgbTriplet(primaryShades[200]))
+    root.style.setProperty("--color-primary-300", toRgbTriplet(primaryShades[300]))
+    root.style.setProperty("--color-primary-400", toRgbTriplet(primaryShades[400]))
+    root.style.setProperty("--color-primary-500", toRgbTriplet(primaryShades[500]))
+    root.style.setProperty("--color-primary-600", toRgbTriplet(primaryShades[600]))
+    root.style.setProperty("--color-primary-700", toRgbTriplet(primaryShades[700]))
+    root.style.setProperty("--color-primary-800", toRgbTriplet(primaryShades[800]))
+    root.style.setProperty("--color-primary-900", toRgbTriplet(primaryShades[900]))
 
     const secondary = settings.secondaryColor || DEFAULTS.secondaryColor
     const secondaryShades = generateShades(secondary)
-    root.style.setProperty("--color-secondary-50", secondaryShades[50])
-    root.style.setProperty("--color-secondary-500", secondaryShades[500])
-    root.style.setProperty("--color-secondary-600", secondaryShades[600])
+    root.style.setProperty("--color-secondary-50",  toRgbTriplet(secondaryShades[50]))
+    root.style.setProperty("--color-secondary-500", toRgbTriplet(secondaryShades[500]))
+    root.style.setProperty("--color-secondary-600", toRgbTriplet(secondaryShades[600]))
 
     const accent = settings.accentColor || DEFAULTS.accentColor
     const accentShades = generateShades(accent)
-    root.style.setProperty("--color-accent-50", accentShades[50])
-    root.style.setProperty("--color-accent-500", accentShades[500])
-    root.style.setProperty("--color-accent-600", accentShades[600])
+    root.style.setProperty("--color-accent-50",  toRgbTriplet(accentShades[50]))
+    root.style.setProperty("--color-accent-500", toRgbTriplet(accentShades[500]))
+    root.style.setProperty("--color-accent-600", toRgbTriplet(accentShades[600]))
 
     if (settings.bodyFontSize) {
       root.style.setProperty("--font-size-body", settings.bodyFontSize + "px")
