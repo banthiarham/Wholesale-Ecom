@@ -119,7 +119,7 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
             const comparePrice = product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice)
 
             return (
-              <div key={product.id} className="min-w-[220px] sm:min-w-[240px] lg:min-w-[260px] card-base overflow-hidden group snap-start flex-shrink-0">
+              <div key={product.id} className="w-[220px] sm:w-[240px] lg:w-[260px] card-base overflow-hidden group snap-start flex-shrink-0">
                 <Link href={`/products/${product.handle}`}>
                   <div className="relative aspect-square bg-gray-50 overflow-hidden">
                     {product.thumbnail || product.images?.[0] ? (
@@ -196,7 +196,7 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
                   {!isNonPurchasable && (
                     <button
                       onClick={(e) => { e.preventDefault(); handleAddToCart(product.id) }}
-                      className="mt-3 w-full py-2.5 border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all duration-200 flex items-center justify-center gap-1.5"
+                      className="mt-3 w-full py-2.5 bg-primary-600 text-white rounded-xl text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-all duration-200 flex items-center justify-center gap-1.5"
                     >
                       <ShoppingCart size={13} /> Add to Cart
                     </button>

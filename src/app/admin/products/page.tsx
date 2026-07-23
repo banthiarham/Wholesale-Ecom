@@ -370,7 +370,7 @@ function AdminProductsContent() {
           </Link>
           <button
             onClick={() => setShowBulkEdit(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition text-sm"
+            className="flex items-center gap-2 px-4 py-2 border border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-400 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition text-sm"
           >
             <Download size={16} /> Bulk Edit
           </button>
@@ -574,7 +574,7 @@ function AdminProductsContent() {
 
             <div className="space-y-5">
               {/* Instructions */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 text-sm rounded-lg px-4 py-3">
+              <div className="bg-primary-50 dark:bg-primary-900/20 text-primary-800 dark:text-primary-300 text-sm rounded-xl px-4 py-3">
                 <p className="font-medium mb-1">How it works:</p>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Download the current product spreadsheet</li>
@@ -592,7 +592,7 @@ function AdminProductsContent() {
               </button>
 
               {/* Upload area */}
-              <label className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition text-sm font-medium cursor-pointer">
+              <label className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-400 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/20 transition text-sm font-medium cursor-pointer">
                 <Upload size={18} />
                 {bulkUploading ? "Uploading..." : "Upload Edited Spreadsheet"}
                 <input

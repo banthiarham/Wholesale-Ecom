@@ -431,9 +431,10 @@ function ProductCard({
   if (view === "list") {
     return (
       <Link href={`/products/${product.handle}`} className="card-base flex group">
-        <div className="relative w-48 sm:w-56 flex-shrink-0 bg-gray-50 overflow-hidden">
+        <div className="relative w-44 sm:w-52 flex-shrink-0 bg-gray-50 overflow-hidden rounded-l-2xl">
+          <div className="relative w-full h-full min-h-[160px]">
           {product.thumbnail ? (
-            <Image src={product.thumbnail} alt={product.title} width={224} height={224} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" sizes="224px" />
+            <Image src={product.thumbnail} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="208px" />
           ) : (
             <div className="w-full h-full min-h-[160px] flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
               <Package2Icon size={32} className="text-gray-200" />
@@ -445,6 +446,7 @@ function ProductCard({
             <button onClick={(e) => onToggleWishlist(e, product.id)} className={`p-1.5 rounded-lg shadow-sm ${wishlistIds.has(product.id) ? "bg-red-50 text-red-500" : "bg-white/90 text-gray-500 hover:text-red-500"}`}>
               <Heart size={14} fill={wishlistIds.has(product.id) ? "currentColor" : "none"} />
             </button>
+          </div>
           </div>
         </div>
         <div className="flex-1 p-5 flex flex-col">
@@ -486,7 +488,7 @@ function ProductCard({
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAddToCart(product.id, product.moq) }}
                 disabled={addingId === product.id || product.inventoryQuantity <= 0}
-                className="btn-primary text-sm py-2 px-5"
+                className="btn-primary text-sm py-2 px-5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? t("product.outOfStock") : t("product.addToCart")}
               </button>
@@ -500,7 +502,7 @@ function ProductCard({
   // Grid view
   return (
     <Link href={`/products/${product.handle}`} className="card-base overflow-hidden group">
-      <div className="relative aspect-square bg-gray-50">
+      <div className="relative aspect-square bg-gray-50 overflow-hidden">
         {product.thumbnail ? (
           <Image src={product.thumbnail} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
         ) : (
@@ -561,7 +563,7 @@ function ProductCard({
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAddToCart(product.id, product.moq) }}
             disabled={addingId === product.id || product.inventoryQuantity <= 0}
-            className="mt-3 w-full py-2.5 border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all duration-200 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="mt-3 w-full py-2.5 bg-primary-600 text-white rounded-xl text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-all duration-200 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {addingId === product.id ? "Adding..." : product.inventoryQuantity <= 0 ? t("product.outOfStock") : "Add to Cart"}
           </button>

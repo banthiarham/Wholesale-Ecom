@@ -201,9 +201,9 @@ export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleP
 
           {/* Next tier hint */}
           {nextTier && (
-            <div className="mt-2.5 flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-xl">
-              <Tag size={14} className="text-blue-500 shrink-0" />
-              <p className="text-xs text-blue-700">
+            <div className="mt-2.5 flex items-center gap-2 px-3 py-2 bg-primary-50 rounded-xl">
+              <Tag size={14} className="text-primary-600 shrink-0" />
+              <p className="text-xs text-primary-700">
                 Add <span className="font-bold">{nextTier.minQty - qty}</span> more to unlock <span className="font-bold">{formatPrice(nextTier.price)}/unit</span>
                 {listPrice > Number(nextTier.price) && <span className="ml-1">({Math.round(((listPrice - Number(nextTier.price)) / listPrice) * 100)}% savings)</span>}
               </p>

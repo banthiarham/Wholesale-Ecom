@@ -175,8 +175,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     }
   })
 
-  // Dark mode
+  // Dark mode — ref to the admin wrapper div so it never bleeds into the storefront
   const [darkMode, setDarkMode] = useState(false)
+  const adminRootRef = useRef<HTMLDivElement>(null)
 
   // Search
   const [searchQuery, setSearchQuery] = useState("")
@@ -196,25 +197,30 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     }
   }, [authLoading, user, can, router])
 
-  // ── Dark mode initialization ──
+  // ── Dark mode initialization — scoped to admin wrapper only ──
   useEffect(() => {
+    // Ensure the global <html> never has "dark" class (storefront must stay light)
+    document.documentElement.classList.remove("dark")
     const saved = localStorage.getItem("admin-theme")
-    if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+    if (saved === "dark" || (!saved && prefersDark)) {
       setDarkMode(true)
-      document.documentElement.classList.add("dark")
     }
   }, [])
+
+  // Apply dark class to admin root whenever darkMode state changes
+  useEffect(() => {
+    if (darkMode) {
+      adminRootRef.current?.classList.add("dark")
+    } else {
+      adminRootRef.current?.classList.remove("dark")
+    }
+  }, [darkMode])
 
   const toggleDarkMode = useCallback(() => {
     setDarkMode(prev => {
       const next = !prev
-      if (next) {
-        document.documentElement.classList.add("dark")
-        localStorage.setItem("admin-theme", "dark")
-      } else {
-        document.documentElement.classList.remove("dark")
-        localStorage.setItem("admin-theme", "light")
-      }
+      localStorage.setItem("admin-theme", next ? "dark" : "light")
       return next
     })
   }, [])
@@ -273,14 +279,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   if (authLoading || !user || !can("admin", "access")) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex bg-gray-50 dark:bg-gray-950">
+    <div ref={adminRootRef} className="min-h-screen flex bg-gray-50 dark:bg-gray-950">
       {/* ── Mobile overlay ── */}
       {mobileOpen && (
         <div

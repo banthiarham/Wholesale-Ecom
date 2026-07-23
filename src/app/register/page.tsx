@@ -97,49 +97,50 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="text-2xl font-bold text-primary-700 mb-2">WholesaleX Pro</div>
-          <p className="text-gray-600">Create your account</p>
+          <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-white font-bold text-xl">W</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Create your account</h1>
+          <p className="text-gray-500 text-sm">Join WholesaleX Pro today</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm border border-gray-100 p-8">
-          {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          {error && <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm">{error}</div>}
 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">First Name</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input type="text" name="firstName" value={form.firstName} onChange={handleChange} required className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="John" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input type="text" name="firstName" value={form.firstName} onChange={handleChange} required className="input-base pl-9" placeholder="John" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-              <input type="text" name="lastName" value={form.lastName} onChange={handleChange} required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Doe" />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Last Name</label>
+              <input type="text" name="lastName" value={form.lastName} onChange={handleChange} required className="input-base" placeholder="Doe" />
             </div>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input type="email" name="email" value={form.email} onChange={handleChange} required className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="you@example.com" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input type="email" name="email" value={form.email} onChange={handleChange} required className="input-base pl-9" placeholder="you@example.com" />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input type="tel" name="phone" value={form.phone} onChange={handleChange} className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="+91 98765 43210" />
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input type="tel" name="phone" value={form.phone} onChange={handleChange} className="input-base pl-9" placeholder="+91 98765 43210" />
               </div>
             </div>
 
             {/* Role Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Choose Your Account Type
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Choose Your Account Type</label>
               {loadingRoles ? (
                 <div className="flex items-center justify-center py-6">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
@@ -151,22 +152,19 @@ export default function RegisterPage() {
                       key={role.id}
                       type="button"
                       onClick={() => setForm((prev) => ({ ...prev, roleId: role.id }))}
-                      className={`relative flex items-start gap-3 p-4 rounded-lg border-2 transition text-left ${
+                      className={`relative flex items-start gap-3 p-4 rounded-xl border-2 transition-all text-left ${
                         form.roleId === role.id
                           ? "border-primary-500 bg-primary-50"
                           : "border-gray-200 hover:border-gray-300 bg-white"
                       }`}
                     >
-                      {/* Radio indicator */}
-                      <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition ${
+                      <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                         form.roleId === role.id
                           ? "border-primary-500 bg-primary-500"
                           : "border-gray-300 bg-white"
                       }`}>
                         {form.roleId === role.id && <Check size={12} className="text-white" />}
                       </div>
-
-                      {/* Role icon & info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <div
@@ -191,21 +189,23 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input type={showPassword ? "text" : "password"} name="password" value={form.password} onChange={handleChange} required className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="••••••••" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input type={showPassword ? "text" : "password"} name="password" value={form.password} onChange={handleChange} required className="input-base pl-9 pr-10" placeholder="••••••••" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-              <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={handleChange} required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="••••••••" />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+              <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={handleChange} required className="input-base" placeholder="••••••••" />
             </div>
           </div>
 
-          <button type="submit" disabled={loading || !form.roleId} className="w-full mt-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 font-medium">
+          <button type="submit" disabled={loading || !form.roleId} className="btn-primary w-full mt-6 justify-center">
             {loading ? "Creating account..." : "Create Account"}
           </button>
 
@@ -217,9 +217,9 @@ export default function RegisterPage() {
           )}
         </form>
 
-        <p className="text-center mt-6 text-sm text-gray-600">
+        <p className="text-center mt-6 text-sm text-gray-500">
           Already have an account?{" "}
-          <Link href="/login" className="text-primary-600 hover:underline font-medium">Sign in</Link>
+          <Link href="/login" className="text-primary-600 hover:text-primary-700 font-semibold transition-colors">Sign in</Link>
         </p>
       </div>
     </div>

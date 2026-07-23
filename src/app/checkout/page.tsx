@@ -461,7 +461,7 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/cart" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to cart</Link>
+        <Link href="/cart" className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-primary-600 mb-6 transition-colors"><ArrowLeft size={16} /> Back to cart</Link>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Checkout</h1>
 
         {redirectData && (
@@ -485,7 +485,7 @@ export default function CheckoutPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center gap-2 mb-4">
                 <MapPin className="text-primary-600" size={20} />
                 <h2 className="font-semibold">Shipping Address</h2>
@@ -579,7 +579,7 @@ export default function CheckoutPage() {
             </div>
 
             {/* Billing Address */}
-            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <CreditCard className="text-primary-600" size={20} />
@@ -674,7 +674,7 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center gap-2 mb-4">
                 <CreditCard className="text-primary-600" size={20} />
                 <h2 className="font-semibold">Payment Method</h2>
@@ -771,7 +771,7 @@ export default function CheckoutPage() {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <h2 className="font-semibold mb-4">Order Summary</h2>
               <div className="space-y-2 text-sm mb-4">
                 {cart.cart.items.map((item) => {
@@ -880,8 +880,8 @@ export default function CheckoutPage() {
               </div>
 
               <div className="mt-4 flex gap-2">
-                <input type="text" placeholder="Coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                <button onClick={applyCoupon} disabled={!couponCode} className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 transition disabled:opacity-50"><Tag size={16} /></button>
+                <input type="text" placeholder="Coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                <button onClick={applyCoupon} disabled={!couponCode} className="px-4 py-2 bg-primary-600 text-white rounded-xl text-sm hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 font-medium"><Tag size={16} /></button>
               </div>
               {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
 
@@ -923,7 +923,7 @@ export default function CheckoutPage() {
               <button
                 onClick={placeOrder}
                 disabled={placing || redirectData !== null || isCheckoutBlocked}
-                className={`w-full mt-6 py-3 rounded-lg transition disabled:opacity-50 ${isCheckoutBlocked ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-primary-600 text-white hover:bg-primary-700"}`}
+                className={`w-full mt-6 py-3 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 ${isCheckoutBlocked ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800"}`}
               >
                 {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : walletInsufficient ? "Insufficient Wallet Credit" : isCheckoutBlocked ? "Checkout Restricted" : (paymentMethod === "ONLINE" ? "Pay Now" : paymentMethod === "WALLET" ? "Pay from Wallet" : "Place Order")}
               </button>

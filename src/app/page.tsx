@@ -360,9 +360,9 @@ function DefaultHeroFallback({
                 href={`/products/${product.handle}`}
                 className="card-base overflow-hidden group"
               >
-                <div className="relative aspect-square bg-gray-50">
+                <div className="relative aspect-square bg-gray-50 overflow-hidden">
                   {product.thumbnail || product.images?.[0] ? (
-                    <Image src={product.thumbnail || product.images[0]} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" loading="lazy" />
+                    <Image src={product.thumbnail || product.images[0]} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw" loading="lazy" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
                       <Package size={32} className="text-gray-200" />
@@ -429,7 +429,7 @@ function DefaultHeroFallback({
                   {!isNonPurchasable && (
                     <button
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAddToCart(product.id) }}
-                      className="mt-2.5 w-full py-2 border border-gray-200 text-gray-700 rounded-xl text-[11px] font-semibold hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all duration-200 flex items-center justify-center gap-1.5"
+                      className="mt-2.5 w-full py-2 bg-primary-600 text-white rounded-xl text-[11px] font-semibold hover:bg-primary-700 active:bg-primary-800 transition-all duration-200 flex items-center justify-center gap-1.5"
                     >
                       <ShoppingCart size={12} /> Add to Cart
                     </button>

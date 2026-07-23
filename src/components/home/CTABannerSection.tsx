@@ -25,7 +25,7 @@ export default function CTABannerSection({
       {/* Subtle background pattern */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-primary-400/10 rounded-full blur-3xl" />
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -39,7 +39,7 @@ export default function CTABannerSection({
             <p className="text-gray-400 text-base leading-relaxed">{subtext}</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
-            <Link href={ctaLink} className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-all duration-200 shadow-lg shadow-primary-600/30 text-sm">
+            <Link href={ctaLink} className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-all duration-200 shadow-lg shadow-primary-600/20 text-sm">
               {ctaText} <ArrowRight size={16} />
             </Link>
             <Link href={ctaLink2} className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-white/10 backdrop-blur text-white font-semibold rounded-xl border border-white/20 hover:bg-white/20 transition-all duration-200 text-sm">

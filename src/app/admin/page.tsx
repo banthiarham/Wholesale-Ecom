@@ -161,9 +161,9 @@ export default function AdminDashboardPage() {
   const sparklineData = sales?.revenueByDay?.slice(-7).map(d => d.revenue) ?? []
 
   const cards = [
-    { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, href: "/admin/users", color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20", sparkColor: "#3b82f6" },
+    { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, href: "/admin/users", color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/20", sparkColor: "#059669" },
     { label: "Total Products", value: stats?.totalProducts ?? 0, icon: Package, href: "/admin/products", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/20", sparkColor: "#9333ea" },
-    { label: "Total Orders", value: stats?.totalOrders ?? 0, icon: ShoppingBag, href: "/admin/orders", color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20", sparkColor: "#22c55e" },
+    { label: "Total Orders", value: stats?.totalOrders ?? 0, icon: ShoppingBag, href: "/admin/orders", color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20", sparkColor: "#2563eb" },
     { label: "Total Revenue", value: formatPrice(stats?.totalRevenue ?? 0), icon: IndianRupee, href: "/admin/orders", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", sparkColor: "#f59e0b", isPrice: true },
     { label: "Low Stock", value: vendorData?.lowStockCount ?? 0, icon: AlertTriangle, href: "/admin/inventory", color: (vendorData?.lowStockCount ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-gray-400", bg: (vendorData?.lowStockCount ?? 0) > 0 ? "bg-red-50 dark:bg-red-900/20" : "bg-gray-50 dark:bg-gray-800", sparkColor: "#ef4444" },
     { label: "Pending RFQs", value: vendorData?.pendingRfqCount ?? 0, icon: FileText, href: "/admin/rfqs", color: "text-yellow-600 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/20", sparkColor: "#eab308" },

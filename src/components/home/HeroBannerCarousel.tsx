@@ -19,7 +19,7 @@ const FALLBACK_HEROES = [
   {
     title: "Bulk Orders. Best Prices.",
     subtitle: "India's trusted B2B wholesale marketplace. Get exclusive tier pricing, contract deals, and fast shipping across India.",
-    gradient: "from-primary-700 via-primary-600 to-blue-500",
+    gradient: "from-primary-800 via-primary-700 to-primary-500",
     icon: Zap,
     cta: "Browse Products",
     link: "/products",
@@ -35,7 +35,7 @@ const FALLBACK_HEROES = [
   {
     title: "Fast & Reliable Delivery",
     subtitle: "From warehouse to your doorstep. Pan-India delivery with real-time tracking on every order.",
-    gradient: "from-blue-700 via-blue-600 to-indigo-500",
+    gradient: "from-teal-700 via-teal-600 to-cyan-500",
     icon: Truck,
     cta: "Start Ordering",
     link: "/products",
@@ -110,7 +110,7 @@ export default function HeroBannerCarousel() {
                       <div className="flex flex-col sm:flex-row gap-3">
                         <Link
                           href={hero.link}
-                          className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white text-primary-700 font-bold rounded-xl hover:bg-blue-50 transition-all duration-200 shadow-lg shadow-black/20 text-sm lg:text-base"
+                          className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 transition-all duration-200 shadow-lg shadow-black/20 text-sm lg:text-base"
                         >
                           {hero.cta} <ArrowRight size={18} />
                         </Link>
@@ -170,7 +170,7 @@ export default function HeroBannerCarousel() {
                   <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-3 lg:mb-4 leading-tight tracking-tight">{banner.title}</h2>
                   {banner.subtitle && <p className="text-base sm:text-lg text-white/90 mb-5 lg:mb-6 leading-relaxed">{banner.subtitle}</p>}
                   {banner.buttonText && (
-                    <span className="inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-700 font-bold rounded-xl hover:bg-blue-50 transition shadow-lg text-sm lg:text-base">
+                    <span className="inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 transition shadow-lg text-sm lg:text-base">
                       {banner.buttonText} <ArrowRight size={16} />
                     </span>
                   )}

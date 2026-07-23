@@ -6,6 +6,7 @@
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 255, 255, 255;
   --background-end-rgb: 255, 255, 255;
+  /* Primary: Blue */
   --color-primary-50: 239 246 255;
   --color-primary-100: 219 234 254;
   --color-primary-200: 191 219 254;
@@ -32,6 +33,7 @@
   --foreground-rgb: 255, 255, 255;
   --background-start-rgb: 9, 9, 11;
   --background-end-rgb: 9, 9, 11;
+  /* Primary: Blue dark mode */
   --color-primary-50: 23 37 84;
   --color-primary-100: 30 58 95;
   --color-primary-200: 30 64 175;
@@ -102,53 +104,65 @@ h1, h2, h3, h4, h5, h6 {
 
   /* Card */
   .card-base {
-    @apply bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-200;
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-200;
   }
 
   .card-base-static {
-    @apply bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm;
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm;
   }
 
   /* Typography */
   .heading-xl {
-    @apply text-3xl lg:text-4xl font-bold text-gray-900 dark:text-gray-100 tracking-tight;
+    @apply text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight;
   }
 
   .heading-lg {
-    @apply text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100;
+    @apply text-2xl lg:text-3xl font-bold text-gray-900;
   }
 
   .heading-md {
-    @apply text-xl lg:text-2xl font-semibold text-gray-900 dark:text-gray-100;
+    @apply text-xl lg:text-2xl font-semibold text-gray-900;
   }
 
   .heading-sm {
-    @apply text-lg font-semibold text-gray-900 dark:text-gray-100;
+    @apply text-lg font-semibold text-gray-900;
   }
 
   .body-lg {
-    @apply text-base lg:text-lg text-gray-600 dark:text-gray-400 leading-relaxed;
+    @apply text-base lg:text-lg text-gray-600 leading-relaxed;
   }
 
   .body-sm {
-    @apply text-sm text-gray-500 dark:text-gray-400;
+    @apply text-sm text-gray-500;
   }
 
   /* Buttons */
   .btn-primary {
-    @apply px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 active:bg-primary-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-outline {
-    @apply px-6 py-3 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200;
+    @apply inline-flex items-center justify-center px-6 py-3 bg-white border border-primary-600 text-primary-600 rounded-xl font-semibold hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-ghost {
-    @apply px-4 py-2 text-gray-600 dark:text-gray-400 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200;
+    @apply inline-flex items-center justify-center px-4 py-2 bg-transparent text-gray-600 rounded-lg font-medium border border-gray-200 hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-all duration-200;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-sm {
-    @apply px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200;
+    @apply inline-flex items-center justify-center px-3 py-1.5 text-sm rounded-lg font-medium bg-primary-600 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-sm-outline {
+    @apply inline-flex items-center justify-center px-3 py-1.5 text-sm rounded-lg font-medium bg-white border border-primary-600 text-primary-600 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 transition-all duration-200;
+  }
+
+  .btn-sm-ghost {
+    @apply inline-flex items-center justify-center px-3 py-1.5 text-sm rounded-lg font-medium bg-transparent text-gray-600 border border-gray-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-all duration-200;
   }
 
   /* Badge */
@@ -157,24 +171,24 @@ h1, h2, h3, h4, h5, h6 {
   }
 
   .badge-primary {
-    @apply badge bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400;
+    @apply badge bg-primary-50 text-primary-700;
   }
 
   .badge-success {
-    @apply badge bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400;
+    @apply badge bg-green-50 text-green-700;
   }
 
   .badge-warning {
-    @apply badge bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400;
+    @apply badge bg-amber-50 text-amber-700;
   }
 
   .badge-danger {
-    @apply badge bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+    @apply badge bg-red-50 text-red-700;
   }
 
   /* Inputs */
   .input-base {
-    @apply w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+    @apply w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
   }
 
   /* Section heading pattern */
@@ -187,8 +201,17 @@ h1, h2, h3, h4, h5, h6 {
   }
 
   .section-header a {
-    @apply text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1 transition-colors duration-200;
+    @apply text-sm font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1 transition-colors duration-200;
   }
+}
+
+/* ── Scrollbar hide utility ── */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── Animations ── */
