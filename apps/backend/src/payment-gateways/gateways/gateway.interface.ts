@@ -16,6 +16,12 @@ export interface GatewayCallbackResult {
   rawResponse?: any;
 }
 
+export interface GatewayRefundResult {
+  refundId: string;
+  status: 'PENDING' | 'PROCESSED' | 'FAILED';
+  rawResponse?: any;
+}
+
 export interface PaymentGatewayProvider {
   validateCredentials(credentials: Record<string, string>): boolean;
   initiatePayment(params: {
@@ -29,4 +35,11 @@ export interface PaymentGatewayProvider {
   }): Promise<GatewayInitResponse>;
   handleCallback(payload: any, credentials: Record<string, string>, testMode: boolean): Promise<GatewayCallbackResult>;
   getGatewayUrl(testMode: boolean): string;
+  // Optional: only gateways that support server-initiated refunds implement this.
+  refundPayment?(params: {
+    providerPaymentId: string;
+    amount: number;
+    credentials: Record<string, string>;
+    notes?: Record<string, string>;
+  }): Promise<GatewayRefundResult>;
 }

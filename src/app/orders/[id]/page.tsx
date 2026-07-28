@@ -28,7 +28,7 @@ interface OrderDetail {
     totalPrice: number
     product: { id: string; title: string; thumbnail: string | null; sku: string | null }
   }[]
-  payment: { provider: string; status: string; amount: number; providerRef: string | null } | null
+  payment: { provider: string; status: string; amount: number; providerRef: string | null; metadata: any } | null
   user: { firstName: string; lastName: string; email: string; phone: string | null }
   deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null; logo: string | null } | null
   deliveryTracking?: { status: string; currentLocation: string | null; estimatedDelivery: string | null; events: { status: string; location: string | null; notes: string | null; occurredAt: string }[] } | null
@@ -48,6 +48,7 @@ export default function OrderDetailPage() {
   const [returnNotes, setReturnNotes] = useState("")
   const [returnItems, setReturnItems] = useState<Record<string, { qty: number; selected: boolean }>>({})
   const [submittingReturn, setSubmittingReturn] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -113,6 +114,80 @@ export default function OrderDetailPage() {
       const res = await fetch(`/api/orders/${order.id}/cancel`, { method: "PUT", headers: { Authorization: `Bearer ${token}` } })
       if (res.ok) { const data = await res.json(); setOrder(data.order) } else { alert("Failed to cancel order") }
     } catch { alert("Something went wrong") } finally { setCancelling(false) }
+  }
+
+  const retryPayment = async () => {
+    if (!order) return
+    const token = localStorage.getItem("token")
+    if (!token) { router.push("/login"); return }
+    setRetrying(true)
+    try {
+      const initRes = await fetch(
+        `/api/payments/initiate/${order.id}?provider=RAZORPAY&returnUrl=${encodeURIComponent(`${window.location.origin}/orders/${order.id}`)}`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+      )
+      const initData = await initRes.json()
+      if (!initRes.ok || !initData.providerOrderId) {
+        alert(initData.message || "Failed to start payment retry. Please contact support.")
+        setRetrying(false)
+        return
+      }
+
+      const script = document.createElement("script")
+      script.src = "https://checkout.razorpay.com/v1/checkout.js"
+      script.async = true
+      script.onload = () => {
+        const options: any = {
+          key: initData.keyId,
+          order_id: initData.providerOrderId,
+          name: "WholesaleX",
+          amount: initData.extra?.amount,
+          currency: initData.extra?.currency || "INR",
+          prefill: {
+            name: initData.extra?.customerName || "",
+            email: initData.extra?.customerEmail || "",
+            contact: initData.extra?.customerPhone || "",
+          },
+          handler: async function (response: any) {
+            try {
+              const verifyRes = await fetch("/api/payments/razorpay/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                }),
+              })
+              setPaymentAlert(verifyRes.ok ? "Payment successful! Your order is confirmed." : "Payment failed. Please try again.")
+              if (verifyRes.ok) {
+                const refreshed = await fetch(`/api/orders/${order.id}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json())
+                setOrder(refreshed.order || order)
+              }
+            } catch {
+              setPaymentAlert("Something went wrong verifying your payment. Contact support if the amount was deducted.")
+            } finally {
+              setRetrying(false)
+            }
+          },
+          modal: { ondismiss: function () { setRetrying(false) } },
+        }
+        const rzp = new (window as any).Razorpay(options)
+        rzp.on("payment.failed", function () {
+          alert("Payment failed. Please try again.")
+          setRetrying(false)
+        })
+        rzp.open()
+      }
+      script.onerror = () => {
+        alert("Could not load the Razorpay checkout. Please check your internet connection and try again.")
+        setRetrying(false)
+      }
+      document.body.appendChild(script)
+    } catch {
+      alert("Something went wrong")
+      setRetrying(false)
+    }
   }
 
   const handleReorder = async () => {
@@ -419,7 +494,25 @@ export default function OrderDetailPage() {
               <div className="flex justify-between"><span>Method</span><span className="font-medium">{order.payment?.provider || "COD"}</span></div>
               <div className="flex justify-between"><span>Status</span>{getPaymentStatusBadge(order.payment?.status || "PENDING")}</div>
               {order.payment?.providerRef && <div className="flex justify-between"><span>Transaction ID</span><span className="font-medium text-xs">{order.payment.providerRef}</span></div>}
+              {order.payment?.metadata?.razorpayOrderId && (
+                <div className="flex justify-between"><span>Razorpay Order ID</span><span className="font-medium text-xs">{order.payment.metadata.razorpayOrderId}</span></div>
+              )}
+              {order.payment?.metadata?.razorpayPaymentId && (
+                <div className="flex justify-between"><span>Razorpay Payment ID</span><span className="font-medium text-xs">{order.payment.metadata.razorpayPaymentId}</span></div>
+              )}
+              {order.payment?.metadata?.verifiedAt && (
+                <div className="flex justify-between"><span>Verified At</span><span className="font-medium text-xs">{new Date(order.payment.metadata.verifiedAt).toLocaleString()}</span></div>
+              )}
               <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span>Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
+              {order.payment?.provider === "RAZORPAY" && ["FAILED", "PENDING"].includes(order.payment?.status || "") && !["CANCELLED", "DELIVERED", "REFUNDED"].includes(order.status) && (
+                <button
+                  onClick={retryPayment}
+                  disabled={retrying}
+                  className="w-full mt-2 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition disabled:opacity-50"
+                >
+                  {retrying ? "Processing..." : "Retry Payment"}
+                </button>
+              )}
             </div>
           </div>
         </div>

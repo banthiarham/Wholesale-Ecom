@@ -31,9 +31,38 @@ interface Payment {
   gatewayId: string | null
   gateway: PaymentGateway | null
   order: OrderInfo
+  metadata: any
   createdAt: string
   updatedAt: string
 }
+
+interface PaymentStats {
+  totalPayments: number
+  totalAmount: number
+  successfulPayments: number
+  successfulAmount: number
+  pendingPayments: number
+  pendingAmount: number
+  failedPayments: number
+  failedAmount: number
+  refundedPayments: number
+  refundedAmount: number
+  todayRevenue: number
+  monthRevenue: number
+  successRate: number
+}
+
+interface Refund {
+  id: string
+  razorpayRefundId: string | null
+  amount: number
+  isPartial: boolean
+  reason: string | null
+  status: string
+  createdAt: string
+}
+
+const PAGE_SIZE = 20
 
 const PROVIDER_LABELS: Record<string, string> = {
   CCAVENUE: "CCAvenue",
@@ -80,10 +109,18 @@ export default function AdminPaymentsPage() {
   const [verifyStatus, setVerifyStatus] = useState("")
   const [providerRef, setProviderRef] = useState("")
   const [verifying, setVerifying] = useState(false)
+  const [stats, setStats] = useState<PaymentStats | null>(null)
+  const [page, setPage] = useState(1)
+  const [refunds, setRefunds] = useState<Refund[]>([])
+  const [loadingRefunds, setLoadingRefunds] = useState(false)
+  const [refundAmount, setRefundAmount] = useState("")
+  const [refundReason, setRefundReason] = useState("")
+  const [refunding, setRefunding] = useState(false)
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
-  useEffect(() => { loadPayments() }, [token])
+  useEffect(() => { loadPayments(); loadStats() }, [token])
+  useEffect(() => { setPage(1) }, [search, statusFilter, providerFilter])
 
   useEffect(() => {
     let result = payments
@@ -114,10 +151,67 @@ export default function AdminPaymentsPage() {
     } catch (e) { console.error(e) } finally { setLoading(false) }
   }
 
+  const loadStats = async () => {
+    try {
+      const res = await fetch("/api/payments/stats/summary", { headers: { Authorization: `Bearer ${token}` } })
+      if (res.ok) setStats(await res.json())
+    } catch (e) { console.error(e) }
+  }
+
+  const loadRefunds = async (orderId: string) => {
+    setLoadingRefunds(true)
+    try {
+      const res = await fetch(`/api/payments/${orderId}/refunds`, { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      setRefunds(data.refunds ?? [])
+    } catch (e) { console.error(e) } finally { setLoadingRefunds(false) }
+  }
+
   const openDetail = (payment: Payment) => {
     setSelected(payment)
     setVerifyStatus("")
     setProviderRef(payment.providerRef || "")
+    setRefundAmount("")
+    setRefundReason("")
+    setRefunds([])
+    if (payment.provider === "RAZORPAY" && payment.status === "CAPTURED") {
+      loadRefunds(payment.orderId)
+    }
+  }
+
+  const alreadyRefunded = refunds.filter((r) => r.status === "PROCESSED").reduce((s, r) => s + Number(r.amount), 0)
+  const remainingRefundable = selected ? Number(selected.amount) - alreadyRefunded : 0
+
+  const submitRefund = async (full: boolean) => {
+    if (!selected) return
+    const amount = full ? undefined : Number(refundAmount)
+    if (!full && (!amount || amount <= 0 || amount > remainingRefundable)) {
+      alert(`Enter a refund amount between 0 and ${remainingRefundable.toFixed(2)}`)
+      return
+    }
+    if (!confirm(full ? "Issue a full refund for this payment?" : `Issue a partial refund of ${amount}?`)) return
+    setRefunding(true)
+    try {
+      const res = await fetch(`/api/payments/${selected.orderId}/refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ amount, reason: refundReason || undefined }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setRefundAmount("")
+        setRefundReason("")
+        await loadRefunds(selected.orderId)
+        await loadPayments()
+        await loadStats()
+      } else {
+        alert(data.message || "Failed to process refund")
+      }
+    } catch (e) {
+      alert("Failed to process refund")
+    } finally {
+      setRefunding(false)
+    }
   }
 
   const verifyPayment = async () => {
@@ -135,12 +229,15 @@ export default function AdminPaymentsPage() {
         setVerifyStatus("")
         setProviderRef("")
         loadPayments()
+        loadStats()
       } else { alert("Failed to verify payment") }
     } catch (e) { alert("Failed to verify payment") } finally { setVerifying(false) }
   }
 
   // Get unique providers for filter dropdown
   const providers = Array.from(new Set(payments.map((p) => p.provider))).sort()
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   if (loading) return <SkeletonTable />
 
@@ -200,6 +297,23 @@ export default function AdminPaymentsPage() {
         ))}
       </div>
 
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { label: "Refunded", value: stats.refundedPayments, sub: formatPrice(stats.refundedAmount) },
+            { label: "Today's Revenue", value: formatPrice(stats.todayRevenue), sub: "" },
+            { label: "Monthly Revenue", value: formatPrice(stats.monthRevenue), sub: "" },
+            { label: "Success Rate", value: `${stats.successRate}%`, sub: `${stats.successfulPayments}/${stats.totalPayments}` },
+          ].map((card) => (
+            <div key={card.label} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-4">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{card.label}</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{card.value}</p>
+              {card.sub && <p className="text-xs text-gray-500 dark:text-gray-400">{card.sub}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-12 text-center">
           <CreditCard size={48} className="text-gray-300 dark:text-gray-600 mx-auto mb-4" />
@@ -222,7 +336,7 @@ export default function AdminPaymentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-              {filtered.map((p) => (
+              {paginated.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">#{p.order?.orderNumber?.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
@@ -266,6 +380,29 @@ export default function AdminPaymentsPage() {
               ))}
             </tbody>
           </table>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 text-sm">
+              <span className="text-gray-500 dark:text-gray-400">
+                Page {page} of {totalPages} ({filtered.length} payments)
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -298,8 +435,77 @@ export default function AdminPaymentsPage() {
                 {selected.providerRef && (
                   <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Ref:</span><span className="font-mono text-xs">{selected.providerRef}</span></div>
                 )}
+                {selected.metadata?.razorpayOrderId && (
+                  <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Razorpay Order ID:</span><span className="font-mono text-xs">{selected.metadata.razorpayOrderId}</span></div>
+                )}
+                {selected.metadata?.razorpayPaymentId && (
+                  <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Razorpay Payment ID:</span><span className="font-mono text-xs">{selected.metadata.razorpayPaymentId}</span></div>
+                )}
+                {selected.metadata?.verifiedAt && (
+                  <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Verified At:</span><span className="text-xs">{new Date(selected.metadata.verifiedAt).toLocaleString()}</span></div>
+                )}
                 <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Order Status:</span><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${orderStatusColor[selected.order?.status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>{selected.order?.status}</span></div>
               </div>
+
+              {selected.provider === "RAZORPAY" && selected.status === "CAPTURED" && (
+                <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Refund</p>
+                  {loadingRefunds ? (
+                    <p className="text-xs text-gray-400">Loading refund history...</p>
+                  ) : (
+                    <>
+                      {refunds.length > 0 && (
+                        <div className="mb-3 space-y-1.5 max-h-28 overflow-y-auto">
+                          {refunds.map((r) => (
+                            <div key={r.id} className="flex justify-between text-xs bg-gray-50 dark:bg-gray-800/50 rounded px-2 py-1.5">
+                              <span>{formatPrice(Number(r.amount))} {r.isPartial ? "(partial)" : "(full)"}</span>
+                              <span className={r.status === "PROCESSED" ? "text-green-600" : r.status === "FAILED" ? "text-red-600" : "text-yellow-600"}>{r.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {remainingRefundable > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Refundable balance: {formatPrice(remainingRefundable)}</p>
+                          <input
+                            type="number"
+                            value={refundAmount}
+                            onChange={(e) => setRefundAmount(e.target.value)}
+                            placeholder={`Amount (max ${remainingRefundable.toFixed(2)})`}
+                            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                          <input
+                            type="text"
+                            value={refundReason}
+                            onChange={(e) => setRefundReason(e.target.value)}
+                            placeholder="Reason (optional)"
+                            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => submitRefund(false)}
+                              disabled={refunding || !refundAmount}
+                              className="flex-1 py-2 border border-primary-600 text-primary-600 rounded-lg text-sm hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50"
+                            >
+                              {refunding ? "Processing..." : "Partial Refund"}
+                            </button>
+                            <button
+                              onClick={() => submitRefund(true)}
+                              disabled={refunding}
+                              className="flex-1 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50"
+                            >
+                              {refunding ? "Processing..." : "Full Refund"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">This payment has been fully refunded.</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
               <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Verify / Update Payment</p>
                 <div className="space-y-3">

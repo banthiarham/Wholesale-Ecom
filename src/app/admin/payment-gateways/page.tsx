@@ -32,6 +32,7 @@ const CREDENTIAL_FIELDS: Record<string, { key: string; label: string; required: 
   RAZORPAY: [
     { key: "keyId", label: "Key ID", required: true },
     { key: "keySecret", label: "Key Secret", required: true },
+    { key: "webhookSecret", label: "Webhook Secret (from Razorpay Dashboard > Webhooks)", required: false },
   ],
   STRIPE: [
     { key: "secretKey", label: "Secret Key", required: true },
@@ -492,6 +493,16 @@ export default function AdminPaymentGatewaysPage() {
                 />
               ))}
             </div>
+
+            {!isCustom && form.provider === "RAZORPAY" && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
+                In your Razorpay Dashboard, create a webhook pointing to{" "}
+                <code className="font-mono bg-white dark:bg-gray-900 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700">
+                  {`${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000")}/api/v1/payments/razorpay/webhook`}
+                </code>
+                , subscribed to <strong>payment.captured</strong>, <strong>payment.failed</strong>, and <strong>refund.processed</strong>. Paste the generated webhook secret above.
+              </div>
+            )}
 
             {/* Toggle fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

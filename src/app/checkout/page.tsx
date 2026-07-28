@@ -200,14 +200,46 @@ export default function CheckoutPage() {
           email: data.extra?.customerEmail || "",
           contact: data.extra?.customerPhone || "",
         },
-        handler: function (response: any) {
-          const orderId = response.razorpay_order_id ? new URLSearchParams(window.location.search).get("orderId") || "" : ""
-          router.push(`/orders/${orderId}?payment=success`)
+        handler: async function (response: any) {
+          const token = localStorage.getItem("token")
+          try {
+            const verifyRes = await fetch("/api/payments/razorpay/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            })
+            if (verifyRes.ok) {
+              router.push(`/orders/${data.orderId}?payment=success`)
+            } else {
+              router.push(`/orders/${data.orderId}?payment=failure`)
+            }
+          } catch (err) {
+            // Payment likely succeeded at the gateway but our verification call couldn't be reached
+            // (network error) — send the customer to the order page rather than losing the outcome.
+            router.push(`/orders/${data.orderId}?payment=error`)
+          } finally {
+            setPlacing(false)
+          }
+        },
+        modal: {
+          // Customer closed the popup without paying (Payment Cancelled) — let them retry.
+          ondismiss: function () { setPlacing(false) },
         },
       }
       const rzp = new (window as any).Razorpay(options)
-      rzp.on("payment.failed", function () { alert("Payment failed. Please try again."); setPlacing(false) })
+      rzp.on("payment.failed", function () {
+        alert("Payment failed. This can happen due to insufficient funds, a bank decline, or a network issue. You can retry the payment or choose another method.")
+        setPlacing(false)
+      })
       rzp.open()
+    }
+    script.onerror = () => {
+      alert("Could not load the Razorpay checkout. Please check your internet connection and try again.")
+      setPlacing(false)
     }
     document.body.appendChild(script)
   }
@@ -252,7 +284,7 @@ export default function CheckoutPage() {
   const walletInsufficient = paymentMethod === "WALLET" && cart && walletCreditInfo && (cart.totals.total - couponDiscount) > walletCreditInfo.availableCredit
 
   const placeOrder = async () => {
-    if (!cart) return
+    if (!cart || placing) return
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
 

@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { PaymentGatewayProvider, GatewayInitResponse, GatewayCallbackResult } from './gateway.interface';
+import { PaymentGatewayProvider, GatewayInitResponse, GatewayCallbackResult, GatewayRefundResult } from './gateway.interface';
 import { PaymentStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 
@@ -62,8 +62,12 @@ export class RazorpayGatewayService implements PaymentGatewayProvider {
 
     const isValid = expectedSignature === razorpay_signature;
 
-    // Extract our internal orderId from merchantOrderId in notes or from the razorpay order
-    const orderId = payload.merchantOrderId || '';
+    // Razorpay's JS-checkout flow is verified via the dedicated
+    // POST /payments/razorpay/verify endpoint (PaymentsService.verifyRazorpayPayment),
+    // which resolves the internal order via Payment.providerRef === razorpay_order_id.
+    // This generic callback is only a fallback for redirect-based invocations and has no
+    // way to resolve an internal order id on its own, so it intentionally no-ops.
+    const orderId = '';
 
     if (isValid) {
       return {
@@ -86,6 +90,44 @@ export class RazorpayGatewayService implements PaymentGatewayProvider {
 
   getGatewayUrl(testMode: boolean): string {
     return 'https://api.razorpay.com/v1';
+  }
+
+  async refundPayment(params: {
+    providerPaymentId: string;
+    amount: number;
+    credentials: Record<string, string>;
+    notes?: Record<string, string>;
+  }): Promise<GatewayRefundResult> {
+    const { providerPaymentId, amount, credentials, notes } = params;
+    const url = `https://api.razorpay.com/v1/payments/${providerPaymentId}/refund`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Basic ' + Buffer.from(`${credentials.keyId}:${credentials.keySecret}`).toString('base64'),
+        // Razorpay dedupes refund requests sharing the same idempotency key,
+        // preventing a retried admin action from creating a second refund.
+        'X-Razorpay-Idempotency-Key': (notes && notes.internalRefundId) || crypto.randomUUID(),
+      },
+      body: JSON.stringify({
+        amount: Math.round(amount * 100),
+        speed: 'normal',
+        notes: notes || {},
+      }),
+    });
+
+    const body = await response.json();
+
+    if (!response.ok) {
+      throw new BadRequestException(`Razorpay refund failed: ${body?.error?.description || JSON.stringify(body)}`);
+    }
+
+    return {
+      refundId: body.id,
+      status: body.status === 'processed' ? 'PROCESSED' : body.status === 'failed' ? 'FAILED' : 'PENDING',
+      rawResponse: body,
+    };
   }
 
   private async createRazorpayOrder(

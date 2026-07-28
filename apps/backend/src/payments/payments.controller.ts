@@ -1,10 +1,14 @@
-import { Controller, Post, Body, UseGuards, Param, Get, Req, Res, Query } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Param, Get, Req, Res, Query, Headers, RawBodyRequest } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
+import { RazorpayVerifyDto } from './dto/razorpay-verify.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { PaymentStatus } from '@prisma/client';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { PaymentStatus, UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
 
 @ApiTags('Payments')
@@ -28,9 +32,10 @@ export class PaymentsController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all payments' })
+  @ApiOperation({ summary: 'List all payments (admin)' })
   @ApiResponse({ status: 200, description: 'List of all payments' })
   @ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'AUTHORIZED', 'CAPTURED', 'FAILED', 'REFUNDED', 'CANCELLED'] })
   async findAll(@Query('status') status?: string) {
@@ -38,10 +43,68 @@ export class PaymentsController {
     return { payments };
   }
 
-  @Post(':orderId/verify')
+  @Get('stats/summary')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Payments dashboard summary stats (admin)' })
+  async getStats() {
+    return this.paymentsService.getStats();
+  }
+
+  // ─── Razorpay Checkout Verification ───
+  // NOTE: these literal routes (razorpay/verify, razorpay/webhook) MUST be registered
+  // before the parameterized ':orderId/verify' and ':orderId' routes below — Nest/Express
+  // match routes in registration order, and ':orderId/verify' would otherwise shadow
+  // 'razorpay/verify' by treating "razorpay" as the orderId param.
+
+  @Post('razorpay/verify')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Verify/update payment status for an order' })
+  @ApiOperation({ summary: 'Verify a Razorpay checkout payment signature (owner or admin)' })
+  @ApiBody({ type: RazorpayVerifyDto })
+  async verifyRazorpay(@Body() dto: RazorpayVerifyDto, @CurrentUser() user: any) {
+    return this.paymentsService.verifyRazorpayPayment(user, dto);
+  }
+
+  // ─── Razorpay Webhook ───
+
+  @Post('razorpay/webhook')
+  @ApiOperation({ summary: 'Razorpay webhook receiver (no auth — verified via HMAC signature header)' })
+  async razorpayWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('x-razorpay-signature') signature: string,
+    @Headers('x-razorpay-event-id') eventId: string,
+    @Body() body: any,
+  ) {
+    return this.paymentsService.handleRazorpayWebhook(req.rawBody, signature, eventId, body);
+  }
+
+  // ─── Generic Payment Initiation ───
+
+  @Post('initiate/:orderId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Initiate payment for an order using a configured gateway (owner or admin)' })
+  @ApiResponse({ status: 200, description: 'Payment initiation data returned' })
+  @ApiParam({ name: 'orderId', description: 'Order UUID' })
+  @ApiQuery({ name: 'provider', enum: ['RAZORPAY', 'CCAVENUE', 'STRIPE', 'PAYU'] })
+  @ApiQuery({ name: 'returnUrl', required: false })
+  async initiatePayment(
+    @Param('orderId') orderId: string,
+    @Query('provider') provider: string,
+    @CurrentUser() user: any,
+    @Query('returnUrl') returnUrl?: string,
+  ) {
+    const result = await this.paymentsService.initiatePayment(orderId, provider, returnUrl, user);
+    return result;
+  }
+
+  @Post(':orderId/verify')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Manually verify/override payment status for an order (admin)' })
   @ApiResponse({ status: 200, description: 'Payment verified' })
   @ApiResponse({ status: 404, description: 'Payment not found' })
   @ApiParam({ name: 'orderId', description: 'Order UUID' })
@@ -61,32 +124,13 @@ export class PaymentsController {
   @Get(':orderId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get payment details for an order' })
+  @ApiOperation({ summary: 'Get payment details for an order (owner or admin)' })
   @ApiResponse({ status: 200, description: 'Payment found' })
   @ApiResponse({ status: 404, description: 'Payment not found' })
   @ApiParam({ name: 'orderId', description: 'Order UUID' })
-  async findByOrderId(@Param('orderId') orderId: string) {
-    const payment = await this.paymentsService.findByOrderId(orderId);
+  async findByOrderId(@Param('orderId') orderId: string, @CurrentUser() user: any) {
+    const payment = await this.paymentsService.findByOrderId(orderId, user);
     return { payment };
-  }
-
-  // ─── Generic Payment Initiation ───
-
-  @Post('initiate/:orderId')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Initiate payment for an order using a configured gateway' })
-  @ApiResponse({ status: 200, description: 'Payment initiation data returned' })
-  @ApiParam({ name: 'orderId', description: 'Order UUID' })
-  @ApiQuery({ name: 'provider', enum: ['RAZORPAY', 'CCAVENUE', 'STRIPE', 'PAYU'] })
-  @ApiQuery({ name: 'returnUrl', required: false })
-  async initiatePayment(
-    @Param('orderId') orderId: string,
-    @Query('provider') provider: string,
-    @Query('returnUrl') returnUrl?: string,
-  ) {
-    const result = await this.paymentsService.initiatePayment(orderId, provider, returnUrl);
-    return result;
   }
 
   // ─── Generic Callback Handler ───
