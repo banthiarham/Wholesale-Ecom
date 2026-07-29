@@ -3,10 +3,12 @@
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck } from "lucide-react"
+import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck, ShoppingCart } from "lucide-react"
 import { formatPrice, getCartSessionId, COUNTRIES } from "@/lib/utils"
 import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
 import { useStorefrontRules } from "@/lib/rules"
+import { useToast } from "@/components/ui/Toast"
+import { EmptyState } from "@/components/ui/EmptyState"
 
 interface CartItem {
   id: string; quantity: number; unitPrice: number;
@@ -86,6 +88,7 @@ export default function CheckoutPage() {
   const [usePoints, setUsePoints] = useState(false)
   const [pointsToRedeem, setPointsToRedeem] = useState(0)
   const [pointsRedeeming, setPointsRedeeming] = useState(false)
+  const { showToast } = useToast()
 
   // Evaluate dynamic rules for checkout
   const cartItemsForRules = useMemo(
@@ -232,13 +235,13 @@ export default function CheckoutPage() {
       }
       const rzp = new (window as any).Razorpay(options)
       rzp.on("payment.failed", function () {
-        alert("Payment failed. This can happen due to insufficient funds, a bank decline, or a network issue. You can retry the payment or choose another method.")
+        showToast("error", "Payment failed. This can happen due to insufficient funds, a bank decline, or a network issue. You can retry the payment or choose another method.")
         setPlacing(false)
       })
       rzp.open()
     }
     script.onerror = () => {
-      alert("Could not load the Razorpay checkout. Please check your internet connection and try again.")
+      showToast("error", "Could not load the Razorpay checkout. Please check your internet connection and try again.")
       setPlacing(false)
     }
     document.body.appendChild(script)
@@ -319,7 +322,7 @@ export default function CheckoutPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        alert(data.message || "Failed to place order")
+        showToast("error", data.message || "Failed to place order")
         setPlacing(false)
         return
       }
@@ -341,7 +344,7 @@ export default function CheckoutPage() {
         })
         if (!walletRes.ok) {
           const walletErr = await walletRes.json()
-          alert(walletErr.message || "Wallet payment failed. Please try another payment method.")
+          showToast("error", walletErr.message || "Wallet payment failed. Please try another payment method.")
           setPlacing(false)
           return
         }
@@ -350,13 +353,13 @@ export default function CheckoutPage() {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {})
-        alert("Order placed and paid from wallet!")
+        showToast("success", "Order placed and paid from wallet!")
         router.push(`/orders/${orderId}`)
         return
       }
 
       if (paymentMethod === "COD") {
-        alert("Order placed successfully!")
+        showToast("success", "Order placed successfully!")
         router.push(`/orders/${orderId}`)
         return
       }
@@ -369,7 +372,7 @@ export default function CheckoutPage() {
       const initData = await initRes.json()
 
       if (!initRes.ok) {
-        alert(initData.message || "Failed to initiate payment. Please try COD or contact support.")
+        showToast("error", initData.message || "Failed to initiate payment. Please try COD or contact support.")
         setPlacing(false)
         return
       }
@@ -398,10 +401,10 @@ export default function CheckoutPage() {
         if (url) { setRedirectData({ url, method: "post", params }); return }
       }
 
-      alert("Payment initiated but no redirect was received. Please check your order status.")
+      showToast("error", "Payment initiated but no redirect was received. Please check your order status.")
       router.push(`/orders/${orderId}`)
     } catch (err) {
-      alert("Something went wrong")
+      showToast("error", "Something went wrong")
       setPlacing(false)
     }
   }
@@ -474,17 +477,26 @@ export default function CheckoutPage() {
         setLoyalty((prev) => prev ? { ...prev, points: data.points ?? prev.points - pointsToRedeem, walletBalance: data.walletBalance ?? prev.walletBalance } : prev)
         setUseWallet(true)
         setWalletAmount((prev) => prev + pointsToRedeem)
-      } else { alert("Failed to redeem points") }
-    } catch { alert("Failed to redeem points") } finally { setPointsRedeeming(false) }
+      } else { showToast("error", "Failed to redeem points") }
+    } catch { showToast("error", "Failed to redeem points") } finally { setPointsRedeeming(false) }
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <div className="h-64 rounded-2xl bg-gray-100 animate-pulse" />
+        <div className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
+      </main>
+    </div>
+  )
   if (!cart || cart.cart.items.length === 0) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Your cart is empty</h1>
-        <Link href="/products" className="text-primary-600 hover:underline">Continue Shopping</Link>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <EmptyState
+        icon={ShoppingCart}
+        title="Your cart is empty"
+        description="Add some products to your cart before checking out."
+        action={{ label: "Continue Shopping", href: "/products" }}
+      />
     </div>
   )
 
@@ -517,7 +529,7 @@ export default function CheckoutPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="card-base-static p-6">
               <div className="flex items-center gap-2 mb-4">
                 <MapPin className="text-primary-600" size={20} />
                 <h2 className="font-semibold">Shipping Address</h2>
@@ -527,35 +539,35 @@ export default function CheckoutPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="John Doe" value={address.fullName} onChange={(e) => { setAddress({ ...address, fullName: e.target.value }); if (errors.fullName) setErrors({ ...errors, fullName: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.fullName ? "border-red-400" : "border-gray-200"}`} />
+                    <input type="text" placeholder="John Doe" value={address.fullName} onChange={(e) => { setAddress({ ...address, fullName: e.target.value }); if (errors.fullName) setErrors({ ...errors, fullName: "" }) }} className={`input-base ${errors.fullName ? "!border-red-400" : ""}`} />
                     {errors.fullName && <p className="text-xs text-red-500 mt-1">{errors.fullName}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
-                    <input type="tel" placeholder="+91 98765 43210" value={address.phone} onChange={(e) => { setAddress({ ...address, phone: e.target.value }); if (errors.phone) setErrors({ ...errors, phone: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.phone ? "border-red-400" : "border-gray-200"}`} />
+                    <input type="tel" placeholder="+91 98765 43210" value={address.phone} onChange={(e) => { setAddress({ ...address, phone: e.target.value }); if (errors.phone) setErrors({ ...errors, phone: "" }) }} className={`input-base ${errors.phone ? "!border-red-400" : ""}`} />
                     {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-gray-400">(optional)</span></label>
-                  <input type="email" placeholder="john@example.com" value={address.email} onChange={(e) => { setAddress({ ...address, email: e.target.value }); if (errors.email) setErrors({ ...errors, email: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.email ? "border-red-400" : "border-gray-200"}`} />
+                  <input type="email" placeholder="john@example.com" value={address.email} onChange={(e) => { setAddress({ ...address, email: e.target.value }); if (errors.email) setErrors({ ...errors, email: "" }) }} className={`input-base ${errors.email ? "!border-red-400" : ""}`} />
                   {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
                 </div>
 
                 {/* Address Lines */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Street Address <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="123 Main Street" value={address.street} onChange={(e) => { setAddress({ ...address, street: e.target.value }); if (errors.street) setErrors({ ...errors, street: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.street ? "border-red-400" : "border-gray-200"}`} />
+                  <input type="text" placeholder="123 Main Street" value={address.street} onChange={(e) => { setAddress({ ...address, street: e.target.value }); if (errors.street) setErrors({ ...errors, street: "" }) }} className={`input-base ${errors.street ? "!border-red-400" : ""}`} />
                   {errors.street && <p className="text-xs text-red-500 mt-1">{errors.street}</p>}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Apartment / Suite <span className="text-gray-400">(optional)</span></label>
-                    <input type="text" placeholder="Apt 4B" value={address.apartment} onChange={(e) => setAddress({ ...address, apartment: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                    <input type="text" placeholder="Apt 4B" value={address.apartment} onChange={(e) => setAddress({ ...address, apartment: e.target.value })} className="input-base" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Landmark / Area <span className="text-gray-400">(optional)</span></label>
-                    <input type="text" placeholder="Near City Mall" value={address.landmark} onChange={(e) => setAddress({ ...address, landmark: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                    <input type="text" placeholder="Near City Mall" value={address.landmark} onChange={(e) => setAddress({ ...address, landmark: e.target.value })} className="input-base" />
                   </div>
                 </div>
 
@@ -563,32 +575,32 @@ export default function CheckoutPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">City <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="Mumbai" value={address.city} onChange={(e) => { setAddress({ ...address, city: e.target.value }); if (errors.city) setErrors({ ...errors, city: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.city ? "border-red-400" : "border-gray-200"}`} />
+                    <input type="text" placeholder="Mumbai" value={address.city} onChange={(e) => { setAddress({ ...address, city: e.target.value }); if (errors.city) setErrors({ ...errors, city: "" }) }} className={`input-base ${errors.city ? "!border-red-400" : ""}`} />
                     {errors.city && <p className="text-xs text-red-500 mt-1">{errors.city}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">State <span className="text-red-500">*</span></label>
                     {address.country === "India" ? (
-                      <select value={address.state} onChange={(e) => { setAddress({ ...address, state: e.target.value }); if (errors.state) setErrors({ ...errors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${errors.state ? "border-red-400" : "border-gray-200"}`}>
+                      <select value={address.state} onChange={(e) => { setAddress({ ...address, state: e.target.value }); if (errors.state) setErrors({ ...errors, state: "" }) }} className={`input-base ${errors.state ? "!border-red-400" : ""}`}>
                         <option value="">Select State</option>
                         {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     ) : (
-                      <input type="text" placeholder="State" value={address.state} onChange={(e) => { setAddress({ ...address, state: e.target.value }); if (errors.state) setErrors({ ...errors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${errors.state ? "border-red-400" : "border-gray-200"}`} />
+                      <input type="text" placeholder="State" value={address.state} onChange={(e) => { setAddress({ ...address, state: e.target.value }); if (errors.state) setErrors({ ...errors, state: "" }) }} className={`input-base ${errors.state ? "!border-red-400" : ""}`} />
                     )}
                     {errors.state && <p className="text-xs text-red-500 mt-1">{errors.state}</p>}
                   </div>
                   <div className="relative">
                     <label className="block text-xs font-medium text-gray-700 mb-1">PIN Code <span className="text-red-500">*</span></label>
                     <div className="relative">
-                      <input type="text" placeholder="400001" maxLength={6} value={address.zip} onChange={(e) => { setAddress({ ...address, zip: e.target.value }); if (errors.zip) setErrors({ ...errors, zip: "" }) }} onBlur={(e) => { if (e.target.value.length === 6) handlePincodeLookup(e.target.value, false) }} className={`w-full px-4 py-2 border rounded-lg text-sm pr-8 ${errors.zip ? "border-red-400" : "border-gray-200"}`} />
+                      <input type="text" placeholder="400001" maxLength={6} value={address.zip} onChange={(e) => { setAddress({ ...address, zip: e.target.value }); if (errors.zip) setErrors({ ...errors, zip: "" }) }} onBlur={(e) => { if (e.target.value.length === 6) handlePincodeLookup(e.target.value, false) }} className={`input-base pr-8 ${errors.zip ? "!border-red-400" : ""}`} />
                       {pincodeLoading && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div></div>}
                     </div>
                     {errors.zip && <p className="text-xs text-red-500 mt-1">{errors.zip}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Country <span className="text-red-500">*</span></label>
-                    <select value={address.country} onChange={(e) => { setAddress({ ...address, country: e.target.value }); if (errors.country) setErrors({ ...errors, country: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${errors.country ? "border-red-400" : "border-gray-200"}`}>
+                    <select value={address.country} onChange={(e) => { setAddress({ ...address, country: e.target.value }); if (errors.country) setErrors({ ...errors, country: "" }) }} className={`input-base ${errors.country ? "!border-red-400" : ""}`}>
                       {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                     {errors.country && <p className="text-xs text-red-500 mt-1">{errors.country}</p>}
@@ -598,7 +610,7 @@ export default function CheckoutPage() {
                 {pincodeLocations.length > 0 && (
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Locality / Post Office</label>
-                    <select value={address.street} onChange={(e) => { setAddress({ ...address, street: e.target.value }); if (errors.street) setErrors({ ...errors, street: "" }) }} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                    <select value={address.street} onChange={(e) => { setAddress({ ...address, street: e.target.value }); if (errors.street) setErrors({ ...errors, street: "" }) }} className="input-base">
                       <option value="">Select locality</option>
                       {pincodeLocations.map((loc, i) => (
                         <option key={i} value={loc.name}>{loc.name} — {loc.district}, {loc.block}</option>
@@ -611,7 +623,7 @@ export default function CheckoutPage() {
             </div>
 
             {/* Billing Address */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="card-base-static p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <CreditCard className="text-primary-600" size={20} />
@@ -627,64 +639,64 @@ export default function CheckoutPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
-                      <input type="text" placeholder="John Doe" value={billingAddress.fullName} onChange={(e) => { setBillingAddress({ ...billingAddress, fullName: e.target.value }); if (billingErrors.fullName) setBillingErrors({ ...billingErrors, fullName: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.fullName ? "border-red-400" : "border-gray-200"}`} />
+                      <input type="text" placeholder="John Doe" value={billingAddress.fullName} onChange={(e) => { setBillingAddress({ ...billingAddress, fullName: e.target.value }); if (billingErrors.fullName) setBillingErrors({ ...billingErrors, fullName: "" }) }} className={`input-base ${billingErrors.fullName ? "!border-red-400" : ""}`} />
                       {billingErrors.fullName && <p className="text-xs text-red-500 mt-1">{billingErrors.fullName}</p>}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
-                      <input type="tel" placeholder="+91 98765 43210" value={billingAddress.phone} onChange={(e) => { setBillingAddress({ ...billingAddress, phone: e.target.value }); if (billingErrors.phone) setBillingErrors({ ...billingErrors, phone: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.phone ? "border-red-400" : "border-gray-200"}`} />
+                      <input type="tel" placeholder="+91 98765 43210" value={billingAddress.phone} onChange={(e) => { setBillingAddress({ ...billingAddress, phone: e.target.value }); if (billingErrors.phone) setBillingErrors({ ...billingErrors, phone: "" }) }} className={`input-base ${billingErrors.phone ? "!border-red-400" : ""}`} />
                       {billingErrors.phone && <p className="text-xs text-red-500 mt-1">{billingErrors.phone}</p>}
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-gray-400">(optional)</span></label>
-                    <input type="email" placeholder="billing@example.com" value={billingAddress.email} onChange={(e) => { setBillingAddress({ ...billingAddress, email: e.target.value }); if (billingErrors.email) setBillingErrors({ ...billingErrors, email: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.email ? "border-red-400" : "border-gray-200"}`} />
+                    <input type="email" placeholder="billing@example.com" value={billingAddress.email} onChange={(e) => { setBillingAddress({ ...billingAddress, email: e.target.value }); if (billingErrors.email) setBillingErrors({ ...billingErrors, email: "" }) }} className={`input-base ${billingErrors.email ? "!border-red-400" : ""}`} />
                     {billingErrors.email && <p className="text-xs text-red-500 mt-1">{billingErrors.email}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Street Address <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="123 Main Street" value={billingAddress.street} onChange={(e) => { setBillingAddress({ ...billingAddress, street: e.target.value }); if (billingErrors.street) setBillingErrors({ ...billingErrors, street: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.street ? "border-red-400" : "border-gray-200"}`} />
+                    <input type="text" placeholder="123 Main Street" value={billingAddress.street} onChange={(e) => { setBillingAddress({ ...billingAddress, street: e.target.value }); if (billingErrors.street) setBillingErrors({ ...billingErrors, street: "" }) }} className={`input-base ${billingErrors.street ? "!border-red-400" : ""}`} />
                     {billingErrors.street && <p className="text-xs text-red-500 mt-1">{billingErrors.street}</p>}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Apartment / Suite <span className="text-gray-400">(optional)</span></label>
-                      <input type="text" placeholder="Apt 4B" value={billingAddress.apartment} onChange={(e) => setBillingAddress({ ...billingAddress, apartment: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                      <input type="text" placeholder="Apt 4B" value={billingAddress.apartment} onChange={(e) => setBillingAddress({ ...billingAddress, apartment: e.target.value })} className="input-base" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Landmark / Area <span className="text-gray-400">(optional)</span></label>
-                      <input type="text" placeholder="Near City Mall" value={billingAddress.landmark} onChange={(e) => setBillingAddress({ ...billingAddress, landmark: e.target.value })} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
+                      <input type="text" placeholder="Near City Mall" value={billingAddress.landmark} onChange={(e) => setBillingAddress({ ...billingAddress, landmark: e.target.value })} className="input-base" />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">City <span className="text-red-500">*</span></label>
-                      <input type="text" placeholder="Mumbai" value={billingAddress.city} onChange={(e) => { setBillingAddress({ ...billingAddress, city: e.target.value }); if (billingErrors.city) setBillingErrors({ ...billingErrors, city: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.city ? "border-red-400" : "border-gray-200"}`} />
+                      <input type="text" placeholder="Mumbai" value={billingAddress.city} onChange={(e) => { setBillingAddress({ ...billingAddress, city: e.target.value }); if (billingErrors.city) setBillingErrors({ ...billingErrors, city: "" }) }} className={`input-base ${billingErrors.city ? "!border-red-400" : ""}`} />
                       {billingErrors.city && <p className="text-xs text-red-500 mt-1">{billingErrors.city}</p>}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">State <span className="text-red-500">*</span></label>
                       {billingAddress.country === "India" ? (
-                        <select value={billingAddress.state} onChange={(e) => { setBillingAddress({ ...billingAddress, state: e.target.value }); if (billingErrors.state) setBillingErrors({ ...billingErrors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${billingErrors.state ? "border-red-400" : "border-gray-200"}`}>
+                        <select value={billingAddress.state} onChange={(e) => { setBillingAddress({ ...billingAddress, state: e.target.value }); if (billingErrors.state) setBillingErrors({ ...billingErrors, state: "" }) }} className={`input-base ${billingErrors.state ? "!border-red-400" : ""}`}>
                           <option value="">Select State</option>
                           {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       ) : (
-                        <input type="text" placeholder="State" value={billingAddress.state} onChange={(e) => { setBillingAddress({ ...billingAddress, state: e.target.value }); if (billingErrors.state) setBillingErrors({ ...billingErrors, state: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm ${billingErrors.state ? "border-red-400" : "border-gray-200"}`} />
+                        <input type="text" placeholder="State" value={billingAddress.state} onChange={(e) => { setBillingAddress({ ...billingAddress, state: e.target.value }); if (billingErrors.state) setBillingErrors({ ...billingErrors, state: "" }) }} className={`input-base ${billingErrors.state ? "!border-red-400" : ""}`} />
                       )}
                       {billingErrors.state && <p className="text-xs text-red-500 mt-1">{billingErrors.state}</p>}
                     </div>
                     <div className="relative">
                       <label className="block text-xs font-medium text-gray-700 mb-1">PIN Code <span className="text-red-500">*</span></label>
                       <div className="relative">
-                        <input type="text" placeholder="400001" maxLength={6} value={billingAddress.zip} onChange={(e) => { setBillingAddress({ ...billingAddress, zip: e.target.value }); if (billingErrors.zip) setBillingErrors({ ...billingErrors, zip: "" }) }} onBlur={(e) => { if (e.target.value.length === 6) handlePincodeLookup(e.target.value, true) }} className={`w-full px-4 py-2 border rounded-lg text-sm pr-8 ${billingErrors.zip ? "border-red-400" : "border-gray-200"}`} />
+                        <input type="text" placeholder="400001" maxLength={6} value={billingAddress.zip} onChange={(e) => { setBillingAddress({ ...billingAddress, zip: e.target.value }); if (billingErrors.zip) setBillingErrors({ ...billingErrors, zip: "" }) }} onBlur={(e) => { if (e.target.value.length === 6) handlePincodeLookup(e.target.value, true) }} className={`input-base pr-8 ${billingErrors.zip ? "!border-red-400" : ""}`} />
                         {billingPincodeLoading && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div></div>}
                       </div>
                       {billingErrors.zip && <p className="text-xs text-red-500 mt-1">{billingErrors.zip}</p>}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Country <span className="text-red-500">*</span></label>
-                      <select value={billingAddress.country} onChange={(e) => { setBillingAddress({ ...billingAddress, country: e.target.value }); if (billingErrors.country) setBillingErrors({ ...billingErrors, country: "" }) }} className={`w-full px-4 py-2 border rounded-lg text-sm bg-white ${billingErrors.country ? "border-red-400" : "border-gray-200"}`}>
+                      <select value={billingAddress.country} onChange={(e) => { setBillingAddress({ ...billingAddress, country: e.target.value }); if (billingErrors.country) setBillingErrors({ ...billingErrors, country: "" }) }} className={`input-base ${billingErrors.country ? "!border-red-400" : ""}`}>
                         {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
                       {billingErrors.country && <p className="text-xs text-red-500 mt-1">{billingErrors.country}</p>}
@@ -693,7 +705,7 @@ export default function CheckoutPage() {
                   {billingPincodeLocations.length > 0 && (
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Locality / Post Office</label>
-                      <select value={billingAddress.street} onChange={(e) => { setBillingAddress({ ...billingAddress, street: e.target.value }); if (billingErrors.street) setBillingErrors({ ...billingErrors, street: "" }) }} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                      <select value={billingAddress.street} onChange={(e) => { setBillingAddress({ ...billingAddress, street: e.target.value }); if (billingErrors.street) setBillingErrors({ ...billingErrors, street: "" }) }} className="input-base">
                         <option value="">Select locality</option>
                         {billingPincodeLocations.map((loc, i) => (
                           <option key={i} value={loc.name}>{loc.name} — {loc.district}, {loc.block}</option>
@@ -706,7 +718,7 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="card-base-static p-6">
               <div className="flex items-center gap-2 mb-4">
                 <CreditCard className="text-primary-600" size={20} />
                 <h2 className="font-semibold">Payment Method</h2>
@@ -803,7 +815,7 @@ export default function CheckoutPage() {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="card-base-static p-6">
               <h2 className="font-semibold mb-4">Order Summary</h2>
               <div className="space-y-2 text-sm mb-4">
                 {cart.cart.items.map((item) => {

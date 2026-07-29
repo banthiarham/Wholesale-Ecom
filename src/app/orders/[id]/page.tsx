@@ -5,6 +5,9 @@ import Link from "next/link"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation, ExternalLink, Circle, Clock, Layers } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { useToast } from "@/components/ui/Toast"
+import { useCartDrawer } from "@/components/ui/CartDrawer"
+import { EmptyState } from "@/components/ui/EmptyState"
 
 interface OrderDetail {
   id: string
@@ -49,6 +52,8 @@ export default function OrderDetailPage() {
   const [returnItems, setReturnItems] = useState<Record<string, { qty: number; selected: boolean }>>({})
   const [submittingReturn, setSubmittingReturn] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const { showToast } = useToast()
+  const { openCartDrawer } = useCartDrawer()
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -78,13 +83,11 @@ export default function OrderDetailPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "DELIVERED": return "bg-green-100 text-green-700"
-      case "SHIPPED": return "bg-blue-100 text-blue-700"
-      case "PROCESSING": return "bg-yellow-100 text-yellow-700"
-      case "CONFIRMED": return "bg-indigo-100 text-indigo-700"
-      case "CANCELLED": return "bg-red-100 text-red-700"
-      case "REFUNDED": return "bg-purple-100 text-purple-700"
-      default: return "bg-gray-100 text-gray-700"
+      case "DELIVERED": return "badge-success"
+      case "SHIPPED": return "badge-primary"
+      case "PROCESSING": return "badge-warning"
+      case "CANCELLED": return "badge-danger"
+      default: return "badge bg-gray-100 text-gray-700"
     }
   }
 
@@ -112,8 +115,8 @@ export default function OrderDetailPage() {
     setCancelling(true)
     try {
       const res = await fetch(`/api/orders/${order.id}/cancel`, { method: "PUT", headers: { Authorization: `Bearer ${token}` } })
-      if (res.ok) { const data = await res.json(); setOrder(data.order) } else { alert("Failed to cancel order") }
-    } catch { alert("Something went wrong") } finally { setCancelling(false) }
+      if (res.ok) { const data = await res.json(); setOrder(data.order) } else { showToast("error", "Failed to cancel order") }
+    } catch { showToast("error", "Something went wrong") } finally { setCancelling(false) }
   }
 
   const retryPayment = async () => {
@@ -128,7 +131,7 @@ export default function OrderDetailPage() {
       )
       const initData = await initRes.json()
       if (!initRes.ok || !initData.providerOrderId) {
-        alert(initData.message || "Failed to start payment retry. Please contact support.")
+        showToast("error", initData.message || "Failed to start payment retry. Please contact support.")
         setRetrying(false)
         return
       }
@@ -174,18 +177,18 @@ export default function OrderDetailPage() {
         }
         const rzp = new (window as any).Razorpay(options)
         rzp.on("payment.failed", function () {
-          alert("Payment failed. Please try again.")
+          showToast("error", "Payment failed. Please try again.")
           setRetrying(false)
         })
         rzp.open()
       }
       script.onerror = () => {
-        alert("Could not load the Razorpay checkout. Please check your internet connection and try again.")
+        showToast("error", "Could not load the Razorpay checkout. Please check your internet connection and try again.")
         setRetrying(false)
       }
       document.body.appendChild(script)
     } catch {
-      alert("Something went wrong")
+      showToast("error", "Something went wrong")
       setRetrying(false)
     }
   }
@@ -194,16 +197,34 @@ export default function OrderDetailPage() {
     if (!order) return
     setReordering(true)
     try {
-      for (const item of order.items) {
-        await fetch("/api/cart", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
-          body: JSON.stringify({ productId: item.productId, quantity: item.quantity }),
-        })
-      }
+      const token = localStorage.getItem("token")
+      const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+      const results = await Promise.all(
+        order.items.map((item) =>
+          fetch("/api/cart", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ productId: item.productId, quantity: item.quantity }),
+          }).then((res) => res.ok)
+        )
+      )
       window.dispatchEvent(new CustomEvent("cart-updated"))
-      router.push("/cart")
-    } catch (err) { console.error(err) } finally { setReordering(false) }
+      const failedCount = results.filter((ok) => !ok).length
+      if (failedCount === 0) {
+        openCartDrawer()
+      } else if (failedCount < results.length) {
+        showToast("error", `${failedCount} item(s) could not be added — check stock/quantity limits`)
+        openCartDrawer()
+      } else {
+        showToast("error", "Could not add items to cart")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setReordering(false)
+    }
   }
 
   const handleReturnSubmit = async () => {
@@ -211,8 +232,8 @@ export default function OrderDetailPage() {
     const token = localStorage.getItem("token")
     if (!token) return
     const selectedItems = Object.entries(returnItems).filter(([, v]) => v.selected).map(([id, v]) => ({ orderItemId: id, quantity: v.qty }))
-    if (selectedItems.length === 0) { alert("Select at least one item to return"); return }
-    if (!returnReason.trim()) { alert("Please provide a reason"); return }
+    if (selectedItems.length === 0) { showToast("error", "Select at least one item to return"); return }
+    if (!returnReason.trim()) { showToast("error", "Please provide a reason"); return }
 
     setSubmittingReturn(true)
     try {
@@ -221,13 +242,29 @@ export default function OrderDetailPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ orderId: order.id, reason: returnReason, notes: returnNotes, items: selectedItems }),
       })
-      if (res.ok) { setShowReturnForm(false); alert("Return request submitted!") }
-      else { const data = await res.json(); alert(data.message || "Failed to submit return") }
-    } catch (err) { console.error(err) } finally { setSubmittingReturn(false) }
+      if (res.ok) { setShowReturnForm(false); showToast("success", "Return request submitted!") }
+      else { const data = await res.json(); showToast("error", data.message || "Failed to submit return") }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setSubmittingReturn(false)
+    }
   }
 
-  if (loading) return <div className="min-h-screen bg-gray-50"><div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div></div>
-  if (!order) return <div className="min-h-screen bg-gray-50"><main className="max-w-4xl mx-auto px-4 py-12 text-center"><h1 className="text-2xl font-bold text-gray-900 mb-4">Order not found</h1><Link href="/orders" className="text-primary-600 hover:underline">Back to orders</Link></main></div>
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <div className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
+        <div className="h-32 rounded-2xl bg-gray-100 animate-pulse" />
+      </main>
+    </div>
+  )
+  if (!order) return (
+    <div className="min-h-screen bg-gray-50">
+      <EmptyState icon={Package} title="Order not found" action={{ label: "Back to orders", href: "/orders" }} />
+    </div>
+  )
 
   const canCancel = !["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)
   const canReturn = order.status === "DELIVERED"
@@ -247,14 +284,14 @@ export default function OrderDetailPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+        <div className="card-base-static p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <h1 className="text-xl font-bold text-gray-900">Order #{order.orderNumber}</h1>
               <p className="text-sm text-gray-500 mt-1">Placed on {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+              <span className={`badge inline-flex items-center gap-1.5 ${getStatusColor(order.status)}`}>
                 {getStatusIcon(order.status)} {order.status}
               </span>
               {canCancel && <button onClick={cancelOrder} disabled={cancelling} className="px-3 py-1 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition disabled:opacity-50">{cancelling ? "Cancelling..." : "Cancel"}</button>}
@@ -439,7 +476,7 @@ export default function OrderDetailPage() {
 
         {/* Return Form */}
         {showReturnForm && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+          <div className="card-base-static p-6 mb-6">
             <h2 className="font-semibold text-gray-900 mb-4">Request Return</h2>
             <div className="space-y-4">
               <div>
@@ -471,7 +508,7 @@ export default function OrderDetailPage() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <div className="card-base-static p-6">
             <div className="flex items-center gap-2 mb-4">
               <MapPin className="text-primary-600" size={18} />
               <h2 className="font-semibold text-gray-900">Shipping Address</h2>
@@ -485,7 +522,7 @@ export default function OrderDetailPage() {
             ) : <p className="text-sm text-gray-500">No shipping address provided</p>}
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <div className="card-base-static p-6">
             <div className="flex items-center gap-2 mb-4">
               <CreditCard className="text-primary-600" size={18} />
               <h2 className="font-semibold text-gray-900">Payment</h2>

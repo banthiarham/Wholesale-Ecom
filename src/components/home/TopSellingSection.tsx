@@ -2,13 +2,15 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import { ShoppingCart, Star, ArrowRight } from "lucide-react"
-import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { ArrowRight } from "lucide-react"
+import { getCartSessionId } from "@/lib/utils"
 import { useStorefrontRules } from "@/lib/rules"
 import { useAuth } from "@/lib/auth"
 import { useRolePricing } from "@/lib/pricing/useRolePricing"
-import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
-import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
+import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount } from "@/lib/pricing"
+import { useToast } from "@/components/ui/Toast"
+import { useCartDrawer } from "@/components/ui/CartDrawer"
+import { ProductCard } from "@/components/ui/ProductCard"
 
 interface Product {
   id: string
@@ -41,7 +43,10 @@ interface TopSellingSectionProps {
 export default function TopSellingSection({ sectionId, title, categoryId, categoryHandle, limit = 8, productIds }: TopSellingSectionProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
+  const [addingId, setAddingId] = useState<string | null>(null)
   const { user } = useAuth()
+  const { showToast } = useToast()
+  const { openCartDrawer } = useCartDrawer()
 
   const rulesProducts = useMemo(() => products.map((p) => ({ id: p.id, categoryId: p.categoryId || p.category?.id, unitPrice: Number(p.unitPrice) })), [products])
   const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts } = useStorefrontRules(rulesProducts)
@@ -81,20 +86,38 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
     fetchSeasonalDiscounts().then(setDiscounts)
   }, [categoryId, limit, productIds])
 
-  const handleAddToCart = async (productId: string) => {
+  const handleAddToCart = async (productId: string, moq: number) => {
+    setAddingId(productId)
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
     const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
     if (token) headers["Authorization"] = `Bearer ${token}`
-    await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId, quantity: 1 }) })
-    window.dispatchEvent(new CustomEvent("cart-updated"))
+    try {
+      const res = await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId, quantity: moq }) })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent("cart-updated"))
+        openCartDrawer()
+      } else {
+        showToast("error", data.message || "Could not add to cart")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setAddingId(null)
+    }
   }
 
   const visibleProducts = products.filter((p) => !hiddenProductIds.has(p.id))
 
   if (visibleProducts.length === 0) return null
 
+  // Few products don't need a horizontal-scroll carousel — a filling grid uses the
+  // container width instead of leaving dead space to the right of a short row.
+  const useGrid = visibleProducts.length <= 4
+
   return (
-    <section className="section-padding">
+    <section className="section-padding-tight">
       <div className="section-container">
         <div className="section-header">
           <div>
@@ -107,104 +130,24 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
             </Link>
           )}
         </div>
-        <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory">
-          {visibleProducts.map((product) => {
-            const isPriceHidden = hiddenPriceProductIds.has(product.id)
-            const isNonPurchasable = nonPurchasableProducts.has(product.id)
-            const rp = rolePricingMap[product.id]
-            const ruleDisc = ruleDiscountMap.get(product.id)
-            const productBogo = bogoMap.get(product.id)
-            const productQtyDisc = qtyDiscountMap.get(product.id)
-            const disc = getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)
-            const comparePrice = product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice)
-
-            return (
-              <div key={product.id} className="w-[220px] sm:w-[240px] lg:w-[260px] card-base overflow-hidden group snap-start flex-shrink-0">
-                <Link href={`/products/${product.handle}`}>
-                  <div className="relative aspect-square bg-gray-50 overflow-hidden">
-                    {product.thumbnail || product.images?.[0] ? (
-                      <img src={product.thumbnail || product.images[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-                        <ShoppingCart size={32} className="text-gray-200" />
-                      </div>
-                    )}
-                    {/* Badges */}
-                    <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
-                      {disc && <span className="badge badge-warning">{discountBadge(disc)}</span>}
-                      {product.tierPrices?.length > 0 && <span className="badge badge-success">Bulk</span>}
-                    </div>
-                    {/* Quick view overlay */}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
-                  </div>
-                </Link>
-                <div className="p-4">
-                  <Link href={`/products/${product.handle}`}>
-                    <h3 className="font-medium text-gray-900 text-sm line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug min-h-[2.5rem]">
-                      {product.title}
-                    </h3>
-                  </Link>
-                  {product.rating > 0 && (
-                    <div className="flex items-center gap-1 mt-1.5">
-                      <div className="flex">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star key={s} size={11} className={s <= Math.round(product.rating) ? "text-amber-400 fill-amber-400" : "text-gray-200"} />
-                        ))}
-                      </div>
-                      <span className="text-[11px] text-gray-400">({product.reviewCount})</span>
-                    </div>
-                  )}
-                  <div className="mt-2">
-                    {isPriceHidden ? (
-                      <span className="text-xs text-gray-500 italic">Login for pricing</span>
-                    ) : rp ? (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-lg font-bold text-primary-700">{formatPrice(rp.rolePrice)}</span>
-                        <span className="text-xs text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
-                      </div>
-                    ) : ruleDisc ? (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-lg font-bold text-primary-700">{formatPrice(Number(product.unitPrice) - ruleDisc.discountAmount)}</span>
-                        <span className="text-xs text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
-                      </div>
-                    ) : product.tierPrices?.length > 0 ? (
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-xs text-green-600 font-semibold">From</span>
-                        <span className="text-lg font-bold text-gray-900">{formatPrice(Number(product.tierPrices[product.tierPrices.length - 1].price))}</span>
-                        {comparePrice && <span className="text-xs text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>}
-                      </div>
-                    ) : (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-lg font-bold text-gray-900">{formatPrice(product.unitPrice)}</span>
-                        {comparePrice && <span className="text-xs text-gray-400 line-through">{formatPrice(Number(product.compareAtPrice))}</span>}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    <ProductRuleBadge
-                      priceHidden={isPriceHidden}
-                      nonPurchasable={isNonPurchasable}
-                      hasRolePrice={!!rp}
-                      roleLabel={rp?.appliedRoleName || undefined}
-                      bogoLabel={productBogo ? `Buy ${productBogo[0].buyQuantity} Get ${productBogo[0].freeQuantity} Free` : undefined}
-                      quantityDiscountLabel={productQtyDisc ? productQtyDisc.ruleName : undefined}
-                      discountLabel={ruleDisc?.ruleName}
-                      discountPercent={ruleDisc?.discountPercent}
-                      size="sm"
-                    />
-                  </div>
-                  {!isNonPurchasable && (
-                    <button
-                      onClick={(e) => { e.preventDefault(); handleAddToCart(product.id) }}
-                      className="mt-3 w-full py-2.5 bg-primary-600 text-white rounded-xl text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-all duration-200 flex items-center justify-center gap-1.5"
-                    >
-                      <ShoppingCart size={13} /> Add to Cart
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+        <div className={useGrid ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3" : "flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory"}>
+          {visibleProducts.map((product) => (
+            <div key={product.id} className={useGrid ? "" : "w-[220px] sm:w-[240px] lg:w-[260px] snap-start flex-shrink-0"}>
+              <ProductCard
+                product={{ ...product, thumbnail: product.thumbnail || product.images?.[0] || null }}
+                view="grid"
+                isPriceHidden={hiddenPriceProductIds.has(product.id)}
+                isNonPurchasable={nonPurchasableProducts.has(product.id)}
+                rolePricing={rolePricingMap[product.id]}
+                ruleDiscount={ruleDiscountMap.get(product.id)}
+                bogo={bogoMap.get(product.id)}
+                quantityDiscount={qtyDiscountMap.get(product.id)}
+                seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)}
+                isAdding={addingId === product.id}
+                onAddToCart={handleAddToCart}
+              />
+            </div>
+          ))}
         </div>
         <Link href={`/categories/${categoryHandle || ""}`} className="sm:hidden flex items-center justify-center gap-1.5 text-primary-600 font-semibold mt-4 text-sm">
           View All Products <ArrowRight size={16} />

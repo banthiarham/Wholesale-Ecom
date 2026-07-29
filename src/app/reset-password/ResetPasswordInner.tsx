@@ -37,7 +37,7 @@ export default function ResetPasswordInner() {
       const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, newPassword: password }),
       })
       const data = await res.json()
 
@@ -57,11 +57,14 @@ export default function ResetPasswordInner() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="text-2xl font-bold text-primary-700 mb-2">WholesaleX Pro</div>
-          <p className="text-gray-600">Reset your password</p>
+          <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-white font-bold text-xl">W</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Reset your password</h1>
+          <p className="text-gray-500 text-sm">Choose a new password for your account</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8">
+        <div className="card-base-static p-8">
           {done ? (
             <div className="text-center py-4">
               <CheckCircle className="mx-auto text-green-500 mb-3" size={48} />
@@ -71,52 +74,48 @@ export default function ResetPasswordInner() {
             </div>
           ) : (
             <>
-              {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
+              {error && <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm">{error}</div>}
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">New Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       minLength={6}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="input-base pl-9"
                       placeholder="••••••"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
                       minLength={6}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="input-base pl-9"
                       placeholder="••••••"
                     />
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={loading || !token}
-                  className="w-full py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
-                >
+                <button type="submit" disabled={loading || !token} className="btn-primary w-full justify-center">
                   {loading ? "Resetting..." : "Reset Password"}
                 </button>
               </form>
 
               <div className="mt-6">
-                <Link href="/login" className="flex items-center gap-1 text-sm text-gray-600 hover:text-primary-600">
+                <Link href="/login" className="flex items-center gap-1 text-sm text-gray-600 hover:text-primary-600 transition-colors">
                   <ArrowLeft size={14} /> Back to sign in
                 </Link>
               </div>

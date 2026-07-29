@@ -179,7 +179,7 @@ export default function RoleRequestPage() {
         </div>
 
         {/* Current Role */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="card-base-static p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Current Role</h2>
           <div className="flex items-center gap-3">
             <div
@@ -200,7 +200,7 @@ export default function RoleRequestPage() {
         </div>
 
         {/* Request Form */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="card-base-static p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Request a New Role</h2>
 
           {message && (
@@ -221,7 +221,7 @@ export default function RoleRequestPage() {
               <select
                 value={selectedRoleId}
                 onChange={(e) => setSelectedRoleId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input-base"
               >
                 <option value="">— Choose a role —</option>
                 {availableRoles.map((role) => (
@@ -288,14 +288,14 @@ export default function RoleRequestPage() {
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
                 placeholder="Why do you need this role?"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                className="input-base resize-none"
               />
             </div>
 
             <button
               onClick={handleSubmit}
               disabled={submitting || !selectedRoleId}
-              className="w-full py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="btn-primary w-full justify-center"
             >
               {submitting ? "Submitting..." : "Submit Request"}
             </button>
@@ -303,7 +303,7 @@ export default function RoleRequestPage() {
         </div>
 
         {/* Past Requests */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="card-base-static p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Requests</h2>
           {myRequests.length === 0 ? (
             <p className="text-gray-500 text-sm py-4 text-center">No role change requests yet.</p>

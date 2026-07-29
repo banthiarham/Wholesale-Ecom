@@ -1,38 +1,59 @@
 "use client"
 
-import { Truck, ShieldCheck, Tag, IndianRupee, FileText, Clock, Headphones, RefreshCcw } from "lucide-react"
+import { Truck, BadgeCheck, Tag, Lock, Award, Headphones, ShieldCheck, IndianRupee, FileText, Clock, RefreshCcw } from "lucide-react"
 
-const ICON_MAP: Record<string, any> = { Truck, ShieldCheck, Tag, IndianRupee, FileText, Clock, Headphones, RefreshCcw }
+// Keep legacy icon keys resolvable so existing admin-configured sections don't break.
+const ICON_MAP: Record<string, any> = {
+  Truck, BadgeCheck, Tag, Lock, Award, Headphones,
+  ShieldCheck, IndianRupee, FileText, Clock, RefreshCcw,
+}
 
 interface TrustBadgesSectionProps {
   items?: { icon: string; title: string; desc: string }[]
 }
 
 const DEFAULT_ITEMS = [
-  { icon: "Truck", title: "Fast Delivery", desc: "Reliable shipping across India" },
-  { icon: "ShieldCheck", title: "Genuine Products", desc: "100% authentic guaranteed" },
-  { icon: "IndianRupee", title: "Best Prices", desc: "Wholesale pricing guaranteed" },
-  { icon: "Tag", title: "Bulk Pricing", desc: "Automatic volume discounts" },
-  { icon: "Headphones", title: "24/7 Support", desc: "Dedicated customer assistance" },
-  { icon: "RefreshCcw", title: "Easy Returns", desc: "Hassle-free return policy" },
+  { icon: "Truck", title: "Fast Delivery", desc: "Receive your wholesale orders quickly with reliable nationwide shipping." },
+  { icon: "BadgeCheck", title: "Verified Suppliers", desc: "All sellers are verified to ensure genuine products and trusted business transactions." },
+  { icon: "Tag", title: "Wholesale Pricing", desc: "Get the best bulk prices with exclusive discounts for business buyers." },
+  { icon: "Lock", title: "Secure Payments", desc: "100% secure checkout with Razorpay and protected online transactions." },
+  { icon: "Award", title: "Quality Products", desc: "Carefully selected products with consistent quality and trusted brands." },
+  { icon: "Headphones", title: "24/7 Business Support", desc: "Dedicated support team available whenever your business needs assistance." },
+]
+
+const CARD_COLORS = [
+  "bg-blue-50 text-blue-600",
+  "bg-emerald-50 text-emerald-600",
+  "bg-amber-50 text-amber-600",
+  "bg-violet-50 text-violet-600",
+  "bg-rose-50 text-rose-600",
+  "bg-cyan-50 text-cyan-600",
 ]
 
 export default function TrustBadgesSection({ items }: TrustBadgesSectionProps) {
   const badges = items && items.length > 0 ? items : DEFAULT_ITEMS
 
   return (
-    <section className="section-padding">
+    <section className="section-padding-tight">
       <div className="section-container">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-5">
+        <div className="mb-5 lg:mb-6">
+          <h2 className="heading-lg">Why Choose Us</h2>
+          <p className="body-sm mt-1">Everything you need for reliable wholesale buying</p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {badges.map((badge, i) => {
             const IconComponent = ICON_MAP[badge.icon] || Truck
+            const colorClass = CARD_COLORS[i % CARD_COLORS.length]
             return (
-              <div key={i} className="text-center p-6 bg-white rounded-2xl border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group">
-                <div className="w-14 h-14 bg-primary-50 rounded-2xl flex items-center justify-center mx-auto mb-3.5 group-hover:bg-primary-100 transition-colors duration-200">
-                  <IconComponent size={24} className="text-primary-600" />
+              <div
+                key={i}
+                className="group h-full flex flex-col bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-5"
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${colorClass}`}>
+                  <IconComponent size={20} strokeWidth={2} />
                 </div>
-                <h3 className="font-semibold text-gray-900 text-sm">{badge.title}</h3>
-                <p className="text-xs text-gray-500 mt-1 leading-relaxed">{badge.desc}</p>
+                <h3 className="text-sm font-bold text-gray-900 mb-1 leading-snug">{badge.title}</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">{badge.desc}</p>
               </div>
             )
           })}

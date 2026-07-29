@@ -3,9 +3,13 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import Image from "next/image"
-import { Heart, ShoppingCart, Trash2, Package } from "lucide-react"
-import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { Heart, Package } from "lucide-react"
+import { getCartSessionId } from "@/lib/utils"
+import { useToast } from "@/components/ui/Toast"
+import { useCartDrawer } from "@/components/ui/CartDrawer"
+import { ProductCard } from "@/components/ui/ProductCard"
+import { EmptyState } from "@/components/ui/EmptyState"
+import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 
 interface TierPrice { minQty: number; maxQty: number | null; price: string }
 
@@ -34,6 +38,8 @@ export default function WishlistPage() {
   const [loading, setLoading] = useState(true)
   const [addingId, setAddingId] = useState<string | null>(null)
   const [error, setError] = useState("")
+  const { showToast } = useToast()
+  const { openCartDrawer } = useCartDrawer()
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -60,63 +66,80 @@ export default function WishlistPage() {
       })
       if (res.ok) {
         setItems((prev) => prev.filter((i) => i.productId !== productId))
+      } else {
+        showToast("error", "Could not remove item")
       }
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    }
   }
 
-  const handleAddToCart = async (product: WishlistProduct) => {
-    setAddingId(product.id)
+  const handleAddToCart = async (productId: string, qty: number) => {
+    setAddingId(productId)
     try {
-      await fetch("/api/cart", {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+      const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+      const res = await fetch("/api/cart", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
-        body: JSON.stringify({ productId: product.id, quantity: product.moq }),
+        headers,
+        body: JSON.stringify({ productId, quantity: qty }),
       })
-      window.dispatchEvent(new CustomEvent("cart-updated"))
-    } catch (err) { console.error(err) } finally { setAddingId(null) }
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent("cart-updated"))
+        openCartDrawer()
+      } else {
+        showToast("error", data.message || "Could not add to cart")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setAddingId(null)
+    }
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+    <div className="min-h-screen bg-gray-50">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <ProductGridSkeleton count={8} />
+      </main>
     </div>
   )
 
   if (error) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-20">
-      <p className="text-red-500 mb-4">{error}</p>
-      <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary-600 text-white rounded-lg">Retry</button>
+    <div className="min-h-screen bg-gray-50">
+      <EmptyState
+        icon={Heart}
+        title="Failed to load wishlist"
+        description={error}
+        action={{ label: "Retry", onClick: () => window.location.reload() }}
+      />
     </div>
   )
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
   if (!token) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-20">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center max-w-md">
-        <div className="w-20 h-20 bg-pink-50 rounded-full flex items-center justify-center mx-auto mb-5">
-          <Heart size={36} className="text-pink-300" />
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Sign in to view your wishlist</h1>
-        <p className="text-sm text-gray-500 mb-6">Save products you're interested in by signing in.</p>
-        <Link href="/login" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
-          Sign In
-        </Link>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <EmptyState
+        icon={Heart}
+        title="Sign in to view your wishlist"
+        description="Save products you're interested in by signing in."
+        action={{ label: "Sign In", href: "/login" }}
+      />
     </div>
   )
 
   if (items.length === 0) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-20">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center max-w-md">
-        <div className="w-20 h-20 bg-pink-50 rounded-full flex items-center justify-center mx-auto mb-5">
-          <Heart size={36} className="text-pink-300" />
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Your wishlist is empty</h1>
-        <p className="text-sm text-gray-500 mb-6">Save products you're interested in to buy later.</p>
-        <Link href="/products" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
-          <Package size={18} /> Browse Products
-        </Link>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <EmptyState
+        icon={Heart}
+        title="Your wishlist is empty"
+        description="Save products you're interested in to buy later."
+        action={{ label: "Browse Products", href: "/products" }}
+      />
     </div>
   )
 
@@ -125,62 +148,22 @@ export default function WishlistPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">My Wishlist</h1>
-            <p className="text-sm text-gray-500 mt-1">{items.length} saved item{items.length !== 1 ? "s" : ""}</p>
+            <h1 className="heading-lg">My Wishlist</h1>
+            <p className="body-sm mt-1">{items.length} saved item{items.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {items.map((item) => {
-            const p = item.product
-            const lowestTier = p.tierPrices?.length > 0 ? p.tierPrices[p.tierPrices.length - 1] : null
-            return (
-              <div key={item.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition group">
-                <Link href={`/products/${p.handle}`}>
-                  <div className="relative h-48 bg-gray-100">
-                    {p.thumbnail ? (
-                      <Image src={p.thumbnail} alt={p.title} fill className="object-cover group-hover:scale-105 transition-transform duration-300" sizes="192px" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center"><Package size={40} className="text-gray-300" /></div>
-                    )}
-                    {p.compareAtPrice && Number(p.compareAtPrice) > Number(p.unitPrice) && (
-                      <span className="absolute top-3 left-3 px-2 py-0.5 bg-red-500 text-white text-xs font-semibold rounded">
-                        {Math.round(((Number(p.compareAtPrice) - Number(p.unitPrice)) / Number(p.compareAtPrice)) * 100)}% OFF
-                      </span>
-                    )}
-                    <span className="absolute bottom-3 left-3 px-2 py-0.5 bg-black/60 text-white text-xs rounded">MOQ: {p.moq}</span>
-                  </div>
-                </Link>
-                <div className="p-4">
-                  <Link href={`/products/${p.handle}`}>
-                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1 group-hover:text-primary-600 transition">{p.title}</h3>
-                  </Link>
-                  <div className="flex items-center gap-2 mb-3">
-                    {lowestTier ? (
-                      <>
-                        <span className="text-xs text-green-600 font-semibold">From </span>
-                        <span className="text-lg font-bold text-gray-900">{formatPrice(lowestTier.price)}</span>
-                        <span className="text-sm text-gray-400 line-through">{formatPrice(p.unitPrice)}</span>
-                      </>
-                    ) : (
-                      <span className="text-lg font-bold text-gray-900">{formatPrice(p.unitPrice)}</span>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleAddToCart(p)}
-                      disabled={addingId === p.id || p.inventoryQuantity <= 0}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
-                    >
-                      <ShoppingCart size={14} /> {addingId === p.id ? "Adding..." : p.inventoryQuantity <= 0 ? "Out of Stock" : "Add to Cart"}
-                    </button>
-                    <button onClick={() => handleRemove(p.id)} className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition" title="Remove from wishlist">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {items.map((item) => (
+            <ProductCard
+              key={item.id}
+              product={item.product}
+              view="grid"
+              isWishlisted
+              onToggleWishlist={(e, productId) => { e.preventDefault(); e.stopPropagation(); handleRemove(productId) }}
+              isAdding={addingId === item.product.id}
+              onAddToCart={handleAddToCart}
+            />
+          ))}
         </div>
       </main>
     </div>

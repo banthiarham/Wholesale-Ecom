@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ShoppingBag, ArrowLeft, ShoppingCart, RotateCcw, FileText } from "lucide-react"
+import { ShoppingBag, RotateCcw, FileText } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { useToast } from "@/components/ui/Toast"
+import { useCartDrawer } from "@/components/ui/CartDrawer"
+import { EmptyState } from "@/components/ui/EmptyState"
 
 interface Order {
   id: string; orderNumber: string; status: string; totalAmount: number; currency: string;
@@ -16,6 +19,8 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [reorderingId, setReorderingId] = useState<string | null>(null)
+  const { showToast } = useToast()
+  const { openCartDrawer } = useCartDrawer()
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -28,11 +33,11 @@ export default function OrdersPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "DELIVERED": return "bg-green-100 text-green-700"
-      case "SHIPPED": return "bg-blue-100 text-blue-700"
-      case "PROCESSING": return "bg-yellow-100 text-yellow-700"
-      case "CANCELLED": return "bg-red-100 text-red-700"
-      default: return "bg-gray-100 text-gray-700"
+      case "DELIVERED": return "badge-success"
+      case "SHIPPED": return "badge-primary"
+      case "PROCESSING": return "badge-warning"
+      case "CANCELLED": return "badge-danger"
+      default: return "badge bg-gray-100 text-gray-700"
     }
   }
 
@@ -41,51 +46,73 @@ export default function OrdersPage() {
     e.stopPropagation()
     setReorderingId(order.id)
     try {
-      for (const item of order.items) {
-        await fetch("/api/cart", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-session-id": getCartSessionId() },
-          body: JSON.stringify({ productId: item.productId, quantity: item.quantity }),
-        })
-      }
+      const token = localStorage.getItem("token")
+      const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+      const results = await Promise.all(
+        order.items.map((item) =>
+          fetch("/api/cart", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ productId: item.productId, quantity: item.quantity }),
+          }).then((res) => res.ok)
+        )
+      )
       window.dispatchEvent(new CustomEvent("cart-updated"))
-      router.push("/cart")
-    } catch (err) { console.error(err) } finally { setReorderingId(null) }
+      const failedCount = results.filter((ok) => !ok).length
+      if (failedCount === 0) {
+        openCartDrawer()
+      } else if (failedCount < results.length) {
+        showToast("error", `${failedCount} item(s) could not be added — check stock/quantity limits`)
+        openCartDrawer()
+      } else {
+        showToast("error", "Could not add items to cart")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setReorderingId(null)
+    }
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
+          <h1 className="heading-lg">My Orders</h1>
           <div className="flex items-center gap-3">
-            <Link href="/orders/bulk-upload" className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition">
+            <Link href="/orders/bulk-upload" className="btn-sm flex items-center gap-2">
               <FileText size={16} /> Bulk Order
             </Link>
-            <Link href="/products" className="text-primary-600 hover:underline text-sm">Continue Shopping</Link>
+            <Link href="/products" className="text-primary-600 hover:text-primary-700 hover:underline text-sm font-medium transition-colors">Continue Shopping</Link>
           </div>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
-        ) : orders.length === 0 ? (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-12 text-center">
-            <ShoppingBag size={48} className="mx-auto text-gray-300 mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No orders yet</h2>
-            <p className="text-gray-600 mb-4">Start shopping to place your first order.</p>
-            <Link href="/products" className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">Browse Products</Link>
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-32 rounded-2xl bg-gray-100 animate-pulse" />
+            ))}
           </div>
+        ) : orders.length === 0 ? (
+          <EmptyState
+            icon={ShoppingBag}
+            title="No orders yet"
+            description="Start shopping to place your first order."
+            action={{ label: "Browse Products", href: "/products" }}
+          />
         ) : (
           <div className="space-y-4">
             {orders.map((order) => (
               <Link key={order.id} href={`/orders/${order.id}`}>
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition">
+                <div className="card-base p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-sm text-gray-500">Order #{order.orderNumber}</p>
                       <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</p>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>{order.status}</span>
+                    <span className={`badge ${getStatusColor(order.status)}`}>{order.status}</span>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
@@ -98,7 +125,7 @@ export default function OrdersPage() {
                       <button
                         onClick={(e) => handleReorder(e, order)}
                         disabled={reorderingId === order.id}
-                        className="inline-flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50 transition"
+                        className="inline-flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50 transition-colors"
                       >
                         <RotateCcw size={14} /> {reorderingId === order.id ? "Adding to cart..." : "Reorder"}
                       </button>

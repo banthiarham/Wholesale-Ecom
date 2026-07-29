@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { useCartDrawer } from "@/components/ui/CartDrawer"
 import PackageGroupSelector from "./PackageGroupSelector"
 import PackagePriceSummary from "./PackagePriceSummary"
 
@@ -41,6 +42,7 @@ export default function PackageConfigurator({ pkg, userId }: Props) {
   const [selections, setSelections] = useState<Record<string, string>>({})
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState("")
+  const { openCartDrawer } = useCartDrawer()
 
   // Set default selections
   useEffect(() => {
@@ -75,8 +77,7 @@ export default function PackageConfigurator({ pkg, userId }: Props) {
       const headers: Record<string, string> = { "Content-Type": "application/json" }
       const token = localStorage.getItem("token")
       if (token) headers["Authorization"] = `Bearer ${token}`
-      const sessionId = localStorage.getItem("cart_session_id") || crypto.randomUUID()
-      localStorage.setItem("cart_session_id", sessionId)
+      const sessionId = getCartSessionId()
       headers["x-session-id"] = sessionId
 
       const res = await fetch("/api/packages/cart", {
@@ -99,6 +100,7 @@ export default function PackageConfigurator({ pkg, userId }: Props) {
 
       // Dispatch cart update event
       window.dispatchEvent(new CustomEvent("cart-updated"))
+      openCartDrawer()
     } catch (err: any) {
       setError(err.message || "Failed to add to cart")
     } finally {

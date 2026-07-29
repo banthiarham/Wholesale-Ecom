@@ -67,8 +67,8 @@ export default function CategoryIconStrip() {
   }
 
   return (
-    <section className="py-8 lg:py-10 border-b border-gray-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-4 lg:py-5 border-b border-gray-100">
+      <div className="section-container">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Browse Categories</h2>
           <div className="hidden sm:flex gap-1.5">

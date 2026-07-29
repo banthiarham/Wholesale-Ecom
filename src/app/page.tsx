@@ -2,21 +2,18 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import Image from "next/image"
-import {
-  ShoppingCart,
-  Star,
-  ArrowRight,
-  Package,
-} from "lucide-react"
+import { ArrowRight } from "lucide-react"
 
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
-import { formatPrice, getCartSessionId } from "@/lib/utils"
-import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount, discountBadge } from "@/lib/pricing"
+import { getCartSessionId } from "@/lib/utils"
+import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount } from "@/lib/pricing"
 import { useAuth } from "@/lib/auth"
 import { useStorefrontRules } from "@/lib/rules"
 import { useRolePricing } from "@/lib/pricing/useRolePricing"
-import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
+import { useToast } from "@/components/ui/Toast"
+import { useCartDrawer } from "@/components/ui/CartDrawer"
+import { ProductCard } from "@/components/ui/ProductCard"
+import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 
 // Home section components
 import AnnouncementBar from "@/components/home/AnnouncementBar"
@@ -149,6 +146,9 @@ function renderSection(section: HomeSection) {
         />
       )
 
+    case "newsletter":
+      return <NewsletterSection key={section.id} />
+
     default:
       return null
   }
@@ -166,7 +166,10 @@ export default function Home() {
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [homeSections, setHomeSections] = useState<HomeSection[]>([])
   const [sectionsLoaded, setSectionsLoaded] = useState(false)
+  const [addingId, setAddingId] = useState<string | null>(null)
   const { user } = useAuth()
+  const { showToast } = useToast()
+  const { openCartDrawer } = useCartDrawer()
 
   // Dynamic rules
   const rulesProducts = useMemo(() => products.map((p) => ({ id: p.id, categoryId: p.categoryId, unitPrice: Number(p.unitPrice) })), [products])
@@ -212,12 +215,26 @@ export default function Home() {
     }).catch(() => setSectionsLoaded(true))
   }, [])
 
-  const handleAddToCart = async (productId: string) => {
+  const handleAddToCart = async (productId: string, qty: number) => {
+    setAddingId(productId)
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
     const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
     if (token) headers["Authorization"] = `Bearer ${token}`
-    await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId, quantity: 1 }) })
-    window.dispatchEvent(new CustomEvent("cart-updated"))
+    try {
+      const res = await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId, quantity: qty }) })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent("cart-updated"))
+        openCartDrawer()
+      } else {
+        showToast("error", data.message || "Could not add to cart")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setAddingId(null)
+    }
   }
 
   const jsonLd = {
@@ -256,7 +273,27 @@ export default function Home() {
 
             {/* ── Hero Banner Carousel (or fallback hero) ── */}
             <HeroBannerCarousel />
-            <DefaultHeroFallback products={products} visibleProducts={visibleProducts} discounts={discounts} hiddenPriceProductIds={hiddenPriceProductIds} nonPurchasableProducts={nonPurchasableProducts} ruleDiscountMap={ruleDiscountMap} bogoMap={bogoMap} qtyDiscountMap={qtyDiscountMap} rolePricingMap={rolePricingMap} handleAddToCart={handleAddToCart} />
+            {!sectionsLoaded ? (
+              <section className="section-padding-tight">
+                <div className="section-container">
+                  <ProductGridSkeleton count={8} />
+                </div>
+              </section>
+            ) : (
+              <DefaultHeroFallback
+                products={products}
+                visibleProducts={visibleProducts}
+                discounts={discounts}
+                hiddenPriceProductIds={hiddenPriceProductIds}
+                nonPurchasableProducts={nonPurchasableProducts}
+                ruleDiscountMap={ruleDiscountMap}
+                bogoMap={bogoMap}
+                qtyDiscountMap={qtyDiscountMap}
+                rolePricingMap={rolePricingMap}
+                addingId={addingId}
+                handleAddToCart={handleAddToCart}
+              />
+            )}
 
             {/* ── Category Icons Strip ── */}
             <CategoryIconStrip />
@@ -273,17 +310,11 @@ export default function Home() {
               />
             ))}
 
-            {/* ── Mid-Page Promotional Banner ── */}
-            <MidPromotionalBanner />
-
-            {/* ── Trust Badges ── */}
-            <TrustBadgesSection />
-
             {/* ── Shop by Category ── */}
             <ShopByCategoryGrid />
 
-            {/* ── CTA Banner ── */}
-            <CTABannerSection />
+            {/* ── Trust Badges / Why Choose Us ── */}
+            <TrustBadgesSection />
 
             {/* ── Newsletter ── */}
             <NewsletterSection />
@@ -309,6 +340,7 @@ function DefaultHeroFallback({
   bogoMap,
   qtyDiscountMap,
   rolePricingMap,
+  addingId,
   handleAddToCart,
 }: {
   products: Product[]
@@ -320,7 +352,8 @@ function DefaultHeroFallback({
   bogoMap: Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>
   qtyDiscountMap: Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>
   rolePricingMap: Record<string, { rolePrice: number; appliedRoleName: string | null; savings: number; savingsPercent: number; finalPrice: number }>
-  handleAddToCart: (id: string) => void
+  addingId: string | null
+  handleAddToCart: (id: string, qty: number) => void
 }) {
   const heroHeadline = useSetting("heroHeadline", "Bulk Orders. Best Prices. Delivered.")
   const heroSubtext = useSetting("heroSubtext", "Connect with top vendors, get tier pricing, request quotes, and manage your wholesale procurement — all in one platform.")
@@ -329,7 +362,7 @@ function DefaultHeroFallback({
   if (visibleProducts.length === 0) return null
 
   return (
-    <section className="section-padding">
+    <section className="section-padding-tight">
       <div className="section-container">
         {/* Section header */}
         <div className="section-header">
@@ -343,101 +376,24 @@ function DefaultHeroFallback({
         </div>
 
         {/* Product grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 sm:gap-5">
-          {visibleProducts.slice(0, 12).map((product) => {
-            const isPriceHidden = hiddenPriceProductIds.has(product.id)
-            const isNonPurchasable = nonPurchasableProducts.has(product.id)
-            const rp = rolePricingMap[product.id]
-            const ruleDisc = ruleDiscountMap.get(product.id)
-            const productBogo = bogoMap.get(product.id)
-            const productQtyDisc = qtyDiscountMap.get(product.id)
-            const disc = getProductDiscount(discounts, product.id, product.categoryId || undefined)
-            const comparePrice = product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice)
-
-            return (
-              <Link
-                key={product.id}
-                href={`/products/${product.handle}`}
-                className="card-base overflow-hidden group"
-              >
-                <div className="relative aspect-square bg-gray-50 overflow-hidden">
-                  {product.thumbnail || product.images?.[0] ? (
-                    <Image src={product.thumbnail || product.images[0]} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-                      <Package size={32} className="text-gray-200" />
-                    </div>
-                  )}
-                  {/* Badges */}
-                  <div className="absolute top-2 left-2 flex flex-col gap-1">
-                    {disc && <span className="badge badge-warning">{discountBadge(disc)}</span>}
-                    {product.tierPrices?.length > 0 && <span className="badge badge-success">Bulk</span>}
-                  </div>
-                  {comparePrice && <span className="absolute bottom-2 left-2 badge badge-danger">Sale</span>}
-                </div>
-                <div className="p-3">
-                  <h3 className="font-medium text-gray-900 text-xs sm:text-sm line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug min-h-[2.25rem]">{product.title}</h3>
-                  {product.rating > 0 && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <div className="flex">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star key={s} size={10} className={s <= Math.round(product.rating) ? "text-amber-400 fill-amber-400" : "text-gray-200"} />
-                        ))}
-                      </div>
-                      <span className="text-[10px] text-gray-400">({product.reviewCount})</span>
-                    </div>
-                  )}
-                  <div className="mt-1.5">
-                    {isPriceHidden ? (
-                      <span className="text-xs text-gray-500 italic">Login for price</span>
-                    ) : rp ? (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-bold text-primary-700 text-sm">{formatPrice(rp.rolePrice)}</span>
-                        <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
-                      </div>
-                    ) : ruleDisc ? (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-bold text-primary-700 text-sm">{formatPrice(Number(product.unitPrice) - ruleDisc.discountAmount)}</span>
-                        <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.unitPrice)}</span>
-                      </div>
-                    ) : product.tierPrices?.length > 0 ? (
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-[10px] text-green-600 font-semibold">From </span>
-                        <span className="font-bold text-gray-900 text-sm">{formatPrice(Number(product.tierPrices[product.tierPrices.length - 1].price))}</span>
-                        {comparePrice && <span className="text-[10px] text-gray-400 line-through ml-1">{formatPrice(product.compareAtPrice)}</span>}
-                      </div>
-                    ) : (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-bold text-gray-900 text-sm">{formatPrice(product.unitPrice)}</span>
-                        {comparePrice && <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.compareAtPrice)}</span>}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-0.5 mt-1.5">
-                    <ProductRuleBadge
-                      priceHidden={isPriceHidden}
-                      nonPurchasable={isNonPurchasable}
-                      hasRolePrice={!!rp}
-                      roleLabel={rp?.appliedRoleName || undefined}
-                      bogoLabel={productBogo ? `Buy ${productBogo[0].buyQuantity} Get ${productBogo[0].freeQuantity} Free` : undefined}
-                      quantityDiscountLabel={productQtyDisc ? productQtyDisc.ruleName : undefined}
-                      discountLabel={ruleDisc?.ruleName}
-                      discountPercent={ruleDisc?.discountPercent}
-                      size="sm"
-                    />
-                  </div>
-                  {!isNonPurchasable && (
-                    <button
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAddToCart(product.id) }}
-                      className="mt-2.5 w-full py-2 bg-primary-600 text-white rounded-xl text-[11px] font-semibold hover:bg-primary-700 active:bg-primary-800 transition-all duration-200 flex items-center justify-center gap-1.5"
-                    >
-                      <ShoppingCart size={12} /> Add to Cart
-                    </button>
-                  )}
-                </div>
-              </Link>
-            )
-          })}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+          {visibleProducts.slice(0, 12).map((product) => (
+            <ProductCard
+              key={product.id}
+              product={{ ...product, thumbnail: product.thumbnail || product.images?.[0] || null }}
+              view="grid"
+              isPriceHidden={hiddenPriceProductIds.has(product.id)}
+              isNonPurchasable={nonPurchasableProducts.has(product.id)}
+              nonPurchasableMsg={nonPurchasableProducts.get(product.id) || ""}
+              rolePricing={rolePricingMap[product.id]}
+              ruleDiscount={ruleDiscountMap.get(product.id)}
+              bogo={bogoMap.get(product.id)}
+              quantityDiscount={qtyDiscountMap.get(product.id)}
+              seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || undefined)}
+              isAdding={addingId === product.id}
+              onAddToCart={handleAddToCart}
+            />
+          ))}
         </div>
 
         <Link href="/products" className="sm:hidden flex items-center justify-center gap-1.5 text-primary-600 font-semibold mt-5 text-sm">

@@ -51,7 +51,7 @@ export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridPr
   const lgCols = GRID_MAP[columns] || "lg:grid-cols-4"
 
   return (
-    <section className="section-padding bg-gray-50/50">
+    <section className="section-padding-tight bg-gray-50/50">
       <div className="section-container">
         <div className="section-header">
           <div>
@@ -62,12 +62,12 @@ export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridPr
             All Categories <ArrowRight size={16} />
           </Link>
         </div>
-        <div className={`grid grid-cols-2 ${smCols} ${lgCols} gap-4 sm:gap-5`}>
+        <div className={`grid grid-cols-2 ${smCols} ${lgCols} gap-3`}>
           {categories.slice(0, columns * 2).map((cat, i) => (
             <Link
               key={cat.id}
               href={`/categories/${cat.handle}`}
-              className="group card-base overflow-hidden"
+              className="group card-base overflow-hidden hover:-translate-y-1"
             >
               <div className="h-36 sm:h-44 relative overflow-hidden">
                 {cat.image ? (

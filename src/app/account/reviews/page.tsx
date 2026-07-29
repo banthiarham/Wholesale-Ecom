@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Star, Trash2, MessageSquare, Package } from "lucide-react"
+import { useToast } from "@/components/ui/Toast"
+import { EmptyState } from "@/components/ui/EmptyState"
 
 interface Review {
   id: string
@@ -19,6 +21,7 @@ export default function MyReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const { showToast } = useToast()
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
 
@@ -43,8 +46,17 @@ export default function MyReviewsPage() {
     setDeletingId(id)
     try {
       const res = await fetch(`/api/reviews/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
-      if (res.ok) { setReviews((prev) => prev.filter((r) => r.id !== id)) }
-    } catch (err) { console.error(err) } finally { setDeletingId(null) }
+      if (res.ok) {
+        setReviews((prev) => prev.filter((r) => r.id !== id))
+      } else {
+        showToast("error", "Could not delete review")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   if (loading) return (
@@ -54,17 +66,13 @@ export default function MyReviewsPage() {
   )
 
   if (reviews.length === 0) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-20">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center max-w-md">
-        <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-5">
-          <MessageSquare size={36} className="text-amber-300" />
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">No reviews yet</h1>
-        <p className="text-sm text-gray-500 mb-6">Share your experience by reviewing products you've purchased.</p>
-        <Link href="/orders" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
-          View My Orders
-        </Link>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <EmptyState
+        icon={MessageSquare}
+        title="No reviews yet"
+        description="Share your experience by reviewing products you've purchased."
+        action={{ label: "View My Orders", href: "/orders" }}
+      />
     </div>
   )
 
@@ -78,7 +86,7 @@ export default function MyReviewsPage() {
 
         <div className="space-y-4">
           {reviews.map((review) => (
-            <div key={review.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div key={review.id} className="card-base-static p-5">
               <div className="flex items-start gap-4">
                 <Link href={`/products/${review.product.handle}`} className="shrink-0">
                   <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden">

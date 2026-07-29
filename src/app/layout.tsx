@@ -4,6 +4,8 @@ import "./globals.css"
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider"
 import { SiteSettingsProvider } from "@/lib/settings/SiteSettingsProvider"
 import { AuthProvider } from "@/lib/auth"
+import { ToastProvider } from "@/components/ui/Toast"
+import { CartDrawerProvider } from "@/components/ui/CartDrawer"
 import Header from "@/components/layout/Header"
 import Footer from "@/components/layout/Footer"
 import { Analytics } from "@/lib/analytics"
@@ -79,9 +81,13 @@ export default function RootLayout({
         <SiteSettingsProvider>
           <LanguageProvider>
             <AuthProvider>
-              <Header />
-              {children}
-              <Footer />
+              <ToastProvider>
+                <CartDrawerProvider>
+                  <Header />
+                  {children}
+                  <Footer />
+                </CartDrawerProvider>
+              </ToastProvider>
             </AuthProvider>
           </LanguageProvider>
           <Analytics />

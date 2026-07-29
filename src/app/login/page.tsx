@@ -75,7 +75,7 @@ export default function LoginPage() {
           <p className="text-gray-500 text-sm">{t("login.title")}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <form onSubmit={handleSubmit} className="card-base-static p-8">
           {error && <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm">{error}</div>}
 
           <div className="space-y-4">

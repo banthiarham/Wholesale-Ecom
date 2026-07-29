@@ -19,7 +19,7 @@ export default function AnnouncementBar() {
 
   return (
     <div className="relative" style={{ backgroundColor: bgColor, color }}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 text-center text-sm font-medium">
+      <div className="section-container py-2 text-center text-sm font-medium">
         {text}
       </div>
       <button

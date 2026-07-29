@@ -15,8 +15,8 @@ import {
   Dumbbell,
   Paintbrush,
   Search,
-  SlidersHorizontal,
 } from "lucide-react"
+import { EmptyState } from "@/components/ui/EmptyState"
 
 interface Category {
   id: string
@@ -51,12 +51,18 @@ function getMeta(handle: string) {
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [search, setSearch] = useState("")
 
   useEffect(() => {
     fetch("/api/categories")
-      .then((res) => res.json())
-      .then((data) => { setCategories(Array.isArray(data.categories) ? data.categories : []); setLoading(false) })
+      .then(async (res) => {
+        if (!res.ok) { setError(true); setLoading(false); return }
+        const data = await res.json()
+        setCategories(Array.isArray(data.categories) ? data.categories : [])
+        setLoading(false)
+      })
+      .catch(() => { setError(true); setLoading(false) })
   }, [])
 
   const filtered = search.trim()
@@ -92,19 +98,24 @@ export default function CategoriesPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-52 rounded-2xl bg-gray-100 animate-pulse" />
+            ))}
           </div>
+        ) : error ? (
+          <EmptyState
+            icon={Package}
+            title="Couldn't load categories"
+            description="Something went wrong while fetching categories. Please try again."
+            action={{ label: "Retry", onClick: () => window.location.reload() }}
+          />
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
-            <Package size={40} className="mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-500 font-medium">{search ? "No categories match your search" : "No categories available"}</p>
-            {search && (
-              <button onClick={() => setSearch("")} className="mt-3 text-sm text-primary-600 hover:underline">
-                Clear search
-              </button>
-            )}
-          </div>
+          <EmptyState
+            icon={Package}
+            title={search ? "No categories match your search" : "No categories available"}
+            action={search ? { label: "Clear search", onClick: () => setSearch("") } : undefined}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map((cat) => {

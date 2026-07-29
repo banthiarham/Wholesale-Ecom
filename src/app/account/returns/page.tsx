@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { RotateCcw, Package, ArrowLeft, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
+import { EmptyState } from "@/components/ui/EmptyState"
 
 interface ReturnItem {
   id: string
@@ -58,17 +59,13 @@ export default function ReturnsPage() {
   )
 
   if (returns.length === 0) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-20">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center max-w-md">
-        <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-5">
-          <RotateCcw size={36} className="text-orange-300" />
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">No return requests</h1>
-        <p className="text-sm text-gray-500 mb-6">You can request a return from any delivered order.</p>
-        <Link href="/orders" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
-          View Orders
-        </Link>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <EmptyState
+        icon={RotateCcw}
+        title="No return requests"
+        description="You can request a return from any delivered order."
+        action={{ label: "View Orders", href: "/orders" }}
+      />
     </div>
   )
 
@@ -89,7 +86,7 @@ export default function ReturnsPage() {
           {returns.map((ret) => {
             const badge = getStatusBadge(ret.status)
             return (
-              <div key={ret.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div key={ret.id} className="card-base-static p-5">
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <div>
                     <p className="text-sm text-gray-500">Return for Order #{ret.order.orderNumber.slice(0, 8)}</p>

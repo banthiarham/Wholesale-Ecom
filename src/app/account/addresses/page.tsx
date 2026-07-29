@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { MapPin, Plus, Pencil, Trash2, Check, Home, Building2, ArrowLeft } from "lucide-react"
+import { MapPin, Plus, Pencil, Trash2, Check, Home, Building2 } from "lucide-react"
+import { useToast } from "@/components/ui/Toast"
+import { EmptyState } from "@/components/ui/EmptyState"
 
 interface Address {
   id: string
@@ -24,6 +26,7 @@ export default function AddressesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ label: "", street: "", city: "", state: "", zip: "", country: "India", isDefault: false })
+  const { showToast } = useToast()
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
 
@@ -53,23 +56,45 @@ export default function AddressesPage() {
       if (res.ok) {
         await loadAddresses()
         resetForm()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        showToast("error", data.message || "Could not save address")
       }
-    } catch (err) { console.error(err) } finally { setSaving(false) }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this address?")) return
     try {
-      await fetch(`/api/addresses/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
-      setAddresses((prev) => prev.filter((a) => a.id !== id))
-    } catch (err) { console.error(err) }
+      const res = await fetch(`/api/addresses/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+      if (res.ok) {
+        setAddresses((prev) => prev.filter((a) => a.id !== id))
+      } else {
+        showToast("error", "Could not delete address")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    }
   }
 
   const handleSetDefault = async (id: string) => {
     try {
-      await fetch(`/api/addresses/${id}/default`, { method: "PUT", headers: { Authorization: `Bearer ${token}` } })
-      await loadAddresses()
-    } catch (err) { console.error(err) }
+      const res = await fetch(`/api/addresses/${id}/default`, { method: "PUT", headers: { Authorization: `Bearer ${token}` } })
+      if (res.ok) {
+        await loadAddresses()
+      } else {
+        showToast("error", "Could not set default address")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    }
   }
 
   const resetForm = () => {
@@ -104,35 +129,35 @@ export default function AddressesPage() {
         </div>
 
         {showForm && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+          <div className="card-base-static p-6 mb-6">
             <h2 className="font-semibold text-gray-900 mb-4">{editingId ? "Edit Address" : "New Address"}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Label</label>
-                <input type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="e.g. Warehouse, Office" className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                <input type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="e.g. Warehouse, Office" className="input-base mt-1" />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Street Address *</label>
-                <input type="text" required value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                <input type="text" required value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} className="input-base mt-1" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700">City *</label>
-                  <input type="text" required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  <input type="text" required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="input-base mt-1" />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">State *</label>
-                  <input type="text" required value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  <input type="text" required value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="input-base mt-1" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700">PIN Code *</label>
-                  <input type="text" required value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  <input type="text" required value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })} className="input-base mt-1" />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Country</label>
-                  <input type="text" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  <input type="text" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className="input-base mt-1" />
                 </div>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -152,20 +177,16 @@ export default function AddressesPage() {
         )}
 
         {addresses.length === 0 && !showForm ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <MapPin size={28} className="text-gray-300" />
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No addresses saved</h2>
-            <p className="text-sm text-gray-500 mb-4">Add a shipping address to speed up your checkout.</p>
-            <button onClick={() => setShowForm(true)} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">
-              Add First Address
-            </button>
-          </div>
+          <EmptyState
+            icon={MapPin}
+            title="No addresses saved"
+            description="Add a shipping address to speed up your checkout."
+            action={{ label: "Add First Address", onClick: () => setShowForm(true) }}
+          />
         ) : (
           <div className="space-y-4">
             {addresses.map((addr) => (
-              <div key={addr.id} className={`bg-white rounded-xl border ${addr.isDefault ? "border-primary-200" : "border-gray-100"} shadow-sm p-5`}>
+              <div key={addr.id} className={`card-base-static p-5 ${addr.isDefault ? "border-primary-200" : ""}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${addr.isDefault ? "bg-primary-50" : "bg-gray-100"}`}>

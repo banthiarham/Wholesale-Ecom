@@ -10,6 +10,9 @@ import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSe
 import { useAuth } from "@/lib/auth"
 import { useStorefrontRules } from "@/lib/rules"
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
+import { useToast } from "@/components/ui/Toast"
+import { useCartDrawer } from "@/components/ui/CartDrawer"
+import { ProductCard } from "@/components/ui/ProductCard"
 import dynamic from "next/dynamic"
 
 const PackageConfigurator = dynamic(() => import("@/components/storefront/PackageConfigurator"), { ssr: false })
@@ -53,6 +56,7 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1)
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
+  const [relatedAddingId, setRelatedAddingId] = useState<string | null>(null)
   const [mainImage, setMainImage] = useState<string | null>(null)
   const [inWishlist, setInWishlist] = useState(false)
   const [wishlistLoading, setWishlistLoading] = useState(false)
@@ -67,6 +71,8 @@ export default function ProductDetailPage() {
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
   const [packageData, setPackageData] = useState<any>(null)
   const { user, role } = useAuth()
+  const { showToast } = useToast()
+  const { openCartDrawer } = useCartDrawer()
 
   const rulesProducts = useMemo(
     () => product ? [{ id: product.id, categoryId: product.categoryId || product.category?.id, unitPrice: product.unitPrice }] : [],
@@ -143,17 +149,50 @@ export default function ProductDetailPage() {
       const token = localStorage.getItem("token")
       const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
       if (token) headers["Authorization"] = `Bearer ${token}`
-      await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId: product.id, quantity }) })
-      window.dispatchEvent(new CustomEvent("cart-updated"))
-      setAdded(true)
-      setTimeout(() => setAdded(false), 2000)
-    } catch (err) { console.error(err) } finally { setAdding(false) }
+      const res = await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId: product.id, quantity }) })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent("cart-updated"))
+        setAdded(true)
+        setTimeout(() => setAdded(false), 2000)
+        openCartDrawer()
+      } else {
+        showToast("error", data.message || "Could not add to cart")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const handleRelatedAddToCart = async (productId: string, qty: number) => {
+    setRelatedAddingId(productId)
+    try {
+      const token = localStorage.getItem("token")
+      const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+      const res = await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId, quantity: qty }) })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent("cart-updated"))
+        openCartDrawer()
+      } else {
+        showToast("error", data.message || "Could not add to cart")
+      }
+    } catch (err) {
+      console.error(err)
+      showToast("error", "Something went wrong")
+    } finally {
+      setRelatedAddingId(null)
+    }
   }
 
   const toggleWishlist = async () => {
     if (!product) return
     const token = localStorage.getItem("token")
-    if (!token) { alert("Please sign in to add items to your wishlist"); return }
+    if (!token) { showToast("info", "Please sign in to add items to your wishlist"); return }
     setWishlistLoading(true)
     try {
       if (inWishlist) {
@@ -194,7 +233,7 @@ export default function ProductDetailPage() {
         if (fresh.product) setProduct(fresh.product)
       } else {
         const data = await res.json()
-        alert(data.message || "Failed to submit review")
+        showToast("error", data.message || "Failed to submit review")
       }
     } catch (err) { console.error(err) } finally { setSubmittingReview(false) }
   }
@@ -648,37 +687,15 @@ export default function ProductDetailPage() {
                 <h2 className="heading-lg">Related Products</h2>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-                {related.map((rp) => {
-                  const lowestTier = rp.tierPrices?.length > 0 ? rp.tierPrices[rp.tierPrices.length - 1] : null
-                  return (
-                    <Link key={rp.id} href={`/products/${rp.handle}`} className="card-base overflow-hidden group">
-                      <div className="relative aspect-square bg-gray-50 overflow-hidden">
-                        {rp.thumbnail ? (
-                          <Image src={rp.thumbnail} alt={rp.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 50vw, 25vw" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center"><Package size={32} className="text-gray-200" /></div>
-                        )}
-                      </div>
-                      <div className="p-3.5">
-                        <h3 className="font-medium text-gray-900 text-sm line-clamp-1 group-hover:text-primary-600 transition-colors">{rp.title}</h3>
-                        <div className="flex items-center gap-1 mt-1">
-                          <Star size={12} className="text-amber-400 fill-amber-400" />
-                          <span className="text-xs text-gray-500">{rp.rating}</span>
-                        </div>
-                        <div className="mt-1.5">
-                          {lowestTier ? (
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-xs text-green-600 font-semibold">From</span>
-                              <span className="font-bold text-gray-900">{formatPrice(lowestTier.price)}</span>
-                            </div>
-                          ) : (
-                            <span className="font-bold text-gray-900">{formatPrice(rp.unitPrice)}</span>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  )
-                })}
+                {related.map((rp) => (
+                  <ProductCard
+                    key={rp.id}
+                    product={rp}
+                    view="grid"
+                    isAdding={relatedAddingId === rp.id}
+                    onAddToCart={handleRelatedAddToCart}
+                  />
+                ))}
               </div>
             </div>
           )}

@@ -33,6 +33,7 @@ import { useTranslation } from "@/lib/i18n/LanguageProvider"
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { useAuth, usePermissions } from "@/lib/auth"
 import { getCartSessionId, getContrastTextColor } from "@/lib/utils"
+import { useCartDrawer } from "@/components/ui/CartDrawer"
 
 export default function Header() {
   const { user, role, loading: authLoading, logout: authLogout } = useAuth()
@@ -48,9 +49,13 @@ export default function Header() {
   const pathname = usePathname()
   const siteName = useSetting("siteName", "WholesaleX Pro")
   const logoUrl = useSetting("logoUrl", "")
+  const { openCartDrawer } = useCartDrawer()
 
   const fetchCartCount = () => {
-    fetch("/api/cart", { headers: { "x-session-id": getCartSessionId() } })
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const headers: Record<string, string> = { "x-session-id": getCartSessionId() }
+    if (token) headers["Authorization"] = `Bearer ${token}`
+    fetch("/api/cart", { headers })
       .then((r) => r.json())
       .then((d) => setCartCount(d.totals?.itemCount ?? 0))
       .catch((err) => { console.error("Failed to fetch cart count:", err) })
@@ -58,9 +63,11 @@ export default function Header() {
 
   useEffect(() => {
     fetchCartCount()
-    window.addEventListener("cart-updated", () => fetchCartCount())
+    window.addEventListener("cart-updated", fetchCartCount)
+    window.addEventListener("auth-change", fetchCartCount)
     return () => {
-      window.removeEventListener("cart-updated", () => fetchCartCount())
+      window.removeEventListener("cart-updated", fetchCartCount)
+      window.removeEventListener("auth-change", fetchCartCount)
     }
   }, [])
 
@@ -245,9 +252,10 @@ export default function Header() {
             </button>
 
             {/* Cart */}
-            <Link
-              href="/cart"
+            <button
+              onClick={openCartDrawer}
               className="relative p-2 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition"
+              aria-label="Open cart"
             >
               <ShoppingCart size={20} />
               {cartCount > 0 && (
@@ -255,7 +263,7 @@ export default function Header() {
                   {cartCount > 99 ? "99+" : cartCount}
                 </span>
               )}
-            </Link>
+            </button>
 
             {/* Auth */}
             {user ? (

@@ -18,9 +18,9 @@ export default function NewsletterSection() {
   }
 
   return (
-    <section className="section-padding">
+    <section className="section-padding-tight">
       <div className="section-container">
-        <div className="bg-gray-50 rounded-3xl px-6 py-12 sm:px-12 sm:py-16 lg:px-16 lg:py-20 text-center">
+        <div className="bg-gray-50 rounded-3xl px-6 py-10 sm:px-12 sm:py-12 lg:px-16 lg:py-14 text-center">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-primary-100 rounded-2xl mb-5">
             <Mail size={24} className="text-primary-600" />
           </div>

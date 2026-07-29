@@ -21,14 +21,14 @@ export default function CTABannerSection({
   ctaLink2 = "/rfqs/new",
 }: CTABannerSectionProps) {
   return (
-    <section className="relative overflow-hidden bg-gray-900 py-16 lg:py-24">
+    <section className="relative overflow-hidden bg-gray-900 py-12 lg:py-16">
       {/* Subtle background pattern */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-primary-400/10 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="relative section-container">
         <div className="flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-16">
           <div className="lg:max-w-xl text-center lg:text-left">
             <div className="inline-flex items-center gap-2 mb-4 px-3.5 py-1.5 bg-primary-600/20 rounded-full border border-primary-500/30">
