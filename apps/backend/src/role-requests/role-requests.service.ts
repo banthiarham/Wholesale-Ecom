@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoleRequestDto } from './dto/create-role-request.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class RoleRequestsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(RoleRequestsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async create(userId: string, dto: CreateRoleRequestDto) {
     // Verify role exists
@@ -31,7 +37,28 @@ export class RoleRequestsService {
         role: { select: { id: true, name: true, label: true, color: true, icon: true } },
       },
     });
+
+    await this.notifyAdmins(
+      'New role change request',
+      `${request.user.firstName} ${request.user.lastName} requested the "${request.role.label}" role.`,
+      { requestId: request.id, userId, roleId: dto.roleId },
+    );
+
     return request;
+  }
+
+  private async notifyAdmins(title: string, message: string, data?: any) {
+    const admins = await this.prisma.user.findMany({
+      where: { OR: [{ role: 'ADMIN' }, { roleRel: { name: 'ADMIN' } }] },
+      select: { id: true },
+    });
+    await Promise.all(
+      admins.map((admin) =>
+        this.notificationsService
+          .createNotification(admin.id, 'SYSTEM', title, message, data)
+          .catch((err) => this.logger.error(`Failed to notify admin ${admin.id}: ${err.message}`)),
+      ),
+    );
   }
 
   async findAll(status?: string) {
@@ -71,7 +98,10 @@ export class RoleRequestsService {
   }
 
   async approve(id: string, reviewedBy: string) {
-    const request = await this.prisma.roleChangeRequest.findUnique({ where: { id } });
+    const request = await this.prisma.roleChangeRequest.findUnique({
+      where: { id },
+      include: { role: true },
+    });
     if (!request) throw new NotFoundException(`Role change request "${id}" not found`);
     if (request.status !== 'PENDING') {
       throw new BadRequestException('Only pending requests can be approved');
@@ -87,17 +117,32 @@ export class RoleRequestsService {
       },
     });
 
-    // Update the user's role
+    // Update the user's role. Only the roleId FK is touched — role-based pricing and
+    // permissions already resolve dynamically off roleId/roleRel, so this is all that's
+    // needed for the new pricing tier to take effect immediately.
     await this.prisma.user.update({
       where: { id: request.userId },
       data: { roleId: request.roleId },
     });
 
+    await this.notificationsService
+      .createNotification(
+        request.userId,
+        'SYSTEM',
+        'Role change approved',
+        `Your request to become "${request.role.label}" has been approved.`,
+        { requestId: request.id, roleId: request.roleId },
+      )
+      .catch((err) => this.logger.error(`Failed to notify user ${request.userId} of approval: ${err.message}`));
+
     return this.findById(id);
   }
 
   async reject(id: string, reviewedBy: string) {
-    const request = await this.prisma.roleChangeRequest.findUnique({ where: { id } });
+    const request = await this.prisma.roleChangeRequest.findUnique({
+      where: { id },
+      include: { role: true },
+    });
     if (!request) throw new NotFoundException(`Role change request "${id}" not found`);
     if (request.status !== 'PENDING') {
       throw new BadRequestException('Only pending requests can be rejected');
@@ -111,6 +156,16 @@ export class RoleRequestsService {
         reviewedAt: new Date(),
       },
     });
+
+    await this.notificationsService
+      .createNotification(
+        request.userId,
+        'SYSTEM',
+        'Role change rejected',
+        `Your request to become "${request.role.label}" was not approved.`,
+        { requestId: request.id, roleId: request.roleId },
+      )
+      .catch((err) => this.logger.error(`Failed to notify user ${request.userId} of rejection: ${err.message}`));
 
     return this.findById(id);
   }

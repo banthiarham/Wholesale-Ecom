@@ -79,44 +79,48 @@ export default function HeroBannerCarousel() {
   if (banners.length === 0) {
     return (
       <section className="relative overflow-hidden">
-        <div className="relative h-[420px] sm:h-[480px] lg:h-[560px]">
+        <div className="relative h-[460px] sm:h-[520px] lg:h-[600px]">
           {FALLBACK_HEROES.map((hero, index) => {
             const Icon = hero.icon
             return (
               <div
                 key={index}
-                className={`absolute inset-0 transition-all duration-700 ease-in-out bg-gradient-to-br ${hero.gradient} ${index === current ? "opacity-100 z-10" : "opacity-0 z-0"}`}
+                className={`absolute inset-0 transition-opacity duration-700 ease-in-out bg-gradient-to-br ${hero.gradient} ${index === current ? "opacity-100 z-10" : "opacity-0 z-0"}`}
               >
-                {/* Decorative shapes */}
+                {/* Decorative shapes + subtle dot texture */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <div className="absolute -top-32 -right-32 w-[500px] h-[500px] bg-white/[0.07] rounded-full" />
-                  <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-white/[0.05] rounded-full translate-y-1/3 -translate-x-1/4" />
-                  <div className="absolute top-1/3 right-1/4 w-[200px] h-[200px] bg-white/[0.08] rounded-full" />
+                  <div
+                    className="absolute inset-0 opacity-[0.15]"
+                    style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px)", backgroundSize: "28px 28px" }}
+                  />
+                  <div className="absolute -top-40 -right-24 w-[560px] h-[560px] bg-white/[0.08] rounded-full blur-2xl" />
+                  <div className="absolute bottom-0 left-0 w-[340px] h-[340px] bg-black/[0.10] rounded-full translate-y-1/3 -translate-x-1/4 blur-2xl" />
+                  <div className="absolute top-1/4 right-1/4 w-[220px] h-[220px] bg-white/[0.10] rounded-full blur-xl" />
                 </div>
 
                 <div className="relative h-full flex items-center">
                   <div className="section-container w-full">
                     <div className="max-w-2xl">
-                      <div className="inline-flex items-center gap-2.5 mb-5 px-4 py-2 bg-white/15 backdrop-blur-sm rounded-full border border-white/20">
+                      <div className="inline-flex items-center gap-2.5 mb-6 px-4 py-2 bg-white/15 backdrop-blur-md rounded-full border border-white/25 shadow-[0_2px_12px_rgba(0,0,0,0.12)]">
                         <Icon size={16} className="text-white" />
-                        <span className="text-xs font-semibold text-white/90 uppercase tracking-wider">WholesaleX Pro</span>
+                        <span className="text-xs font-bold text-white uppercase tracking-widest">WholesaleX Pro</span>
                       </div>
-                      <h2 className="text-3xl sm:text-4xl lg:text-6xl font-extrabold text-white mb-4 lg:mb-5 leading-[1.1] tracking-tight">
+                      <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-5 lg:mb-6 leading-[1.05] tracking-tight text-balance">
                         {hero.title}
                       </h2>
-                      <p className="text-base sm:text-lg lg:text-xl text-white/80 mb-8 lg:mb-10 leading-relaxed max-w-lg">
+                      <p className="text-base sm:text-lg lg:text-xl text-white/85 mb-9 lg:mb-10 leading-relaxed max-w-lg font-light">
                         {hero.subtitle}
                       </p>
-                      <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex flex-col sm:flex-row gap-3.5">
                         <Link
                           href={hero.link}
-                          className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 transition-all duration-200 shadow-lg shadow-black/20 text-sm lg:text-base"
+                          className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 hover:-translate-y-0.5 transition-all duration-200 shadow-[0_16px_32px_-8px_rgba(0,0,0,0.35)] text-sm lg:text-base"
                         >
-                          {hero.cta} <ArrowRight size={18} />
+                          {hero.cta} <ArrowRight size={18} className="transition-transform duration-200 group-hover:translate-x-0.5" />
                         </Link>
                         <Link
                           href="/categories"
-                          className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white/10 backdrop-blur-sm text-white font-semibold rounded-xl border border-white/25 hover:bg-white/20 transition-all duration-200 text-sm lg:text-base"
+                          className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white/10 backdrop-blur-md text-white font-semibold rounded-xl border border-white/30 hover:bg-white/20 hover:-translate-y-0.5 transition-all duration-200 text-sm lg:text-base"
                         >
                           Explore Categories
                         </Link>
@@ -131,18 +135,18 @@ export default function HeroBannerCarousel() {
 
         {FALLBACK_HEROES.length > 1 && (
           <>
-            <button onClick={prev} className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-white/15 backdrop-blur-sm hover:bg-white/30 text-white rounded-full flex items-center justify-center transition-all duration-200" aria-label="Previous">
+            <button onClick={prev} className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-11 bg-white/15 backdrop-blur-md hover:bg-white/30 hover:scale-105 text-white rounded-full flex items-center justify-center transition-all duration-200 border border-white/10" aria-label="Previous">
               <ChevronLeft size={20} />
             </button>
-            <button onClick={next} className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-white/15 backdrop-blur-sm hover:bg-white/30 text-white rounded-full flex items-center justify-center transition-all duration-200" aria-label="Next">
+            <button onClick={next} className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-11 bg-white/15 backdrop-blur-md hover:bg-white/30 hover:scale-105 text-white rounded-full flex items-center justify-center transition-all duration-200 border border-white/10" aria-label="Next">
               <ChevronRight size={20} />
             </button>
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+            <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-20 flex gap-2">
               {FALLBACK_HEROES.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setCurrent(i)}
-                  className={`transition-all duration-300 rounded-full ${i === current ? "w-8 h-2.5 bg-white" : "w-2.5 h-2.5 bg-white/50 hover:bg-white/70"}`}
+                  className={`transition-all duration-300 rounded-full ${i === current ? "w-8 h-2.5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.25)]" : "w-2.5 h-2.5 bg-white/50 hover:bg-white/70"}`}
                   aria-label={`Go to slide ${i + 1}`}
                 />
               ))}
@@ -155,23 +159,23 @@ export default function HeroBannerCarousel() {
 
   return (
     <section className="relative overflow-hidden">
-      <div className="relative h-[420px] sm:h-[480px] lg:h-[560px]">
+      <div className="relative h-[460px] sm:h-[520px] lg:h-[600px]">
         {banners.map((banner, index) => (
           <a
             key={banner.id}
             href={banner.linkUrl || "#"}
-            className={`absolute inset-0 transition-all duration-700 ease-in-out ${index === current ? "opacity-100 z-10" : "opacity-0 z-0"}`}
+            className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${index === current ? "opacity-100 z-10" : "opacity-0 z-0"}`}
           >
             <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" loading={index === 0 ? "eager" : "lazy"} />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/35 to-transparent" />
             <div className="absolute inset-0 flex items-center">
               <div className="section-container w-full">
                 <div className="max-w-lg">
-                  <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-3 lg:mb-4 leading-tight tracking-tight">{banner.title}</h2>
-                  {banner.subtitle && <p className="text-base sm:text-lg text-white/90 mb-5 lg:mb-6 leading-relaxed">{banner.subtitle}</p>}
+                  <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4 lg:mb-5 leading-[1.1] tracking-tight text-balance">{banner.title}</h2>
+                  {banner.subtitle && <p className="text-base sm:text-lg text-white/85 mb-6 lg:mb-7 leading-relaxed font-light">{banner.subtitle}</p>}
                   {banner.buttonText && (
-                    <span className="inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 transition shadow-lg text-sm lg:text-base">
-                      {banner.buttonText} <ArrowRight size={16} />
+                    <span className="group inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 hover:-translate-y-0.5 transition-all duration-200 shadow-[0_16px_32px_-8px_rgba(0,0,0,0.35)] text-sm lg:text-base">
+                      {banner.buttonText} <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-0.5" />
                     </span>
                   )}
                 </div>
@@ -183,18 +187,18 @@ export default function HeroBannerCarousel() {
 
       {banners.length > 1 && (
         <>
-          <button onClick={prev} className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-white/15 backdrop-blur-sm hover:bg-white/30 text-white rounded-full flex items-center justify-center transition-all duration-200" aria-label="Previous">
+          <button onClick={prev} className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-11 bg-white/15 backdrop-blur-md hover:bg-white/30 hover:scale-105 text-white rounded-full flex items-center justify-center transition-all duration-200 border border-white/10" aria-label="Previous">
             <ChevronLeft size={20} />
           </button>
-          <button onClick={next} className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-white/15 backdrop-blur-sm hover:bg-white/30 text-white rounded-full flex items-center justify-center transition-all duration-200" aria-label="Next">
+          <button onClick={next} className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-11 bg-white/15 backdrop-blur-md hover:bg-white/30 hover:scale-105 text-white rounded-full flex items-center justify-center transition-all duration-200 border border-white/10" aria-label="Next">
             <ChevronRight size={20} />
           </button>
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+          <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-20 flex gap-2">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrent(i)}
-                className={`transition-all duration-300 rounded-full ${i === current ? "w-8 h-2.5 bg-white" : "w-2.5 h-2.5 bg-white/50 hover:bg-white/70"}`}
+                className={`transition-all duration-300 rounded-full ${i === current ? "w-8 h-2.5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.25)]" : "w-2.5 h-2.5 bg-white/50 hover:bg-white/70"}`}
                 aria-label={`Go to slide ${i + 1}`}
               />
             ))}

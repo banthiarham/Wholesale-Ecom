@@ -148,7 +148,7 @@ export default function Header() {
     { href: "/categories", label: t("nav.categories"), icon: BarChart3 },
     { href: "/packages", label: "Packages", icon: Layers },
     { href: "/rfqs", label: t("nav.rfqs"), icon: FileText },
-    { href: "/orders/bulk-orders", label: "Bulk Orders", icon: FileText },
+    { href: "/bulk-orders", label: "Bulk Orders", icon: PackageOpen },
   ]
 
   const userLinks = user
@@ -156,14 +156,13 @@ export default function Header() {
         ...(can("admin", "access")
           ? [{ href: "/admin", label: "Admin", icon: Settings }]
           : []),
-        { href: "/orders", label: t("nav.orders"), icon: ShoppingBag, permission: "orders:view" },
+        { href: "/orders", label: t("nav.orders"), icon: ShoppingBag, permission: "read:orders" },
         { href: "/wishlist", label: "Wishlist", icon: Heart },
         { href: "/account/role-request", label: "Role & Access", icon: Shield },
         { href: "/account/addresses", label: "Addresses", icon: MapPin },
         { href: "/account/returns", label: "Returns", icon: RotateCcw },
         { href: "/account/reviews", label: "My Reviews", icon: Star },
         { href: "/loyalty", label: t("nav.loyalty"), icon: Heart },
-        { href: "/bulk-orders", label: "Bulk Orders", icon: PackageOpen },
         { href: "/wallet", label: "Wallet", icon: Wallet },
         { href: "/notifications", label: t("nav.notifications"), icon: Bell },
       ].filter((link) => {

@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Poppins, Open_Sans } from "next/font/google"
 import "./globals.css"
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider"
 import { SiteSettingsProvider } from "@/lib/settings/SiteSettingsProvider"
@@ -10,7 +10,20 @@ import Header from "@/components/layout/Header"
 import Footer from "@/components/layout/Footer"
 import { Analytics } from "@/lib/analytics"
 
-const inter = Inter({ subsets: ["latin"] })
+// Self-hosted defaults (zero layout shift). Kept in sync with SELF_HOSTED_FONTS
+// in SiteSettingsProvider.tsx — an admin picking a different Google Font falls
+// back to a runtime-injected stylesheet instead of this build-time bundle.
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-poppins",
+  display: "swap",
+})
+const openSans = Open_Sans({
+  subsets: ["latin"],
+  variable: "--font-open-sans",
+  display: "swap",
+})
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wholesalex.com"
 
@@ -77,7 +90,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${poppins.variable} ${openSans.variable}`}>
         <SiteSettingsProvider>
           <LanguageProvider>
             <AuthProvider>

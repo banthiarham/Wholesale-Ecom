@@ -8,7 +8,6 @@ import {
   Delete,
   Query,
   UseGuards,
-  ParseIntPipe,
   ParseEnumPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
@@ -48,9 +47,11 @@ export class UsersController {
   findAll(
     @Query('role') role?: UserRole,
     @Query('status') status?: UserStatus,
-    @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
-    @Query('take', new ParseIntPipe({ optional: true })) take?: number,
+    @Query('skip') skipRaw?: string,
+    @Query('take') takeRaw?: string,
   ) {
+    const skip = skipRaw !== undefined ? parseInt(skipRaw, 10) : undefined;
+    const take = takeRaw !== undefined ? parseInt(takeRaw, 10) : undefined;
     return this.usersService.findAll({ role, status, skip, take });
   }
 

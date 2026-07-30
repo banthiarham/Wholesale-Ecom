@@ -2,10 +2,28 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { EmailService } from '../notifications/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
 import { CartItemContext } from '../rules/rules-engine.service';
 import { OrderStatus, PaymentStatus, DeliveryStatus } from '@prisma/client';
+
+const ORDER_STATUS_MESSAGES: Partial<Record<OrderStatus, { title: string; message: (orderNumber: string) => string }>> = {
+  CONFIRMED: { title: 'Order confirmed', message: (n) => `Your order #${n} has been confirmed and is being prepared.` },
+  PROCESSING: { title: 'Order packed', message: (n) => `Your order #${n} has been packed and is ready to ship.` },
+  SHIPPED: { title: 'Order shipped', message: (n) => `Your order #${n} is on its way.` },
+  DELIVERED: { title: 'Order delivered', message: (n) => `Your order #${n} has been delivered. We hope you enjoy it!` },
+  CANCELLED: { title: 'Order cancelled', message: (n) => `Your order #${n} has been cancelled.` },
+  REFUNDED: { title: 'Order refunded', message: (n) => `Your order #${n} has been refunded.` },
+};
+
+const DELIVERY_STATUS_MESSAGES: Partial<Record<DeliveryStatus, { title: string; message: (orderNumber: string) => string }>> = {
+  PICKED_UP: { title: 'Order picked up', message: (n) => `Your order #${n} has been picked up by the courier.` },
+  IN_TRANSIT: { title: 'Order in transit', message: (n) => `Your order #${n} is in transit.` },
+  OUT_FOR_DELIVERY: { title: 'Out for delivery', message: (n) => `Your order #${n} is out for delivery today.` },
+  FAILED: { title: 'Delivery attempt failed', message: (n) => `A delivery attempt for your order #${n} was unsuccessful. We'll retry soon.` },
+  RETURNED: { title: 'Order returned', message: (n) => `Your order #${n} has been marked as returned.` },
+};
 
 @Injectable()
 export class OrdersService {
@@ -15,11 +33,44 @@ export class OrdersService {
     private prisma: PrismaService,
     private inventoryService: InventoryService,
     private emailService: EmailService,
+    private notificationsService: NotificationsService,
     private loyaltyEarningService: LoyaltyEarningService,
     private rulesEnforcement: RulesEnforcementService,
   ) {}
 
-  async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string; couponCode?: string }) {
+  private async notifyOrderStatus(userId: string, orderId: string, orderNumber: string, status: OrderStatus) {
+    const copy = ORDER_STATUS_MESSAGES[status];
+    if (!copy) return;
+    try {
+      await this.notificationsService.createNotification(
+        userId,
+        'ORDER',
+        copy.title,
+        copy.message(orderNumber.slice(0, 8)),
+        { orderId, status },
+      );
+    } catch (err) {
+      this.logger.error(`Failed to send order status notification for ${orderId}: ${err.message}`);
+    }
+  }
+
+  private async notifyDeliveryStatus(userId: string, orderId: string, orderNumber: string, status: DeliveryStatus) {
+    const copy = DELIVERY_STATUS_MESSAGES[status];
+    if (!copy) return;
+    try {
+      await this.notificationsService.createNotification(
+        userId,
+        'ORDER',
+        copy.title,
+        copy.message(orderNumber.slice(0, 8)),
+        { orderId, deliveryStatus: status },
+      );
+    } catch (err) {
+      this.logger.error(`Failed to send delivery status notification for ${orderId}: ${err.message}`);
+    }
+  }
+
+  async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string; couponCode?: string; bankOfferId?: string }) {
     const cart = await this.prisma.cart.findUnique({
       where: { id: cartId },
       include: { items: { include: { product: true } } },
@@ -87,6 +138,39 @@ export class OrdersService {
 
     totalAmount = Math.max(0, totalAmount - couponDiscount);
 
+    // Apply bank/UPI payment offer if provided — re-validated here rather than trusting
+    // any discount figure computed client-side, since this determines the amount charged.
+    let bankOfferDiscount = 0;
+    let appliedBankOffer: any = null;
+    if (data.bankOfferId) {
+      const offer = await this.prisma.paymentOffer.findUnique({ where: { id: data.bankOfferId } });
+      const now = new Date();
+      const cartProductIds = new Set(cart.items.map((item) => item.productId));
+      const cartCategoryIds = new Set(cart.items.map((item) => item.product?.categoryId).filter(Boolean));
+      const isEligible =
+        offer &&
+        offer.isActive &&
+        offer.startDate <= now &&
+        offer.endDate >= now &&
+        (!offer.productId || cartProductIds.has(offer.productId)) &&
+        (!offer.categoryId || cartCategoryIds.has(offer.categoryId)) &&
+        (!offer.minOrderValue || totalAmount >= Number(offer.minOrderValue));
+
+      if (isEligible) {
+        bankOfferDiscount =
+          offer!.type === 'PERCENTAGE' ? totalAmount * (Number(offer!.value) / 100) : Number(offer!.value);
+        if (offer!.maxDiscount) bankOfferDiscount = Math.min(bankOfferDiscount, Number(offer!.maxDiscount));
+        bankOfferDiscount = Math.min(bankOfferDiscount, totalAmount);
+        appliedBankOffer = offer;
+      }
+    }
+
+    totalAmount = Math.max(0, totalAmount - bankOfferDiscount);
+
+    const combinedNotes = appliedBankOffer
+      ? [data.notes, `Bank offer applied: ${appliedBankOffer.name} (-₹${bankOfferDiscount.toFixed(2)})`].filter(Boolean).join(' | ')
+      : data.notes;
+
     const order = await this.prisma.order.create({
       data: {
         userId,
@@ -94,7 +178,7 @@ export class OrdersService {
         currency: 'INR',
         shippingAddress: data.shippingAddress,
         billingAddress: data.billingAddress || data.shippingAddress,
-        notes: data.notes,
+        notes: combinedNotes,
         items: { create: orderItemsData },
       },
       include: {
@@ -131,7 +215,12 @@ export class OrdersService {
       }
     }
 
-    return order;
+    return {
+      ...order,
+      couponDiscount,
+      bankOfferDiscount,
+      appliedBankOffer: appliedBankOffer ? { id: appliedBankOffer.id, name: appliedBankOffer.name } : null,
+    };
   }
 
   async createFromBulk(userId: string, items: { productId: string; quantity: number }[], data: { shippingAddress?: any; notes?: string }) {
@@ -257,6 +346,8 @@ export class OrdersService {
       },
     });
 
+    await this.notifyOrderStatus(order.userId, order.id, order.orderNumber, status);
+
     // Award loyalty points on delivery
     if (status === 'DELIVERED') {
       try {
@@ -342,6 +433,8 @@ export class OrdersService {
       },
     });
 
+    await this.notifyOrderStatus(updated.userId, updated.id, updated.orderNumber, OrderStatus.CANCELLED);
+
     // Release reserved inventory
     for (const item of updated.items) {
       try {
@@ -384,6 +477,9 @@ export class OrdersService {
   }
 
   async addTrackingEvent(orderId: string, data: { status: DeliveryStatus; location?: string; notes?: string }) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+
     let tracking = await this.prisma.deliveryTracking.findUnique({ where: { orderId } });
 
     if (!tracking) {
@@ -392,7 +488,7 @@ export class OrdersService {
       });
     }
 
-    const event = await this.prisma.deliveryTrackingEvent.create({
+    await this.prisma.deliveryTrackingEvent.create({
       data: {
         trackingId: tracking.id,
         status: data.status,
@@ -409,20 +505,15 @@ export class OrdersService {
       },
     });
 
+    // Keep the order's own status roughly in sync with meaningful delivery milestones
+    // (routed through updateStatus so it fires the usual order-status notification/loyalty logic).
     if (data.status === DeliveryStatus.DELIVERED) {
-      await this.prisma.order.update({
-        where: { id: orderId },
-        data: { status: OrderStatus.DELIVERED },
-      });
-    } else if (data.status === DeliveryStatus.PICKED_UP) {
-      const order = await this.prisma.order.findUnique({ where: { id: orderId } });
-      if (order && order.status === OrderStatus.PROCESSING) {
-        await this.prisma.order.update({
-          where: { id: orderId },
-          data: { status: OrderStatus.SHIPPED },
-        });
-      }
+      await this.updateStatus(orderId, OrderStatus.DELIVERED);
+    } else if (data.status === DeliveryStatus.PICKED_UP && order.status === OrderStatus.PROCESSING) {
+      await this.updateStatus(orderId, OrderStatus.SHIPPED);
     }
+
+    await this.notifyDeliveryStatus(order.userId, orderId, order.orderNumber, data.status);
 
     return this.getDeliveryTracking(orderId);
   }

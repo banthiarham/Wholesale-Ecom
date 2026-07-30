@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsString, IsOptional, IsEnum, MinLength, IsNotEmpty } from 'class-validator';
-import { UserRole } from '@prisma/client';
+import { IsEmail, IsString, IsOptional, IsEnum, IsUUID, MinLength, IsNotEmpty } from 'class-validator';
+import { UserRole, UserStatus } from '@prisma/client';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'user@example.com' })
@@ -33,6 +33,16 @@ export class CreateUserDto {
   @IsEnum(UserRole)
   @IsOptional()
   role?: UserRole;
+
+  @ApiPropertyOptional({ description: 'Dynamic role FK — takes precedence over `role` enum when both are provided' })
+  @IsUUID()
+  @IsOptional()
+  roleId?: string;
+
+  @ApiPropertyOptional({ enum: UserStatus, default: UserStatus.ACTIVE })
+  @IsEnum(UserStatus)
+  @IsOptional()
+  status?: UserStatus;
 
   @ApiPropertyOptional({ example: 'Acme Corp' })
   @IsString()

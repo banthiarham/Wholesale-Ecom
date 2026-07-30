@@ -54,6 +54,7 @@ export class OrdersController {
         billingAddress: body.billingAddress,
         notes: body.notes,
         couponCode: body.couponCode,
+        bankOfferId: body.bankOfferId,
       },
     );
     return { order };

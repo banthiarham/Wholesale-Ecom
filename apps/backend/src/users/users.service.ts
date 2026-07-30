@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { User, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -20,7 +20,24 @@ export class UsersService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Email already registered');
+      throw new ConflictException('Email already exists');
+    }
+
+    // If roleId provided, it must resolve to a real Role; derive the authoritative
+    // enum role from it so `role` and `roleId` never diverge (mirrors auth.service.ts::register).
+    // Dynamic roles beyond the legacy UserRole enum (e.g. Dealer, Wholesaler) can't be
+    // written to the `role` column — leave it at its previous value for those and rely
+    // on `roleId`/`roleRel` as the authoritative source, as done everywhere else.
+    let roleEnum = createUserDto.role;
+    const roleId = createUserDto.roleId;
+    if (roleId) {
+      const roleRecord = await this.prisma.role.findUnique({ where: { id: roleId } });
+      if (!roleRecord) {
+        throw new BadRequestException('Invalid role selected');
+      }
+      if ((Object.values(UserRole) as string[]).includes(roleRecord.name)) {
+        roleEnum = roleRecord.name as UserRole;
+      }
     }
 
     const hashedPassword = createUserDto.password
@@ -30,6 +47,8 @@ export class UsersService {
     const user = await this.prisma.user.create({
       data: {
         ...createUserDto,
+        role: roleEnum,
+        roleId: roleId || null,
         password: hashedPassword,
       },
     });
@@ -137,12 +156,15 @@ export class UsersService {
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     if (!role) throw new NotFoundException('Role not found');
 
-    // Update both roleId (dynamic) and role (enum) for dual-read compatibility
+    // Update both roleId (dynamic) and role (enum) for dual-read compatibility.
+    // Dynamic roles beyond the legacy UserRole enum can't be written to the `role`
+    // column — leave it untouched for those and rely on roleId/roleRel instead.
+    const isCoreRole = (Object.values(UserRole) as string[]).includes(role.name);
     const user = await this.prisma.user.update({
       where: { id },
       data: {
         roleId,
-        role: role.name as UserRole, // Keep enum in sync during migration
+        ...(isCoreRole ? { role: role.name as UserRole } : {}),
       },
       include: { roleRel: true },
     });

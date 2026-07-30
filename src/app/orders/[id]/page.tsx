@@ -1,9 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
-import { ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart, Navigation, ExternalLink, Circle, Clock, Layers } from "lucide-react"
+import {
+  ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart,
+  Navigation, ExternalLink, Circle, Clock, Layers, Download, RefreshCcw, ClipboardCheck, PackageCheck, Home, ReceiptText,
+} from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
@@ -37,6 +40,37 @@ interface OrderDetail {
   deliveryTracking?: { status: string; currentLocation: string | null; estimatedDelivery: string | null; events: { status: string; location: string | null; notes: string | null; occurredAt: string }[] } | null
 }
 
+const TIMELINE_STEPS = [
+  { key: "PLACED", label: "Order Placed", icon: ClipboardCheck },
+  { key: "PAID", label: "Payment Successful", icon: CreditCard },
+  { key: "CONFIRMED", label: "Confirmed", icon: CheckCircle },
+  { key: "PACKED", label: "Packed", icon: PackageCheck },
+  { key: "SHIPPED", label: "Shipped", icon: Truck },
+  { key: "OUT_FOR_DELIVERY", label: "Out For Delivery", icon: Navigation },
+  { key: "DELIVERED", label: "Delivered", icon: Home },
+]
+
+// Derives how many of the 7 visual timeline steps are complete, combining order
+// status, payment status, and (when available) live delivery tracking status —
+// none of these alone maps cleanly onto the 7-stage buyer-facing timeline.
+function getTimelineStepIndex(order: OrderDetail): number {
+  const paymentDone =
+    order.payment?.status === "CAPTURED" ||
+    order.payment?.status === "AUTHORIZED" ||
+    (order.payment?.provider === "COD" && order.status !== "PENDING")
+
+  let idx = 0
+  if (paymentDone) idx = 1
+  if (["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status)) idx = Math.max(idx, 2)
+  if (["PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status)) idx = Math.max(idx, 3)
+  if (order.status === "SHIPPED" || order.status === "DELIVERED" || ["PICKED_UP", "IN_TRANSIT"].includes(order.deliveryTracking?.status || "")) idx = Math.max(idx, 4)
+  if (order.deliveryTracking?.status === "OUT_FOR_DELIVERY" || order.status === "DELIVERED") idx = Math.max(idx, 5)
+  if (order.status === "DELIVERED") idx = 6
+  return idx
+}
+
+const POLL_INTERVAL_MS = 20000
+
 export default function OrderDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -47,6 +81,7 @@ export default function OrderDetailPage() {
   const [reordering, setReordering] = useState(false)
   const [paymentAlert, setPaymentAlert] = useState<string | null>(null)
   const [showReturnForm, setShowReturnForm] = useState(false)
+  const [returnMode, setReturnMode] = useState<"RETURN" | "REPLACE">("RETURN")
   const [returnReason, setReturnReason] = useState("")
   const [returnNotes, setReturnNotes] = useState("")
   const [returnItems, setReturnItems] = useState<Record<string, { qty: number; selected: boolean }>>({})
@@ -54,24 +89,31 @@ export default function OrderDetailPage() {
   const [retrying, setRetrying] = useState(false)
   const { showToast } = useToast()
   const { openCartDrawer } = useCartDrawer()
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => {
+  const loadOrder = useCallback((silent = false) => {
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
-
+    if (!silent) setLoading(true)
     fetch(`/api/orders/${params.id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => {
         setOrder(data.order || null)
-        setLoading(false)
-        if (data.order) {
+        if (!silent && data.order) {
           const ri: Record<string, { qty: number; selected: boolean }> = {}
           data.order.items.forEach((item: any) => { ri[item.id] = { qty: item.quantity, selected: false } })
           setReturnItems(ri)
         }
       })
-      .catch(() => setLoading(false))
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [params.id, router])
+
+  useEffect(() => {
+    loadOrder()
+    pollRef.current = setInterval(() => loadOrder(true), POLL_INTERVAL_MS)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [loadOrder])
 
   useEffect(() => {
     const payment = searchParams.get("payment")
@@ -79,6 +121,7 @@ export default function OrderDetailPage() {
     if (payment === "failure") setPaymentAlert("Payment failed. Please try again or choose COD.")
     if (payment === "aborted") setPaymentAlert("Payment was cancelled. You can retry from this page.")
     if (payment === "error") setPaymentAlert("Something went wrong with the payment. Contact support if amount was deducted.")
+    if (searchParams.get("action") === "return") setShowReturnForm(true)
   }, [searchParams])
 
   const getStatusColor = (status: string) => {
@@ -232,18 +275,19 @@ export default function OrderDetailPage() {
     const token = localStorage.getItem("token")
     if (!token) return
     const selectedItems = Object.entries(returnItems).filter(([, v]) => v.selected).map(([id, v]) => ({ orderItemId: id, quantity: v.qty }))
-    if (selectedItems.length === 0) { showToast("error", "Select at least one item to return"); return }
+    if (selectedItems.length === 0) { showToast("error", "Select at least one item"); return }
     if (!returnReason.trim()) { showToast("error", "Please provide a reason"); return }
 
     setSubmittingReturn(true)
     try {
+      const reasonPrefix = returnMode === "REPLACE" ? "[Replacement requested] " : ""
       const res = await fetch("/api/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ orderId: order.id, reason: returnReason, notes: returnNotes, items: selectedItems }),
+        body: JSON.stringify({ orderId: order.id, reason: `${reasonPrefix}${returnReason}`, notes: returnNotes, items: selectedItems }),
       })
-      if (res.ok) { setShowReturnForm(false); showToast("success", "Return request submitted!") }
-      else { const data = await res.json(); showToast("error", data.message || "Failed to submit return") }
+      if (res.ok) { setShowReturnForm(false); showToast("success", returnMode === "REPLACE" ? "Replacement request submitted!" : "Return request submitted!") }
+      else { const data = await res.json(); showToast("error", data.message || "Failed to submit request") }
     } catch (err) {
       console.error(err)
       showToast("error", "Something went wrong")
@@ -254,7 +298,7 @@ export default function OrderDetailPage() {
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
         <div className="h-32 rounded-2xl bg-gray-100 animate-pulse" />
       </main>
@@ -269,55 +313,108 @@ export default function OrderDetailPage() {
   const canCancel = !["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)
   const canReturn = order.status === "DELIVERED"
   const canReorder = !["CANCELLED"].includes(order.status)
+  const isCancelled = ["CANCELLED", "REFUNDED"].includes(order.status)
+  const timelineIdx = getTimelineStepIndex(order)
 
-  const statusSteps = ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"]
-  const currentStepIdx = statusSteps.indexOf(order.status)
+  // Presentation-only breakdown derived from stored item totals — the DB stores a
+  // single settled totalAmount (no separate tax/shipping columns), so tax is shown
+  // as the balancing figure between subtotal+shipping and the actual amount charged.
+  const subtotal = order.items.reduce((sum, item) => sum + Number(item.totalPrice), 0)
+  const shippingFee = 0
+  const taxAmount = Math.max(0, Number(order.totalAmount) - subtotal - shippingFee)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to orders</Link>
+    <div className="min-h-screen bg-gray-50/60">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <Link href="/orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 text-sm font-medium"><ArrowLeft size={16} /> Back to orders</Link>
+          <Link href={`/orders/${order.id}/invoice`} target="_blank" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+            <Download size={15} /> Download Invoice
+          </Link>
+        </div>
 
         {paymentAlert && (
-          <div className={`mb-6 p-4 rounded-lg border ${paymentAlert.includes("successful") ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
-            <p className="font-medium">{paymentAlert}</p>
+          <div className={`mb-6 p-4 rounded-xl border ${paymentAlert.includes("successful") ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+            <p className="font-medium text-sm">{paymentAlert}</p>
           </div>
         )}
 
         <div className="card-base-static p-6 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Order #{order.orderNumber}</h1>
+              <h1 className="text-xl font-bold text-gray-900">Order #{order.orderNumber.slice(0, 8).toUpperCase()}</h1>
               <p className="text-sm text-gray-500 mt-1">Placed on {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}</p>
             </div>
             <div className="flex items-center gap-3">
               <span className={`badge inline-flex items-center gap-1.5 ${getStatusColor(order.status)}`}>
                 {getStatusIcon(order.status)} {order.status}
               </span>
-              {canCancel && <button onClick={cancelOrder} disabled={cancelling} className="px-3 py-1 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition disabled:opacity-50">{cancelling ? "Cancelling..." : "Cancel"}</button>}
+              {canCancel && <button onClick={cancelOrder} disabled={cancelling} className="px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition disabled:opacity-50">{cancelling ? "Cancelling..." : "Cancel"}</button>}
             </div>
           </div>
+        </div>
 
-          {/* Order Status Timeline */}
-          {currentStepIdx >= 0 && (
-            <div className="flex items-center justify-between mb-6 px-2">
-              {statusSteps.map((step, idx) => (
-                <div key={step} className="flex items-center">
-                  <div className="flex flex-col items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${idx <= currentStepIdx ? "bg-primary-600 text-white" : "bg-gray-200 text-gray-500"}`}>
-                      {idx <= currentStepIdx ? <CheckCircle size={16} /> : idx + 1}
-                    </div>
-                    <span className={`text-xs mt-1 ${idx <= currentStepIdx ? "text-primary-600 font-medium" : "text-gray-400"}`}>{step}</span>
-                  </div>
-                  {idx < statusSteps.length - 1 && <div className={`flex-1 h-0.5 mx-2 ${idx < currentStepIdx ? "bg-primary-600" : "bg-gray-200"}`} style={{ minWidth: "40px" }} />}
-                </div>
-              ))}
+        {/* Visual tracking timeline */}
+        <div id="tracking" className="card-base-static p-6 mb-6 scroll-mt-24">
+          <h2 className="font-semibold text-gray-900 mb-6 flex items-center gap-2"><Navigation size={16} className="text-primary-600" /> Order Tracking</h2>
+
+          {isCancelled ? (
+            <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl">
+              <XCircle size={22} className="text-red-500 flex-shrink-0" />
+              <p className="text-sm font-medium text-red-700">This order was {order.status === "REFUNDED" ? "refunded" : "cancelled"} and is no longer being processed.</p>
             </div>
+          ) : (
+            <>
+              {/* Desktop: horizontal */}
+              <div className="hidden md:flex items-start">
+                {TIMELINE_STEPS.map((step, i) => {
+                  const done = i <= timelineIdx
+                  const current = i === timelineIdx && timelineIdx < TIMELINE_STEPS.length - 1
+                  const StepIcon = step.icon
+                  return (
+                    <div key={step.key} className="flex-1 flex items-start">
+                      <div className="flex flex-col items-center flex-shrink-0" style={{ width: 90 }}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${done ? "bg-primary-600 text-white shadow-[0_4px_12px_-2px_rgba(3,105,161,0.4)]" : "bg-gray-100 text-gray-400"} ${current ? "ring-4 ring-primary-100" : ""}`}>
+                          <StepIcon size={16} />
+                        </div>
+                        <span className={`text-[11px] text-center mt-2 leading-tight font-medium ${done ? "text-primary-700" : "text-gray-400"}`}>{step.label}</span>
+                        {i === 0 && <span className="text-[10px] text-gray-400 mt-0.5">{new Date(order.createdAt).toLocaleDateString()}</span>}
+                      </div>
+                      {i < TIMELINE_STEPS.length - 1 && (
+                        <div className={`flex-1 h-0.5 mt-5 transition-all duration-300 ${i < timelineIdx ? "bg-primary-600" : "bg-gray-200"}`} />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Mobile: vertical */}
+              <div className="md:hidden space-y-0">
+                {TIMELINE_STEPS.map((step, i) => {
+                  const done = i <= timelineIdx
+                  const StepIcon = step.icon
+                  return (
+                    <div key={step.key} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${done ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-400"}`}>
+                          <StepIcon size={14} />
+                        </div>
+                        {i < TIMELINE_STEPS.length - 1 && <div className={`w-0.5 flex-1 min-h-[24px] ${i < timelineIdx ? "bg-primary-600" : "bg-gray-200"}`} />}
+                      </div>
+                      <div className="pb-5">
+                        <p className={`text-sm font-medium ${done ? "text-primary-700" : "text-gray-400"}`}>{step.label}</p>
+                        {i === 0 && <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</p>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           )}
 
-          {/* Tracking Info */}
+          {/* Live shipment tracking */}
           {(order.trackingNumber || order.carrier || order.shippingEta || order.deliveryPartner || order.deliveryTracking) && (
-            <div className="mb-6 bg-blue-50 border border-blue-100 rounded-lg p-4">
+            <div className="mt-6 bg-blue-50 border border-blue-100 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Navigation size={16} className="text-blue-600" />
                 <span className="text-sm font-semibold text-blue-800">Shipment Tracking</span>
@@ -368,8 +465,10 @@ export default function OrderDetailPage() {
               )}
             </div>
           )}
+        </div>
 
-          <div className="border-t border-gray-100 pt-6">
+        <div className="card-base-static p-6 mb-6">
+          <div className="pt-0">
             <h2 className="font-semibold text-gray-900 mb-4">Items</h2>
             <div className="space-y-4">
               {(() => {
@@ -459,6 +558,17 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
+          {/* Price breakdown */}
+          <div className="mt-6 pt-4 border-t border-gray-100">
+            <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><ReceiptText size={16} className="text-primary-600" /> Order Summary</h2>
+            <div className="text-sm text-gray-600 space-y-2 max-w-xs ml-auto">
+              <div className="flex justify-between"><span>Subtotal</span><span className="text-gray-900">{formatPrice(subtotal)}</span></div>
+              <div className="flex justify-between"><span>Shipping</span><span className="text-green-600 font-medium">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span></div>
+              <div className="flex justify-between"><span>GST / Taxes</span><span className="text-gray-900">{formatPrice(taxAmount)}</span></div>
+              <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span className="text-gray-900">Grand Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
+            </div>
+          </div>
+
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-100">
             {canReorder && (
@@ -468,19 +578,31 @@ export default function OrderDetailPage() {
             )}
             {canReturn && !showReturnForm && (
               <button onClick={() => setShowReturnForm(true)} className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium">
-                <RotateCcw size={14} /> Request Return
+                <RefreshCcw size={14} /> Return / Replace
               </button>
             )}
           </div>
         </div>
 
-        {/* Return Form */}
+        {/* Return / Replace Form */}
         {showReturnForm && (
           <div className="card-base-static p-6 mb-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Request Return</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">Request Return / Replacement</h2>
             <div className="space-y-4">
+              <div className="flex gap-2">
+                {(["RETURN", "REPLACE"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setReturnMode(mode)}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-colors ${returnMode === mode ? "bg-primary-600 text-white border-primary-600" : "bg-white text-gray-600 border-gray-200 hover:border-primary-300"}`}
+                  >
+                    {mode === "RETURN" ? "Return for Refund" : "Replace Item"}
+                  </button>
+                ))}
+              </div>
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Select items to return:</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Select items:</p>
                 {order.items.map((item) => (
                   <label key={item.id} className="flex items-center gap-3 py-2 border-b border-gray-50 cursor-pointer">
                     <input type="checkbox" checked={returnItems[item.id]?.selected || false} onChange={(e) => setReturnItems({ ...returnItems, [item.id]: { ...returnItems[item.id], selected: e.target.checked } })} className="rounded border-gray-300" />
@@ -493,21 +615,21 @@ export default function OrderDetailPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Reason *</label>
-                <textarea value={returnReason} onChange={(e) => setReturnReason(e.target.value)} rows={3} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Why are you returning these items?" />
+                <textarea value={returnReason} onChange={(e) => setReturnReason(e.target.value)} rows={3} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder={returnMode === "REPLACE" ? "Why do you need a replacement?" : "Why are you returning these items?"} />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Additional notes</label>
                 <textarea value={returnNotes} onChange={(e) => setReturnNotes(e.target.value)} rows={2} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Any other details..." />
               </div>
               <div className="flex gap-3">
-                <button onClick={handleReturnSubmit} disabled={submittingReturn} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">{submittingReturn ? "Submitting..." : "Submit Return Request"}</button>
+                <button onClick={handleReturnSubmit} disabled={submittingReturn} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">{submittingReturn ? "Submitting..." : `Submit ${returnMode === "REPLACE" ? "Replacement" : "Return"} Request`}</button>
                 <button onClick={() => setShowReturnForm(false)} className="px-6 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm">Cancel</button>
               </div>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card-base-static p-6">
             <div className="flex items-center gap-2 mb-4">
               <MapPin className="text-primary-600" size={18} />
@@ -520,6 +642,20 @@ export default function OrderDetailPage() {
                 <p>{order.shippingAddress.country}</p>
               </div>
             ) : <p className="text-sm text-gray-500">No shipping address provided</p>}
+          </div>
+
+          <div className="card-base-static p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <ReceiptText className="text-primary-600" size={18} />
+              <h2 className="font-semibold text-gray-900">Billing Address</h2>
+            </div>
+            {order.billingAddress ? (
+              <div className="text-sm text-gray-700 space-y-1">
+                <p>{order.billingAddress.street}</p>
+                <p>{order.billingAddress.city}, {order.billingAddress.state} {order.billingAddress.zip}</p>
+                <p>{order.billingAddress.country}</p>
+              </div>
+            ) : <p className="text-sm text-gray-500">Same as shipping address</p>}
           </div>
 
           <div className="card-base-static p-6">

@@ -40,6 +40,7 @@ export default function RoleRequestPage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [selectedRolePermissions, setSelectedRolePermissions] = useState<{ action: string; resource: string; description: string | null }[]>([])
   const [loadingPermissions, setLoadingPermissions] = useState(false)
+  const [rolesError, setRolesError] = useState<string | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -50,21 +51,44 @@ export default function RoleRequestPage() {
 
     const headers = { Authorization: `Bearer ${token}` }
 
-    Promise.all([
-      fetch("/api/auth/me", { headers }).then((r) => r.json()),
-      fetch("/api/roles", { headers }).then((r) => r.json()).then((d) => d.roles || []),
-      fetch("/api/role-requests/mine", { headers }).then((r) => r.json()).then((d) => d.requests || []),
-    ])
-      .then(([userData, rolesData, requestsData]) => {
-        setUser(userData.user || userData)
-        setRoles(rolesData)
-        setMyRequests(requestsData)
-        setLoading(false)
-      })
-      .catch(() => {
+    // Each fetch is tracked independently: an auth failure means the session is
+    // invalid (redirect to login), but a roles-fetch failure should surface as an
+    // inline error rather than silently becoming an empty dropdown or logging the
+    // user out of an otherwise-valid session.
+    Promise.allSettled([
+      fetch("/api/auth/me", { headers }).then((r) => {
+        if (!r.ok) throw new Error("Unauthorized")
+        return r.json()
+      }),
+      fetch("/api/roles/public", { headers }).then(async (r) => {
+        if (!r.ok) throw new Error("Failed to load roles")
+        const d = await r.json()
+        return d.roles || []
+      }),
+      fetch("/api/role-requests/mine", { headers }).then(async (r) => {
+        if (!r.ok) throw new Error("Failed to load your requests")
+        const d = await r.json()
+        return d.requests || []
+      }),
+    ]).then(([userResult, rolesResult, requestsResult]) => {
+      if (userResult.status === "rejected") {
         localStorage.removeItem("token")
         router.push("/login")
-      })
+        return
+      }
+      setUser(userResult.value.user || userResult.value)
+
+      if (rolesResult.status === "fulfilled") {
+        setRoles(rolesResult.value)
+        setRolesError(null)
+      } else {
+        setRoles([])
+        setRolesError("Unable to load roles right now. Please try again later.")
+      }
+
+      setMyRequests(requestsResult.status === "fulfilled" ? requestsResult.value : [])
+      setLoading(false)
+    })
   }, [router])
 
   // Fetch permissions for the selected role
@@ -218,18 +242,28 @@ export default function RoleRequestPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Select Role</label>
-              <select
-                value={selectedRoleId}
-                onChange={(e) => setSelectedRoleId(e.target.value)}
-                className="input-base"
-              >
-                <option value="">— Choose a role —</option>
-                {availableRoles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.label} {role.isSystem ? "(System)" : ""}
-                  </option>
-                ))}
-              </select>
+              {rolesError ? (
+                <div className="p-3 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
+                  {rolesError}
+                </div>
+              ) : availableRoles.length === 0 ? (
+                <div className="p-3 rounded-lg text-sm bg-gray-50 text-gray-500 border border-gray-200 text-center">
+                  No roles available for request.
+                </div>
+              ) : (
+                <select
+                  value={selectedRoleId}
+                  onChange={(e) => setSelectedRoleId(e.target.value)}
+                  className="input-base"
+                >
+                  <option value="">— Choose a role —</option>
+                  {availableRoles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.label} {role.isSystem ? "(System)" : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {selectedRoleId && (

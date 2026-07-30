@@ -4,15 +4,16 @@ import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check } from "lucide-react"
+import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText } from "lucide-react"
 import { formatPrice, getCartSessionId, getContrastTextColor } from "@/lib/utils"
-import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, getPaymentOfferLabel } from "@/lib/pricing"
+import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
 import { useAuth } from "@/lib/auth"
 import { useStorefrontRules } from "@/lib/rules"
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
 import { ProductCard } from "@/components/ui/ProductCard"
+import { BankOfferCard, BankOffersModal } from "@/components/ui/BankOffers"
 import dynamic from "next/dynamic"
 
 const PackageConfigurator = dynamic(() => import("@/components/storefront/PackageConfigurator"), { ssr: false })
@@ -69,6 +70,7 @@ export default function ProductDetailPage() {
   const [pricing, setPricing] = useState<PricingBreakdown | null>(null)
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
+  const [showOffersModal, setShowOffersModal] = useState(false)
   const [packageData, setPackageData] = useState<any>(null)
   const { user, role } = useAuth()
   const { showToast } = useToast()
@@ -296,7 +298,7 @@ export default function ProductDetailPage() {
   const effectiveMaxQty = maxQtyRule ? Math.min(product.inventoryQuantity, maxQtyRule.maxQty) : product.inventoryQuantity
 
   // Collect all offer/rule sections for collapsible area
-  const hasOffers = paymentOffers.length > 0 || productBogo.length > 0 || productQtyDiscount || productExtraCharges.length > 0 || productShipping || productTaxes.length > 0 || (minQtyRule || maxQtyRule)
+  const hasOffers = productBogo.length > 0 || productQtyDiscount || productExtraCharges.length > 0 || productShipping || productTaxes.length > 0 || (minQtyRule || maxQtyRule)
   const hasPricingInfo = (pricing && (pricing.rolePrice !== null || pricing.contractPrice !== null || pricing.seasonalDiscount > 0)) || ruleDiscount
 
   return (
@@ -393,17 +395,6 @@ export default function ProductDetailPage() {
                 {hasOffers && (
                   <CollapsibleSection title="Available Offers">
                     <div className="space-y-3">
-                      {paymentOffers.map((offer) => (
-                        <div key={offer.id} className="flex items-start gap-3 p-3 rounded-lg bg-amber-50">
-                          <span className={`px-2 py-0.5 rounded text-xs font-bold text-white flex-shrink-0 ${offer.offerType === "BANK" ? "bg-blue-600" : "bg-purple-600"}`}>
-                            {offer.offerType === "BANK" ? "BANK" : "UPI"}
-                          </span>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{offer.name}</p>
-                            <p className="text-xs text-gray-600">{getPaymentOfferLabel(offer)}</p>
-                          </div>
-                        </div>
-                      ))}
                       {productBogo.map((b, i) => (
                         <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-pink-50">
                           <Gift size={16} className="text-pink-600 flex-shrink-0 mt-0.5" />
@@ -613,6 +604,28 @@ export default function ProductDetailPage() {
                     </div>
                   )}
 
+                  {/* Bank & UPI Offers — shown directly below price, Amazon/Flipkart style */}
+                  {paymentOffers.length > 0 && !isPriceHidden && (
+                    <div className="border border-gray-100 rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                        <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Bank Offers</span>
+                        <button onClick={() => setShowOffersModal(true)} className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors">
+                          View All Offers
+                        </button>
+                      </div>
+                      <div className="p-3 space-y-2.5">
+                        {paymentOffers.slice(0, 3).map((offer) => (
+                          <BankOfferCard key={offer.id} offer={offer} />
+                        ))}
+                      </div>
+                      {paymentOffers.length > 3 && (
+                        <button onClick={() => setShowOffersModal(true)} className="w-full text-center py-2.5 text-xs font-semibold text-primary-600 hover:bg-primary-50 border-t border-gray-100 transition-colors">
+                          +{paymentOffers.length - 3} more offer{paymentOffers.length - 3 !== 1 ? "s" : ""}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Meta info */}
                   <div className="space-y-2">
                     {product.sku && <p className="body-sm">SKU: {product.sku}</p>}
@@ -658,6 +671,13 @@ export default function ProductDetailPage() {
                     </>
                   )}
 
+                  <Link
+                    href={`/bulk-orders?productId=${product.id}`}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-primary-300 text-primary-700 bg-primary-50/50 hover:bg-primary-50 hover:border-primary-400 transition-all duration-200 text-sm font-semibold"
+                  >
+                    <FileText size={16} /> Request Bulk Quote
+                  </Link>
+
                   {product.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2">{product.tags.map((tag) => <span key={tag} className="badge bg-gray-100 text-gray-600">{tag}</span>)}</div>
                   )}
@@ -701,6 +721,7 @@ export default function ProductDetailPage() {
           )}
         </main>
       </div>
+      {showOffersModal && <BankOffersModal offers={paymentOffers} onClose={() => setShowOffersModal(false)} />}
     </>
   )
 }

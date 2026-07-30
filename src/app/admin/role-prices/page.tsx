@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { Search, DollarSign, Plus, Trash2, Save, X, Eye, ChevronDown, Edit2, Check } from "lucide-react"
+import Link from "next/link"
+import { Search, DollarSign, Plus, Trash2, Save, X, Eye, ChevronDown, Edit2, Check, Users, ArrowRight, Package, Percent } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 
@@ -90,7 +91,8 @@ export default function AdminRolePricesPage() {
       const res = await fetch("/api/roles", { headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` } })
       const data = await res.json()
       const list = Array.isArray(data) ? data : data.roles ?? []
-      setRoles(list)
+      // Role-based pricing applies to purchasing (buyer-side) roles only — ADMIN is staff, not a customer segment.
+      setRoles(list.filter((r: Role) => r.name !== "ADMIN"))
     } catch (e) {
       console.error(e)
     } finally {
@@ -101,7 +103,7 @@ export default function AdminRolePricesPage() {
   const loadProducts = useCallback(async () => {
     setLoadingProducts(true)
     try {
-      const res = await fetch("/api/products?status=PUBLISHED&take=100", { headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` } })
+      const res = await fetch("/api/products?status=PUBLISHED&limit=100", { headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` } })
       const data = await res.json()
       setProducts(data.products ?? [])
     } catch (e) {
@@ -161,6 +163,12 @@ export default function AdminRolePricesPage() {
 
   const getRoleById = (roleId: string): Role | undefined => {
     return roles.find((r) => r.id === roleId)
+  }
+
+  const discountPercent = (basePrice: number, customPrice: number | undefined): number | null => {
+    if (customPrice === undefined || !basePrice) return null
+    const pct = ((basePrice - customPrice) / basePrice) * 100
+    return Math.round(pct * 10) / 10
   }
 
   const filteredProducts = products.filter((p) =>
@@ -371,6 +379,24 @@ export default function AdminRolePricesPage() {
     return <SkeletonTable rows={4} cols={5} />
   }
 
+  if (products.length === 0) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Role-Based Pricing</h1>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-12 text-center">
+          <div className="w-14 h-14 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Package size={26} className="text-gray-300 dark:text-gray-600" />
+          </div>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1.5">No products found</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Add and publish products before setting up role-based pricing.</p>
+          <Link href="/admin/products" className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition">
+            Go to Products <ArrowRight size={14} />
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -478,15 +504,26 @@ export default function AdminRolePricesPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
             </div>
           ) : roles.length === 0 ? (
-            <div className="p-12 text-center text-gray-500 dark:text-gray-400">No roles found. Create roles first.</div>
+            <div className="p-12 text-center">
+              <div className="w-14 h-14 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users size={26} className="text-gray-300 dark:text-gray-600" />
+              </div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1.5">No buyer roles found</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Create at least one buyer role before setting up role-based pricing.</p>
+              <Link href="/admin/roles" className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition">
+                Go to Role Management <ArrowRight size={14} />
+              </Link>
+            </div>
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Role</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Price</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Base Price</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Custom Price</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Discount %</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Min Qty</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Active</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Enable/Disable</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
@@ -515,7 +552,12 @@ export default function AdminRolePricesPage() {
                         </div>
                       </td>
 
-                      {/* Price */}
+                      {/* Base Price (read-only, from product) */}
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+                        {formatPrice(selectedProduct.unitPrice)}
+                      </td>
+
+                      {/* Custom Price */}
                       <td className="px-4 py-3">
                         {isEditingPrice ? (
                           <div className="flex items-center gap-1">
@@ -541,6 +583,20 @@ export default function AdminRolePricesPage() {
                             <Edit2 size={12} className="text-gray-300 dark:text-gray-600" />
                           </span>
                         )}
+                      </td>
+
+                      {/* Discount % (derived from base vs custom price) */}
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const pct = discountPercent(Number(selectedProduct.unitPrice), rp?.price)
+                          if (pct === null) return <span className="text-gray-300 dark:text-gray-600">—</span>
+                          if (pct <= 0) return <span className="text-gray-400 dark:text-gray-500">0%</span>
+                          return (
+                            <span className="inline-flex items-center gap-1 text-green-700 dark:text-green-400 font-medium">
+                              <Percent size={11} /> {pct}% off
+                            </span>
+                          )
+                        })()}
                       </td>
 
                       {/* Min Qty */}

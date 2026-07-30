@@ -51,41 +51,45 @@ export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridPr
   const lgCols = GRID_MAP[columns] || "lg:grid-cols-4"
 
   return (
-    <section className="section-padding-tight bg-gray-50/50">
+    <section className="section-padding-tight bg-gray-50/60">
       <div className="section-container">
         <div className="section-header">
           <div>
+            <span className="eyebrow">Industries</span>
             <h2 className="heading-lg">Shop by Category</h2>
-            <p className="body-sm mt-1">Browse products by industry</p>
+            <p className="body-sm mt-1.5">Browse products by industry</p>
           </div>
-          <Link href="/categories" className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors">
+          <Link href="/categories" className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-primary-600 hover:text-primary-700 hover:bg-white transition-all duration-200">
             All Categories <ArrowRight size={16} />
           </Link>
         </div>
-        <div className={`grid grid-cols-2 ${smCols} ${lgCols} gap-3`}>
+        <div className={`grid grid-cols-2 ${smCols} ${lgCols} gap-4 sm:gap-5`}>
           {categories.slice(0, columns * 2).map((cat, i) => (
             <Link
               key={cat.id}
               href={`/categories/${cat.handle}`}
-              className="group card-base overflow-hidden"
+              className="group card-base overflow-hidden bg-white"
             >
-              <div className="h-36 sm:h-44 relative overflow-hidden">
+              <div className="h-40 sm:h-48 relative overflow-hidden">
                 {cat.image ? (
-                  <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" />
                 ) : (
                   <div className={`w-full h-full bg-gradient-to-br ${COLORS[i % COLORS.length]} flex items-center justify-center`}>
                     <Package size={44} className="text-white/70" />
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                <div className="absolute bottom-3 left-4 right-4">
-                  <span className="text-white font-bold text-base drop-shadow-md">{cat.name}</span>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-transparent" />
+                <div className="absolute bottom-3.5 left-4 right-4 flex items-end justify-between gap-2">
+                  <span className="text-white font-bold text-lg tracking-tight drop-shadow-md leading-tight">{cat.name}</span>
+                  <span className="flex-shrink-0 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm border border-white/25 flex items-center justify-center text-white opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                    <ArrowRight size={14} />
+                  </span>
                 </div>
               </div>
               <div className="p-3.5 flex items-center justify-between">
                 <h3 className="font-semibold text-gray-900 text-sm group-hover:text-primary-600 transition-colors">{cat.name}</h3>
                 {cat._count && (
-                  <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">{cat._count.products} products</span>
+                  <span className="text-[11px] font-semibold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full">{cat._count.products} products</span>
                 )}
               </div>
             </Link>

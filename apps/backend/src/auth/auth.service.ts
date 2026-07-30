@@ -53,13 +53,20 @@ export class AuthService {
     // Determine role: roleId takes precedence, fall back to enum role → BUYER default
     let roleEnum: UserRole = registerDto.role || UserRole.BUYER;
     let roleId: string | null = registerDto.roleId || null;
+    let resolvedRoleName: string = roleEnum;
 
-    // If roleId provided, look up the enum value; otherwise resolve from enum role
+    // If roleId provided, look up the enum value; otherwise resolve from enum role.
+    // Dynamic roles beyond the legacy UserRole enum (e.g. Dealer, Wholesaler) can't be
+    // written to the `role` column — keep the BUYER default for those and rely on
+    // roleId/roleRel as the authoritative source, as done everywhere else.
     if (roleId) {
       try {
         const roleRecord = await this.prisma.role.findUnique({ where: { id: roleId } });
         if (roleRecord) {
-          roleEnum = roleRecord.name as UserRole;
+          resolvedRoleName = roleRecord.name;
+          if ((Object.values(UserRole) as string[]).includes(roleRecord.name)) {
+            roleEnum = roleRecord.name as UserRole;
+          }
         } else {
           roleId = null;
         }
@@ -99,7 +106,7 @@ export class AuthService {
     });
 
     // If user selected a non-BUYER role, create a role change request for admin approval
-    if (roleEnum !== UserRole.BUYER && roleId) {
+    if (resolvedRoleName !== UserRole.BUYER && roleId) {
       try {
         await this.prisma.roleChangeRequest.create({
           data: {

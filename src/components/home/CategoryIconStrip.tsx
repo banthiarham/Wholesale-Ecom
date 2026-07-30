@@ -67,20 +67,27 @@ export default function CategoryIconStrip() {
   }
 
   return (
-    <section className="py-4 lg:py-5 border-b border-gray-100">
+    <section className="py-7 lg:py-9 border-b border-gray-100">
       <div className="section-container">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Browse Categories</h2>
-          <div className="hidden sm:flex gap-1.5">
-            <button onClick={() => scroll(-1)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-300 transition-colors">
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            <span className="eyebrow">Explore</span>
+            <h2 className="heading-md">Browse Categories</h2>
+          </div>
+          <div className="hidden sm:flex gap-2">
+            <button onClick={() => scroll(-1)} className="w-9 h-9 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-300 hover:shadow-md transition-all duration-200" aria-label="Scroll left">
               <ChevronLeft size={16} />
             </button>
-            <button onClick={() => scroll(1)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-300 transition-colors">
+            <button onClick={() => scroll(1)} className="w-9 h-9 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-300 hover:shadow-md transition-all duration-200" aria-label="Scroll right">
               <ChevronRight size={16} />
             </button>
           </div>
         </div>
-        <div ref={scrollRef} className="flex gap-5 overflow-x-auto pb-2 scrollbar-hide scroll-smooth">
+        <div
+          ref={scrollRef}
+          className="flex gap-6 overflow-x-auto pb-2 scrollbar-hide scroll-smooth"
+          style={{ WebkitMaskImage: "linear-gradient(to right, transparent 0, black 24px, black calc(100% - 24px), transparent 100%)", maskImage: "linear-gradient(to right, transparent 0, black 24px, black calc(100% - 24px), transparent 100%)" }}
+        >
           {categories.map((cat, i) => {
             const Icon = CATEGORY_ICONS[cat.handle] || CATEGORY_ICONS[cat.name.toLowerCase()] || Monitor
             const colorClass = COLORS[i % COLORS.length]
@@ -88,16 +95,18 @@ export default function CategoryIconStrip() {
               <Link
                 key={cat.id}
                 href={`/categories/${cat.handle}`}
-                className="flex flex-col items-center gap-2.5 min-w-[85px] group"
+                className="flex flex-col items-center gap-3 min-w-[88px] group"
               >
-                <div className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl flex items-center justify-center transition-all duration-200 shadow-sm ${colorClass}`}>
+                <div
+                  className={`w-16 h-16 sm:w-[76px] sm:h-[76px] rounded-2xl flex items-center justify-center shadow-sm group-hover:shadow-lg transition-all duration-300 group-hover:-translate-y-1 ${colorClass}`}
+                >
                   {cat.image ? (
                     <img src={cat.image} alt={cat.name} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
                   ) : (
                     <Icon size={28} />
                   )}
                 </div>
-                <span className="text-xs sm:text-sm font-medium text-gray-600 group-hover:text-primary-600 transition-colors text-center leading-tight max-w-[85px]">
+                <span className="text-xs sm:text-sm font-medium text-gray-600 group-hover:text-primary-600 transition-colors text-center leading-tight max-w-[88px]">
                   {cat.name}
                 </span>
               </Link>

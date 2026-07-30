@@ -3,16 +3,20 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { adjustColor, generateShades, hexToRgb } from "./color-utils"
 
+// Self-hosted via next/font in layout.tsx (zero layout shift) — anything outside this set
+// is fetched at runtime from Google Fonts when an admin picks it in settings.
+const SELF_HOSTED_FONTS = new Set(["Inter", "Poppins", "Open Sans"])
+
 const DEFAULTS: Record<string, string> = {
   siteName: "WholesaleX Pro",
   tagline: "B2B Wholesale E-Commerce Platform",
   logoUrl: "",
   faviconUrl: "",
-  primaryColor: "#3b82f6",
-  secondaryColor: "#64748b",
+  primaryColor: "#0369a1",
+  secondaryColor: "#0f172a",
   accentColor: "#f59e0b",
-  headingFont: "Inter",
-  bodyFont: "Inter",
+  headingFont: "Poppins",
+  bodyFont: "Open Sans",
   headingFontSize: "36",
   bodyFontSize: "16",
   heroBannerUrl: "",
@@ -108,12 +112,14 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
 
     const headingFont = settings.headingFont || DEFAULTS.headingFont
     const bodyFont = settings.bodyFont || DEFAULTS.bodyFont
-    const fonts = Array.from(new Set([headingFont, bodyFont])).filter((f) => f !== "Inter")
+    // Inter/Poppins/Open Sans are self-hosted via next/font in layout.tsx (zero layout shift) — only
+    // fetch a dynamic Google Fonts stylesheet for fonts an admin picks outside that set.
+    const fonts = Array.from(new Set([headingFont, bodyFont])).filter((f) => !SELF_HOSTED_FONTS.has(f))
     if (fonts.length > 0) {
       loadGoogleFonts(fonts)
     }
-    root.style.setProperty("--font-heading", headingFont === "Inter" ? "Inter, sans-serif" : `'${headingFont}', sans-serif`)
-    root.style.setProperty("--font-body", bodyFont === "Inter" ? "Inter, sans-serif" : `'${bodyFont}', sans-serif`)
+    root.style.setProperty("--font-heading", `'${headingFont}', sans-serif`)
+    root.style.setProperty("--font-body", `'${bodyFont}', sans-serif`)
   }, [settings, loaded, mounted])
 
   return (

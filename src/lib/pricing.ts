@@ -153,3 +153,36 @@ export function formatUpiApp(app: string | null): string {
 function formatDiscountPrice(val: number): string {
   return "₹" + val.toLocaleString("en-IN")
 }
+
+export interface CartItemForOffers {
+  productId: string
+  categoryId?: string | null
+}
+
+// Client-side mirror of the eligibility check used for display only — the server
+// re-validates authoritatively when the order is actually placed (see orders.service.ts).
+export function checkOfferEligibility(
+  offer: PaymentOffer,
+  cartItems: CartItemForOffers[],
+  cartSubtotal: number
+): { eligible: boolean; reason?: string } {
+  const productIds = new Set(cartItems.map((i) => i.productId))
+  const categoryIds = new Set(cartItems.map((i) => i.categoryId).filter(Boolean))
+
+  if (offer.productId && !productIds.has(offer.productId)) {
+    return { eligible: false, reason: "Not applicable to the items in your cart" }
+  }
+  if (offer.categoryId && !categoryIds.has(offer.categoryId)) {
+    return { eligible: false, reason: "Not applicable to the items in your cart" }
+  }
+  if (offer.minOrderValue && cartSubtotal < Number(offer.minOrderValue)) {
+    return { eligible: false, reason: `Minimum order value ${formatDiscountPrice(Number(offer.minOrderValue))} required` }
+  }
+  return { eligible: true }
+}
+
+export function calcOfferDiscount(offer: PaymentOffer, amount: number): number {
+  let discount = offer.type === "PERCENTAGE" ? (amount * offer.value) / 100 : offer.value
+  if (offer.maxDiscount) discount = Math.min(discount, Number(offer.maxDiscount))
+  return Math.min(discount, amount)
+}

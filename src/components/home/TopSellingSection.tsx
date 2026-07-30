@@ -11,6 +11,7 @@ import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount } from "@/
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
 import { ProductCard } from "@/components/ui/ProductCard"
+import { ProductCarousel } from "@/components/ui/ProductCarousel"
 
 interface Product {
   id: string
@@ -112,28 +113,28 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
 
   if (visibleProducts.length === 0) return null
 
-  // Few products don't need a horizontal-scroll carousel — a filling grid uses the
-  // container width instead of leaving dead space to the right of a short row.
-  const useGrid = visibleProducts.length <= 4
-
   return (
     <section className="section-padding-tight">
       <div className="section-container">
-        <div className="section-header">
-          <div>
-            <h2 className="heading-lg">{title}</h2>
-            <p className="body-sm mt-1">Handpicked products at wholesale prices</p>
+        {/* Small extra inset (on top of section-container's own padding) so the
+            row never reads as edge-to-edge — lands at ~24-32px total per side. */}
+        <div className="px-2">
+          <div className="section-header">
+            <div>
+              <span className="eyebrow">Top Selling</span>
+              <h2 className="heading-lg">{title}</h2>
+              <p className="body-sm mt-1.5">Handpicked products at wholesale prices</p>
+            </div>
+            {categoryHandle && (
+              <Link href={`/categories/${categoryHandle}`} className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-primary-600 hover:text-primary-700 hover:bg-primary-50 transition-all duration-200">
+                View All <ArrowRight size={16} />
+              </Link>
+            )}
           </div>
-          {categoryHandle && (
-            <Link href={`/categories/${categoryHandle}`} className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors">
-              View All <ArrowRight size={16} />
-            </Link>
-          )}
-        </div>
-        <div className={useGrid ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3" : "flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory"}>
-          {visibleProducts.map((product) => (
-            <div key={product.id} className={useGrid ? "" : "w-[220px] sm:w-[240px] lg:w-[260px] snap-start flex-shrink-0"}>
+          <ProductCarousel
+            items={visibleProducts.map((product) => (
               <ProductCard
+                key={product.id}
                 product={{ ...product, thumbnail: product.thumbnail || product.images?.[0] || null }}
                 view="grid"
                 isPriceHidden={hiddenPriceProductIds.has(product.id)}
@@ -146,12 +147,12 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
                 isAdding={addingId === product.id}
                 onAddToCart={handleAddToCart}
               />
-            </div>
-          ))}
+            ))}
+          />
+          <Link href={`/categories/${categoryHandle || ""}`} className="sm:hidden flex items-center justify-center gap-1.5 text-primary-600 font-semibold mt-5 text-sm">
+            View All Products <ArrowRight size={16} />
+          </Link>
         </div>
-        <Link href={`/categories/${categoryHandle || ""}`} className="sm:hidden flex items-center justify-center gap-1.5 text-primary-600 font-semibold mt-4 text-sm">
-          View All Products <ArrowRight size={16} />
-        </Link>
       </div>
     </section>
   )

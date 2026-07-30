@@ -18,6 +18,26 @@ export class WalletService {
     return wallet;
   }
 
+  async findOrCreateByUserId(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const existing = await this.prisma.wallet.findUnique({
+      where: { userId },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+      },
+    });
+    if (existing) return existing;
+
+    return this.prisma.wallet.create({
+      data: { userId, balance: 0, creditLimit: 0 },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+      },
+    });
+  }
+
   async findAll() {
     return this.prisma.wallet.findMany({
       include: {

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRuleDto } from './dto/create-rule.dto';
 import { UpdateRuleDto } from './dto/update-rule.dto';
@@ -32,6 +32,13 @@ export class RulesService {
   async create(dto: CreateRuleDto, userId?: string, userEmail?: string) {
     // Validate conditions/actions against the rule type
     await validateRuleConditionsActions(dto.type, dto.conditions, dto.actions);
+
+    const duplicate = await this.prisma.dynamicRule.findFirst({
+      where: { name: { equals: dto.name, mode: 'insensitive' } },
+    });
+    if (duplicate) {
+      throw new ConflictException(`A rule named "${dto.name}" already exists`);
+    }
 
     const data: any = {
       name: dto.name,
@@ -68,6 +75,15 @@ export class RulesService {
     const effectiveConditions = dto.conditions !== undefined ? dto.conditions : existing.conditions;
     const effectiveActions = dto.actions !== undefined ? dto.actions : existing.actions;
     await validateRuleConditionsActions(effectiveType as any, effectiveConditions, effectiveActions);
+
+    if (dto.name !== undefined && dto.name.toLowerCase() !== existing.name.toLowerCase()) {
+      const duplicate = await this.prisma.dynamicRule.findFirst({
+        where: { name: { equals: dto.name, mode: 'insensitive' }, id: { not: id } },
+      });
+      if (duplicate) {
+        throw new ConflictException(`A rule named "${dto.name}" already exists`);
+      }
+    }
 
     const data: any = { updatedBy: userId || null };
     if (dto.name !== undefined) data.name = dto.name;

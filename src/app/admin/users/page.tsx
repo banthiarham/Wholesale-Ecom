@@ -149,11 +149,28 @@ export default function AdminUsersPage() {
     setAddError("")
   }
 
+  const friendlyAddUserError = (errData: { message?: string | string[] }): string => {
+    const raw = errData?.message
+    if (Array.isArray(raw)) {
+      // Raw class-validator messages should never reach the UI as-is.
+      if (raw.some((m) => /email/i.test(m))) return "Please enter a valid email address"
+      if (raw.some((m) => /role/i.test(m))) return "Invalid role selected"
+      if (raw.some((m) => /firstName|lastName|should not exist/i.test(m))) return "Please fill all required fields"
+      return "Please fill all required fields"
+    }
+    if (typeof raw === "string") {
+      if (/email/i.test(raw) && /(already|exists|registered)/i.test(raw)) return "Email already exists"
+      if (/role/i.test(raw)) return "Invalid role selected"
+      return raw
+    }
+    return "Failed to create user"
+  }
+
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault()
     setAddError("")
     if (!addForm.email.trim() || !addForm.firstName.trim() || !addForm.lastName.trim()) {
-      setAddError("Email, first name, and last name are required.")
+      setAddError("Please fill all required fields")
       return
     }
     setAddSubmitting(true)
@@ -180,7 +197,7 @@ export default function AdminUsersPage() {
       })
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.message || "Failed to create user")
+        throw new Error(friendlyAddUserError(errData))
       }
       setShowAddModal(false)
       resetAddForm()

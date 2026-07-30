@@ -59,6 +59,19 @@ export class WalletController {
     return { wallets };
   }
 
+  @Post('ensure/:userId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get or create a wallet for a user (Admin) — used before the first top-up/deduct for a user with no wallet yet' })
+  @ApiParam({ name: 'userId', description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'Wallet found or created' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async ensureWallet(@Param('userId') userId: string) {
+    const wallet = await this.walletService.findOrCreateByUserId(userId);
+    return { wallet };
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

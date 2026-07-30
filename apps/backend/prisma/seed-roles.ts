@@ -10,6 +10,17 @@ const SYSTEM_ROLES = [
   { name: 'ADMIN', label: 'Admin', description: 'System administrator — full access to everything', color: '#EF4444', icon: 'shield' },
 ];
 
+// Additional requestable buyer-tier roles — editable/deletable by admin (not system roles),
+// selectable via the Role Change Request flow for role-based pricing tiers.
+const REQUESTABLE_ROLES = [
+  { name: 'DEALER', label: 'Dealer', description: 'Dealer role — access to dealer-level pricing', color: '#0EA5E9', icon: 'handshake' },
+  { name: 'RETAILER', label: 'Retailer', description: 'Retailer role — access to retailer-level pricing', color: '#10B981', icon: 'store' },
+  { name: 'PREMIUM_BUYER', label: 'Premium Buyer', description: 'Premium buyer role — access to premium pricing and perks', color: '#A855F7', icon: 'crown' },
+  { name: 'ENTERPRISE_BUYER', label: 'Enterprise Buyer', description: 'Enterprise buyer role — access to enterprise-level pricing', color: '#6366F1', icon: 'building' },
+  { name: 'RESELLER', label: 'Reseller', description: 'Reseller role — access to reseller-level pricing', color: '#F97316', icon: 'repeat' },
+  { name: 'WHOLESALER', label: 'Wholesaler', description: 'Wholesaler role — access to wholesale-level pricing', color: '#EAB308', icon: 'boxes' },
+];
+
 // Base permission definitions: action:resource
 const BASE_PERMISSIONS = [
   // Buyer permissions
@@ -74,6 +85,14 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'manage:notifications', 'manage:payments', 'manage:loyalty',
     'read:products', 'read:orders', 'write:orders', 'read:cart', 'write:cart',
   ],
+  // Requestable buyer-tier roles start with the same base permissions as BUYER;
+  // admins can customize further per-role via the Role Management UI.
+  DEALER: ['read:products', 'read:orders', 'write:orders', 'read:cart', 'write:cart', 'write:reviews', 'read:rfqs', 'write:rfqs', 'read:quotes'],
+  RETAILER: ['read:products', 'read:orders', 'write:orders', 'read:cart', 'write:cart', 'write:reviews', 'read:rfqs', 'write:rfqs', 'read:quotes'],
+  PREMIUM_BUYER: ['read:products', 'read:orders', 'write:orders', 'read:cart', 'write:cart', 'write:reviews', 'read:rfqs', 'write:rfqs', 'read:quotes'],
+  ENTERPRISE_BUYER: ['read:products', 'read:orders', 'write:orders', 'read:cart', 'write:cart', 'write:reviews', 'read:rfqs', 'write:rfqs', 'read:quotes'],
+  RESELLER: ['read:products', 'read:orders', 'write:orders', 'read:cart', 'write:cart', 'write:reviews', 'read:rfqs', 'write:rfqs', 'read:quotes'],
+  WHOLESALER: ['read:products', 'read:orders', 'write:orders', 'read:cart', 'write:cart', 'write:reviews', 'read:rfqs', 'write:rfqs', 'read:quotes'],
 };
 
 async function main() {
@@ -114,6 +133,24 @@ async function main() {
     roleMap[roleDef.name] = record.id;
   }
   console.log(`✅ Created ${Object.keys(roleMap).length} system roles`);
+
+  // 2b. Create additional requestable (non-system) roles
+  for (const roleDef of REQUESTABLE_ROLES) {
+    const record = await prisma.role.upsert({
+      where: { name: roleDef.name },
+      update: {},
+      create: {
+        name: roleDef.name,
+        label: roleDef.label,
+        description: roleDef.description,
+        isSystem: false,
+        color: roleDef.color,
+        icon: roleDef.icon,
+      },
+    });
+    roleMap[roleDef.name] = record.id;
+  }
+  console.log(`✅ Created ${REQUESTABLE_ROLES.length} requestable roles`);
 
   // 3. Assign permissions to roles
   for (const [roleName, permKeys] of Object.entries(ROLE_PERMISSIONS)) {

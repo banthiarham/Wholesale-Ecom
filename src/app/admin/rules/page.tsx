@@ -82,14 +82,90 @@ type RuleForm = {
   endDate: string
 }
 
+// Several action selects (discountType, shippingType, chargeType) show a visual
+// default via value={x || "DEFAULT"} without the user touching them. If that default
+// isn't also written into form state, a visually-complete form still submits with the
+// field missing, which the backend correctly rejects as a required-field validation
+// error. These defaults keep the displayed value and the submitted value in sync.
+const defaultsForType = (type: string): { conditions: Record<string, any>; actions: Record<string, any> } => {
+  switch (type) {
+    case "PRODUCT_DISCOUNT":
+    case "CART_DISCOUNT":
+    case "PAYMENT_METHOD_DISCOUNT":
+      return { conditions: {}, actions: { discountType: "PERCENTAGE" } }
+    case "SHIPPING_RULE":
+      return { conditions: {}, actions: { shippingType: "FREE" } }
+    case "EXTRA_CHARGE":
+      return { conditions: {}, actions: { chargeType: "FLAT" } }
+    default:
+      return { conditions: {}, actions: {} }
+  }
+}
+
+// Required conditions/actions fields per rule type, mirroring the backend's
+// type-specific validation DTOs (rule-conditions.dto.ts / rule-actions.dto.ts).
+// Fields not listed here are optional for that type.
+const REQUIRED_FIELDS: Record<string, { path: "conditions" | "actions"; key: string; label: string }[]> = {
+  PRODUCT_DISCOUNT: [
+    { path: "actions", key: "discountType", label: "Discount Type" },
+    { path: "actions", key: "discountValue", label: "Discount Value" },
+  ],
+  CART_DISCOUNT: [
+    { path: "actions", key: "discountType", label: "Discount Type" },
+    { path: "actions", key: "discountValue", label: "Discount Value" },
+  ],
+  PAYMENT_METHOD_DISCOUNT: [
+    { path: "conditions", key: "paymentMethod", label: "Payment Method" },
+    { path: "actions", key: "discountType", label: "Discount Type" },
+    { path: "actions", key: "discountValue", label: "Discount Value" },
+  ],
+  REQUIRED_QTY_FOR_PAYMENT_METHOD: [
+    { path: "conditions", key: "paymentMethod", label: "Payment Method" },
+    { path: "conditions", key: "minQty", label: "Min Quantity Required" },
+  ],
+  BOGO: [
+    { path: "conditions", key: "buyProductId", label: "Buy Product" },
+    { path: "conditions", key: "buyQuantity", label: "Buy Quantity" },
+    { path: "actions", key: "freeProductId", label: "Get Free Product" },
+  ],
+  BUY_X_AND_Y_FREE: [
+    { path: "conditions", key: "buyProductId", label: "Buy Product" },
+    { path: "conditions", key: "buyQuantity", label: "Buy Quantity" },
+    { path: "actions", key: "freeProductId", label: "Get Free Product" },
+  ],
+  SHIPPING_RULE: [{ path: "actions", key: "shippingType", label: "Shipping Type" }],
+  MINIMUM_ORDER_QUANTITY: [{ path: "actions", key: "minQty", label: "Min Quantity" }],
+  TAX_RULE: [{ path: "actions", key: "taxRate", label: "Tax Rate" }],
+  EXTRA_CHARGE: [
+    { path: "actions", key: "chargeType", label: "Charge Type" },
+    { path: "actions", key: "chargeValue", label: "Charge Value" },
+  ],
+  MAXIMUM_ORDER_QUANTITY: [{ path: "actions", key: "maxQty", label: "Max Quantity" }],
+}
+
+function validateRuleForm(form: RuleForm): string[] {
+  const errors: string[] = []
+  if (!form.name.trim()) errors.push("Rule Name is required")
+
+  for (const f of REQUIRED_FIELDS[form.type] || []) {
+    const val = form[f.path]?.[f.key]
+    if (val === undefined || val === null || val === "") errors.push(`${f.label} is required`)
+  }
+
+  if (form.type === "QUANTITY_BASED_DISCOUNT" && (!form.actions.tiers || form.actions.tiers.length === 0)) {
+    errors.push("At least one discount tier is required")
+  }
+
+  return errors
+}
+
 const emptyForm = (): RuleForm => ({
   name: "",
   type: "PRODUCT_DISCOUNT",
   description: "",
   priority: "0",
   isActive: true,
-  conditions: {},
-  actions: {},
+  ...defaultsForType("PRODUCT_DISCOUNT"),
   startDate: "",
   endDate: "",
 })
@@ -515,6 +591,15 @@ export default function AdminRulesPage() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<RuleForm>(emptyForm())
   const [filterType, setFilterType] = useState("")
+  const [formErrors, setFormErrors] = useState<string[]>([])
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null)
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   const getAuthHeaders = (): Record<string, string> => {
     const t = typeof window !== "undefined" ? localStorage.getItem("token") : null
@@ -588,7 +673,7 @@ export default function AdminRulesPage() {
     } catch (e) { console.error(e) }
   }
 
-  const resetForm = () => { setForm(emptyForm()); setEditing(null); setShowForm(false) }
+  const resetForm = () => { setForm(emptyForm()); setEditing(null); setShowForm(false); setFormErrors([]) }
 
   const openEdit = (r: DynamicRule) => {
     setEditing(r)
@@ -608,9 +693,17 @@ export default function AdminRulesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormErrors([])
+
+    const clientErrors = validateRuleForm(form)
+    if (clientErrors.length > 0) {
+      setFormErrors(clientErrors)
+      return
+    }
+
     const t = typeof window !== "undefined" ? localStorage.getItem("token") : null
     if (!t) {
-      alert("Your session has expired. Please log in again.")
+      setToast({ type: "error", message: "Your session has expired. Please log in again." })
       window.location.href = "/login"
       return
     }
@@ -632,13 +725,25 @@ export default function AdminRulesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
-      if (res.ok) { resetForm(); loadRules() }
-      else {
+      if (res.ok) {
+        setToast({ type: "success", message: editing ? "Rule updated successfully" : "Rule created successfully" })
+        resetForm()
+        loadRules()
+      } else {
         let msg = "Failed to save rule"
-        try { const d = await res.json(); msg = d.message || msg } catch {}
-        alert(msg)
+        try {
+          const d = await res.json()
+          msg = Array.isArray(d.message) ? d.message.join("; ") : d.message || msg
+        } catch {}
+        setFormErrors([msg])
+        setToast({ type: "error", message: res.status === 409 ? "Duplicate rule" : "Failed to save rule" })
       }
-    } catch (e) { console.error(e); alert(e instanceof Error ? e.message : "Failed to save") } finally { setSaving(false) }
+    } catch (e) {
+      console.error(e)
+      setFormErrors([e instanceof Error ? e.message : "Failed to save rule"])
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -681,9 +786,18 @@ export default function AdminRulesPage() {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editing ? "Edit Rule" : "Add Dynamic Rule"}</h2>
             <button onClick={resetForm} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={20} /></button>
           </div>
+
+          {formErrors.length > 0 && (
+            <div className="mb-4 p-3 rounded-lg text-sm bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800">
+              <ul className="list-disc list-inside space-y-0.5">
+                {formErrors.map((err, i) => <li key={i}>{err}</li>)}
+              </ul>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <input required placeholder="Rule Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, conditions: {}, actions: {} })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, ...defaultsForType(e.target.value) })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
               {RULE_TYPES.map((rt) => <option key={rt.value} value={rt.value}>{rt.label}</option>)}
             </select>
             <input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
@@ -743,6 +857,18 @@ export default function AdminRulesPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div
+            className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+              toast.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"
+            }`}
+          >
+            {toast.message}
+          </div>
         </div>
       )}
     </div>

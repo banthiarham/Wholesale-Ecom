@@ -24,6 +24,18 @@ interface CreditInfo {
   limitReached: boolean
 }
 
+interface EligibleUser {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  role: string
+}
+
+// Wallets are a business-account feature (store credit / prepay for B2B purchases),
+// not something internal admin accounts hold — matches how /roles/public excludes ADMIN.
+const WALLET_ELIGIBLE_ROLES = ["BUYER", "VENDOR", "DISTRIBUTOR"]
+
 interface Transaction {
   id: string
   walletId: string
@@ -48,6 +60,8 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function AdminWalletPage() {
   const [wallets, setWallets] = useState<WalletData[]>([])
+  const [eligibleUsers, setEligibleUsers] = useState<EligibleUser[]>([])
+  const [usersError, setUsersError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [showTopup, setShowTopup] = useState(false)
@@ -63,7 +77,7 @@ export default function AdminWalletPage() {
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
-  useEffect(() => { loadWallets() }, [token])
+  useEffect(() => { loadWallets(); loadEligibleUsers() }, [token])
 
   const loadWallets = async () => {
     setLoading(true)
@@ -72,6 +86,27 @@ export default function AdminWalletPage() {
       const data = await res.json()
       setWallets(data.wallets ?? [])
     } catch (e) { console.error(e) } finally { setLoading(false) }
+  }
+
+  const loadEligibleUsers = async () => {
+    try {
+      // take=1000 to avoid the default page-size cap silently truncating the list —
+      // this dropdown must show every eligible user, not just the first page.
+      const res = await fetch("/api/users?take=1000", { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) {
+        setUsersError("Unable to load users right now. Please try again later.")
+        setEligibleUsers([])
+        return
+      }
+      const data = await res.json()
+      const users: EligibleUser[] = (data.users ?? []).filter((u: EligibleUser) => WALLET_ELIGIBLE_ROLES.includes(u.role))
+      setEligibleUsers(users)
+      setUsersError(null)
+    } catch (e) {
+      console.error(e)
+      setUsersError("Unable to load users right now. Please try again later.")
+      setEligibleUsers([])
+    }
   }
 
   const loadTransactions = async (walletId: string) => {
@@ -121,10 +156,28 @@ export default function AdminWalletPage() {
     return w?.id
   }
 
+  // A selected user may never have had a wallet before (no top-up/deduct has ever
+  // happened for them) — create one on demand rather than dead-ending the flow.
+  const ensureWalletIdForUser = async (userId: string): Promise<string | null> => {
+    const existing = getWalletIdForUser(userId)
+    if (existing) return existing
+    try {
+      const res = await fetch(`/api/wallets/ensure/${userId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return data.wallet?.id ?? null
+    } catch {
+      return null
+    }
+  }
+
   const handleTopup = async () => {
     setSaving(true)
-    const walletId = getWalletIdForUser(form.userId)
-    if (!walletId) { alert("Wallet not found for this user"); setSaving(false); return }
+    const walletId = await ensureWalletIdForUser(form.userId)
+    if (!walletId) { alert("Could not create or find a wallet for this user"); setSaving(false); return }
     try {
       const res = await fetch("/api/wallets/credit", {
         method: "POST",
@@ -138,8 +191,8 @@ export default function AdminWalletPage() {
 
   const handleDeduct = async () => {
     setSaving(true)
-    const walletId = getWalletIdForUser(form.userId)
-    if (!walletId) { alert("Wallet not found for this user"); setSaving(false); return }
+    const walletId = await ensureWalletIdForUser(form.userId)
+    if (!walletId) { alert("Could not create or find a wallet for this user"); setSaving(false); return }
     try {
       const res = await fetch("/api/wallets/debit", {
         method: "POST",
@@ -222,10 +275,22 @@ export default function AdminWalletPage() {
             <button onClick={resetForm} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"><X size={20} /></button>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); showTopup ? handleTopup() : handleDeduct() }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <select required value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">Select user</option>
-              {wallets.map((w) => <option key={w.userId} value={w.userId}>{w.user?.firstName} {w.user?.lastName} ({w.user?.email})</option>)}
-            </select>
+            {usersError ? (
+              <div className="px-3 py-2 rounded-lg text-sm bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800">
+                {usersError}
+              </div>
+            ) : eligibleUsers.length === 0 ? (
+              <div className="px-3 py-2 rounded-lg text-sm bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 text-center">
+                No users found
+              </div>
+            ) : (
+              <select required value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">Select user</option>
+                {eligibleUsers.map((u) => (
+                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName} — {u.email} ({u.role})</option>
+                ))}
+              </select>
+            )}
             <input required type="number" step="0.01" min="0.01" placeholder="Amount (₹)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <div className="flex gap-3">

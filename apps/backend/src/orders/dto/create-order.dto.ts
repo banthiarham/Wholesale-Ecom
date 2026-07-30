@@ -73,4 +73,9 @@ export class CreateOrderDto {
   @IsString()
   @IsOptional()
   couponCode?: string;
+
+  @ApiPropertyOptional({ description: 'Selected bank/UPI payment offer to apply — re-validated server-side' })
+  @IsString()
+  @IsOptional()
+  bankOfferId?: string;
 }

@@ -1,4 +1,5 @@
-import { validateOrReject } from 'class-validator';
+import { BadRequestException } from '@nestjs/common';
+import { validateOrReject, ValidationError } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { DynamicRuleType } from '@prisma/client';
 
@@ -100,9 +101,29 @@ const ACTIONS_MAP: Record<DynamicRuleType, any> = {
 };
 
 /**
+ * Flattens class-validator's ValidationError tree (including nested errors from
+ * @ValidateNested, e.g. QUANTITY_BASED_DISCOUNT's tiers array) into readable messages.
+ */
+function formatValidationErrors(errors: ValidationError[]): string {
+  const messages: string[] = [];
+  for (const err of errors) {
+    if (err.constraints) {
+      messages.push(...Object.values(err.constraints));
+    }
+    if (err.children && err.children.length > 0) {
+      messages.push(formatValidationErrors(err.children));
+    }
+  }
+  return messages.join('; ');
+}
+
+/**
  * Validates rule conditions and actions against their type-specific DTOs.
- * Throws an array of validation errors if the conditions/actions don't match
- * the expected shape for the given rule type.
+ * Throws a BadRequestException (400) — not a raw ValidationError[] — if the
+ * conditions/actions don't match the expected shape for the given rule type.
+ * validateOrReject rejects with a plain ValidationError[] rather than an
+ * HttpException, which NestJS's exception filter can't interpret and falls
+ * back to a 500; this converts it into a proper, readable 400 response.
  */
 export async function validateRuleConditionsActions(
   type: DynamicRuleType,
@@ -114,17 +135,29 @@ export async function validateRuleConditionsActions(
 
   if (CondClass && conditions) {
     const instance = plainToInstance(CondClass, conditions);
-    await validateOrReject(instance, {
-      whitelist: true,
-      forbidNonWhitelisted: false, // allow extra fields for forward-compat
-    });
+    try {
+      await validateOrReject(instance, {
+        whitelist: true,
+        forbidNonWhitelisted: false, // allow extra fields for forward-compat
+      });
+    } catch (errors) {
+      throw new BadRequestException(
+        `Invalid conditions for rule type "${type}": ${formatValidationErrors(errors as ValidationError[])}`,
+      );
+    }
   }
 
   if (ActClass && actions) {
     const instance = plainToInstance(ActClass, actions);
-    await validateOrReject(instance, {
-      whitelist: true,
-      forbidNonWhitelisted: false,
-    });
+    try {
+      await validateOrReject(instance, {
+        whitelist: true,
+        forbidNonWhitelisted: false,
+      });
+    } catch (errors) {
+      throw new BadRequestException(
+        `Invalid actions for rule type "${type}": ${formatValidationErrors(errors as ValidationError[])}`,
+      );
+    }
   }
 }

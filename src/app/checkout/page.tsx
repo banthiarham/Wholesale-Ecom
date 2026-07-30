@@ -3,12 +3,14 @@
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck, ShoppingCart } from "lucide-react"
+import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck, ShoppingCart, Landmark } from "lucide-react"
 import { formatPrice, getCartSessionId, COUNTRIES } from "@/lib/utils"
 import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
 import { useStorefrontRules } from "@/lib/rules"
 import { useToast } from "@/components/ui/Toast"
 import { EmptyState } from "@/components/ui/EmptyState"
+import { PaymentOffer, fetchPaymentOffers, checkOfferEligibility, calcOfferDiscount } from "@/lib/pricing"
+import { BankOfferCard } from "@/components/ui/BankOffers"
 
 interface CartItem {
   id: string; quantity: number; unitPrice: number;
@@ -88,6 +90,8 @@ export default function CheckoutPage() {
   const [usePoints, setUsePoints] = useState(false)
   const [pointsToRedeem, setPointsToRedeem] = useState(0)
   const [pointsRedeeming, setPointsRedeeming] = useState(false)
+  const [bankOffers, setBankOffers] = useState<PaymentOffer[]>([])
+  const [selectedBankOfferId, setSelectedBankOfferId] = useState<string | null>(null)
   const { showToast } = useToast()
 
   // Evaluate dynamic rules for checkout
@@ -158,6 +162,8 @@ export default function CheckoutPage() {
         .then((data) => { if (data?.creditInfo) setWalletCreditInfo(data.creditInfo) })
         .catch(() => {})
     }
+    // All currently active bank/UPI offers — filtered against the cart client-side below.
+    fetchPaymentOffers().then(setBankOffers)
   }, [])
 
   useEffect(() => {
@@ -318,6 +324,7 @@ export default function CheckoutPage() {
           shippingAddress: address,
           billingAddress: billingSameAsShipping ? undefined : billingAddress,
           couponCode: couponCode || undefined,
+          bankOfferId: selectedBankOfferEntry?.eligible ? selectedBankOfferId : undefined,
         }),
       })
       const data = await res.json()
@@ -431,7 +438,29 @@ export default function CheckoutPage() {
   const effectiveShipping = shipping ? shipping.cost : totals.shipping
   const walletDeduction = useWallet ? Math.min(walletAmount, Number(loyalty?.walletBalance || 0), totals.total - couponDiscount) : 0
   const pointsValue = usePoints ? pointsToRedeem : 0
-  const finalTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount - walletDeduction - pointsValue + extraChargesTotal + ruleTaxTotal + effectiveShipping)
+
+  // Bank/UPI offers — eligibility mirrors the server's re-validation basis (subtotal
+  // after coupon) so the amount shown here matches what actually gets charged.
+  const cartItemsForOffers = (cart?.cart.items ?? []).map((item) => ({ productId: item.product.id, categoryId: item.product.category?.id }))
+  const bankOfferBasis = Math.max(0, totals.subtotal - couponDiscount)
+  const bankOffersOnlinePaymentRequired = paymentMethod !== "ONLINE"
+  const evaluatedBankOffers = bankOffers.map((offer) => {
+    const eligibility = checkOfferEligibility(offer, cartItemsForOffers, bankOfferBasis)
+    const reason = bankOffersOnlinePaymentRequired
+      ? "Select Credit/Debit Card, UPI, or Net Banking payment to use this offer"
+      : eligibility.reason
+    return { offer, eligible: eligibility.eligible && !bankOffersOnlinePaymentRequired, reason }
+  })
+  const selectedBankOfferEntry = evaluatedBankOffers.find((e) => e.offer.id === selectedBankOfferId)
+  const bankOfferDiscount = selectedBankOfferEntry?.eligible ? calcOfferDiscount(selectedBankOfferEntry.offer, bankOfferBasis) : 0
+
+  // Clear the selection if it's no longer eligible (e.g. switching away from an online payment method).
+  useEffect(() => {
+    if (selectedBankOfferId && !selectedBankOfferEntry?.eligible) setSelectedBankOfferId(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMethod])
+
+  const finalTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount - bankOfferDiscount - walletDeduction - pointsValue + extraChargesTotal + ruleTaxTotal + effectiveShipping)
 
   // Payment method filtering based on rules
   const totalCartQty = cart?.cart.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0
@@ -812,6 +841,28 @@ export default function CheckoutPage() {
                 </div>
               )}
             </div>
+
+            {/* Bank & UPI Offers */}
+            {bankOffers.length > 0 && (
+              <div className="card-base-static p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Landmark className="text-primary-600" size={20} />
+                  <h2 className="font-semibold">Bank &amp; UPI Offers</h2>
+                </div>
+                <div className="space-y-2.5">
+                  {evaluatedBankOffers.map(({ offer, eligible, reason }) => (
+                    <BankOfferCard
+                      key={offer.id}
+                      offer={offer}
+                      selectable
+                      selected={selectedBankOfferId === offer.id}
+                      onSelect={() => setSelectedBankOfferId((prev) => (prev === offer.id ? null : offer.id))}
+                      ineligibleReason={eligible ? undefined : reason}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-1">
@@ -877,6 +928,12 @@ export default function CheckoutPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Coupon ({couponCode.toUpperCase()})</span>
                     <span className="font-medium text-green-600">-{formatPrice(couponDiscount)}</span>
+                  </div>
+                )}
+                {bankOfferDiscount > 0 && selectedBankOfferEntry && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 flex items-center gap-1"><Landmark size={14} className="text-primary-500" /> Bank Offer Discount</span>
+                    <span className="font-medium text-green-600">-{formatPrice(bankOfferDiscount)}</span>
                   </div>
                 )}
                 {walletDeduction > 0 && (

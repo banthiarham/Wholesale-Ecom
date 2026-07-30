@@ -367,16 +367,17 @@ function DefaultHeroFallback({
         {/* Section header */}
         <div className="section-header">
           <div>
+            <span className="eyebrow">Featured</span>
             <h2 className="heading-lg">{heroHeadline}</h2>
-            <p className="body-sm mt-1">{heroSubtext}</p>
+            <p className="body-sm mt-1.5">{heroSubtext}</p>
           </div>
-          <Link href="/products" className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors">
+          <Link href="/products" className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-primary-600 hover:text-primary-700 hover:bg-primary-50 transition-all duration-200">
             View All <ArrowRight size={16} />
           </Link>
         </div>
 
         {/* Product grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
           {visibleProducts.slice(0, 12).map((product) => (
             <ProductCard
               key={product.id}

@@ -36,23 +36,24 @@ export default function TrustBadgesSection({ items }: TrustBadgesSectionProps) {
   return (
     <section className="section-padding-tight">
       <div className="section-container">
-        <div className="mb-5 lg:mb-6">
+        <div className="mb-6 lg:mb-8 text-center sm:text-left">
+          <span className="eyebrow">Trust &amp; Reliability</span>
           <h2 className="heading-lg">Why Choose Us</h2>
-          <p className="body-sm mt-1">Everything you need for reliable wholesale buying</p>
+          <p className="body-sm mt-1.5">Everything you need for reliable wholesale buying</p>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-5">
           {badges.map((badge, i) => {
             const IconComponent = ICON_MAP[badge.icon] || Truck
             const colorClass = CARD_COLORS[i % CARD_COLORS.length]
             return (
               <div
                 key={i}
-                className="group h-full flex flex-col bg-white rounded-xl border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-5"
+                className="group card-base-static h-full flex flex-col p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
               >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${colorClass}`}>
-                  <IconComponent size={20} strokeWidth={2} />
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3.5 shadow-sm ${colorClass}`}>
+                  <IconComponent size={22} strokeWidth={2} />
                 </div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-1 leading-snug">{badge.title}</h3>
+                <h3 className="text-sm font-bold text-gray-900 mb-1.5 leading-snug tracking-tight">{badge.title}</h3>
                 <p className="text-xs text-gray-500 leading-relaxed">{badge.desc}</p>
               </div>
             )
