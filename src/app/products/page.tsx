@@ -219,7 +219,7 @@ export default function ProductsPage() {
     <div className="min-h-screen bg-gray-50/50">
       {/* Filter sidebar */}
       {showFilters && (
-        <div className="bg-white border-b border-gray-100 shadow-sm animate-fade-in-up">
+        <div className="bg-white border-b border-gray-100 shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="heading-sm">Filters</h3>

@@ -47,12 +47,12 @@ export default function TrustBadgesSection({ items }: TrustBadgesSectionProps) {
             return (
               <div
                 key={i}
-                className="group h-full flex flex-col bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-5"
+                className="group h-full flex flex-col bg-white rounded-xl border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-5"
               >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${colorClass}`}>
                   <IconComponent size={20} strokeWidth={2} />
                 </div>
-                <h3 className="text-sm font-bold text-gray-900 mb-1 leading-snug">{badge.title}</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-1 leading-snug">{badge.title}</h3>
                 <p className="text-xs text-gray-500 leading-relaxed">{badge.desc}</p>
               </div>
             )

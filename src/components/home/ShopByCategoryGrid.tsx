@@ -67,7 +67,7 @@ export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridPr
             <Link
               key={cat.id}
               href={`/categories/${cat.handle}`}
-              className="group card-base overflow-hidden hover:-translate-y-1"
+              className="group card-base overflow-hidden"
             >
               <div className="h-36 sm:h-44 relative overflow-hidden">
                 {cat.image ? (

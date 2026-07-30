@@ -170,7 +170,7 @@ export default function HeroBannerCarousel() {
                   <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-3 lg:mb-4 leading-tight tracking-tight">{banner.title}</h2>
                   {banner.subtitle && <p className="text-base sm:text-lg text-white/90 mb-5 lg:mb-6 leading-relaxed">{banner.subtitle}</p>}
                   {banner.buttonText && (
-                    <span className="inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 transition-all duration-200 shadow-lg text-sm lg:text-base">
+                    <span className="inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 transition shadow-lg text-sm lg:text-base">
                       {banner.buttonText} <ArrowRight size={16} />
                     </span>
                   )}
