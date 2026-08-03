@@ -143,14 +143,29 @@ export default function CartPage() {
     return savings
   })()
 
+  // Attribute savings to whichever single rule the backend actually applied
+  // (Contract > Role Custom > Tier > Discount > Base) — never split/duplicate across rows.
   const discountBreakdown = (data?.cart.items ?? []).reduce((acc, item) => {
     const meta = (item as any).metadata?.pricing; if (!meta) return acc
-    if (meta.contractPrice && meta.contractPrice < meta.basePrice) acc.contract = (acc.contract || 0) + (meta.basePrice - meta.contractPrice) * item.quantity
-    if (meta.seasonalDiscount > 0) { acc.seasonal = (acc.seasonal || 0) + meta.seasonalDiscount * item.quantity; if (meta.appliedDiscounts?.length) meta.appliedDiscounts.forEach((d: string) => { if (!acc.labels.includes(d)) acc.labels.push(d) }) }
-    if (meta.rolePrice && meta.rolePrice < meta.basePrice) { acc.roleSavings = (acc.roleSavings || 0) + (meta.basePrice - meta.rolePrice) * item.quantity; if (meta.appliedRoleName && !acc.roleName) acc.roleName = meta.appliedRoleName }
-    if (meta.tierPrice && meta.tierPrice < meta.basePrice) {
-      const bestOtherPrice = Math.min(meta.rolePrice ?? meta.basePrice, meta.contractPrice ?? meta.basePrice)
-      if (meta.tierPrice <= bestOtherPrice) acc.tierSavings = (acc.tierSavings || 0) + (meta.basePrice - meta.tierPrice) * item.quantity
+    console.log("[PricingEngine:CartSummary]", {
+      productId: item.product.id,
+      loggedInRole: meta.appliedRoleName,
+      basePrice: meta.basePrice,
+      rolePrice: meta.rolePrice,
+      tierPrice: meta.tierPrice,
+      finalPrice: meta.finalPrice,
+      appliedRule: meta.appliedRule,
+    })
+    if (meta.appliedRule === "contract" && meta.contractPrice != null) {
+      acc.contract = (acc.contract || 0) + (meta.basePrice - meta.contractPrice) * item.quantity
+    } else if (meta.appliedRule === "role" && meta.rolePrice != null) {
+      acc.roleSavings = (acc.roleSavings || 0) + (meta.basePrice - meta.rolePrice) * item.quantity
+      if (meta.appliedRoleName && !acc.roleName) acc.roleName = meta.appliedRoleName
+    } else if (meta.appliedRule === "tier" && meta.tierPrice != null) {
+      acc.tierSavings = (acc.tierSavings || 0) + (meta.basePrice - meta.tierPrice) * item.quantity
+    } else if (meta.appliedRule === "discount" && meta.seasonalDiscount > 0) {
+      acc.seasonal = (acc.seasonal || 0) + meta.seasonalDiscount * item.quantity
+      if (meta.appliedDiscounts?.length) meta.appliedDiscounts.forEach((d: string) => { if (!acc.labels.includes(d)) acc.labels.push(d) })
     }
     return acc
   }, { contract: 0, seasonal: 0, roleSavings: 0, tierSavings: 0, roleName: undefined as string | undefined, labels: [] as string[] } as { contract: number; seasonal: number; roleSavings: number; tierSavings: number; roleName: string | undefined; labels: string[] })
@@ -286,7 +301,7 @@ export default function CartPage() {
             </Link>
           </div>
 
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 sticky-rail">
             <CartSummary
               subtotal={totals.subtotal} itemCount={totals.itemCount}
               tax={ruleTaxTotal > 0 ? ruleTaxTotal : totals.tax}

@@ -4,9 +4,10 @@ import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText } from "lucide-react"
+import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText, X, Store } from "lucide-react"
 import { formatPrice, getCartSessionId, getContrastTextColor } from "@/lib/utils"
-import { PricingBreakdown, SeasonalDiscount, PaymentOffer, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
+import { PricingBreakdown, SeasonalDiscount, PaymentOffer, TierPrice, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, findApplicableTier, getEffectiveUnitPrice, sortTierPrices } from "@/lib/pricing"
+import { useQuantityStepper } from "@/lib/pricing/useQuantityStepper"
 import { useAuth } from "@/lib/auth"
 import { useStorefrontRules } from "@/lib/rules"
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
@@ -18,7 +19,6 @@ import dynamic from "next/dynamic"
 
 const PackageConfigurator = dynamic(() => import("@/components/storefront/PackageConfigurator"), { ssr: false })
 
-interface TierPrice { id: string; minQty: number; maxQty: number | null; price: number }
 interface Review { id: string; rating: number; title: string | null; body: string | null; user: { firstName: string | null; lastName: string | null } }
 interface RelatedProduct {
   id: string; title: string; handle: string; thumbnail: string | null; unitPrice: string; compareAtPrice: string | null; moq: number; rating: number; tierPrices: TierPrice[]
@@ -26,7 +26,7 @@ interface RelatedProduct {
 interface Product {
   id: string; title: string; handle: string; description: string | null; sku: string | null; moq: number;
   unitPrice: number; compareAtPrice: number | null; inventoryQuantity: number; thumbnail: string | null;
-  images: string[]; vendorName: string | null; rating: number; reviewCount: number; tags: string[];
+  images: string[]; vendorName: string | null; vendorId: string | null; rating: number; reviewCount: number; tags: string[];
   category: { id: string; name: string; handle: string } | null;
   tierPrices: TierPrice[]; reviews: Review[];
   categoryId?: string
@@ -54,11 +54,19 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [related, setRelated] = useState<RelatedProduct[]>([])
   const [loading, setLoading] = useState(true)
-  const [quantity, setQuantity] = useState(1)
+  // Shared stepper (same one Cart/Mini Cart use): defaults to MOQ, steps by exactly 1,
+  // and disables the minus button only once quantity has hit the MOQ floor.
+  const { qty, increment, decrement, setTyped, flush, atMin } = useQuantityStepper(
+    product?.id, product?.moq ?? 1, product?.moq ?? 1, product?.inventoryQuantity ?? 1
+  )
+  const quantity = qty
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
   const [relatedAddingId, setRelatedAddingId] = useState<string | null>(null)
   const [mainImage, setMainImage] = useState<string | null>(null)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [zoomOrigin, setZoomOrigin] = useState("center")
+  const [isZooming, setIsZooming] = useState(false)
   const [inWishlist, setInWishlist] = useState(false)
   const [wishlistLoading, setWishlistLoading] = useState(false)
   const [showReviewForm, setShowReviewForm] = useState(false)
@@ -68,6 +76,7 @@ export default function ProductDetailPage() {
   const [submittingReview, setSubmittingReview] = useState(false)
   const [userHasReviewed, setUserHasReviewed] = useState(false)
   const [pricing, setPricing] = useState<PricingBreakdown | null>(null)
+  const [pricingQty, setPricingQty] = useState<number | null>(null)
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
   const [showOffersModal, setShowOffersModal] = useState(false)
@@ -98,12 +107,10 @@ export default function ProductDetailPage() {
       .then((data) => {
         if (data.product) {
           setProduct(data.product)
-          setQuantity(data.product.moq)
           setMainImage(data.product.thumbnail || (data.product.images?.[0] ?? null))
           loadRelated(data.product)
           checkWishlist(data.product.id)
           checkUserReview(data.product.id)
-          loadPricing(data.product)
           fetchPaymentOffers(data.product.id, data.product.categoryId || data.product.category?.id).then(setPaymentOffers)
 
           const packageTemplateId = data.product.metadata?.packageTemplateId || data.product.metadata?.package_template_id
@@ -118,14 +125,6 @@ export default function ProductDetailPage() {
       })
     fetchSeasonalDiscounts().then(setDiscounts)
   }, [params.handle])
-
-  const loadPricing = (p: Product) => {
-    const token = localStorage.getItem("token")
-    if (!token) return
-    const userId = JSON.parse(atob(token.split(".")[1]))?.userId || JSON.parse(atob(token.split(".")[1]))?.sub
-    if (!userId) return
-    fetchPricing(p.id, 1, userId).then(setPricing)
-  }
 
   const checkWishlist = (productId: string) => {
     const token = localStorage.getItem("token")
@@ -240,23 +239,35 @@ export default function ProductDetailPage() {
     } catch (err) { console.error(err) } finally { setSubmittingReview(false) }
   }
 
-  const getEffectiveTierPrice = (qty: number) => {
-    if (!product) return 0
-    const sorted = [...product.tierPrices].sort((a, b) => a.minQty - b.minQty)
-    for (let i = sorted.length - 1; i >= 0; i--) { if (qty >= sorted[i].minQty) return sorted[i].price }
-    return product.unitPrice
-  }
-
   useEffect(() => {
-    if (!product || !pricing) return
+    if (!lightboxOpen) return
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setLightboxOpen(false) }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [lightboxOpen])
+
+  // Sole source of role/contract pricing — fires immediately once the product loads
+  // (using whatever `quantity` is at that point, i.e. MOQ) and again on every quantity
+  // change. Previously this bailed out until `pricing` was already set, but nothing
+  // else ever set it first except a stale, hardcoded quantity=1 fetch — so the default
+  // MOQ quantity displayed a price computed for quantity 1 until the user touched the stepper.
+  useEffect(() => {
+    if (!product) return
     const token = localStorage.getItem("token")
-    if (!token) return
+    if (!token) { setPricing(null); setPricingQty(null); return }
     const userId = JSON.parse(atob(token.split(".")[1]))?.userId || JSON.parse(atob(token.split(".")[1]))?.sub
-    if (!userId) return
-    fetchPricing(product.id, quantity, userId).then(setPricing)
+    if (!userId) { setPricing(null); setPricingQty(null); return }
+    let cancelled = false
+    fetchPricing(product.id, quantity, userId).then((result) => {
+      if (cancelled) return
+      setPricing(result)
+      setPricingQty(quantity)
+    })
+    return () => { cancelled = true }
   }, [quantity, product?.id])
 
-  const effectivePrice = getEffectiveTierPrice(quantity)
+  const effectivePrice = product ? getEffectiveUnitPrice(product.tierPrices, quantity, product.unitPrice) : 0
+  const activeTier = product ? findApplicableTier(product.tierPrices, quantity) : null
   const totalCost = effectivePrice * quantity
   const savingsPerUnit = product ? Number(product.unitPrice) - effectivePrice : 0
   const totalSavings = savingsPerUnit * quantity
@@ -282,8 +293,28 @@ export default function ProductDetailPage() {
     )
   }
 
-  const displayPrice = pricing?.rolePrice && pricing.rolePrice < effectivePrice ? pricing.rolePrice : pricing?.finalPrice || effectivePrice
-  const priceLabel = pricing?.rolePrice && pricing.rolePrice < effectivePrice ? pricing.appliedRoleName : null
+  // `pricing` is only trustworthy once it was fetched for the CURRENT quantity — while a
+  // fresh fetch is in flight after a quantity change, fall back to the instantly-computed
+  // (client-side) tier price so the displayed price and tier always update immediately,
+  // never showing a stale role/contract price left over from the previous quantity.
+  const pricingIsCurrent = pricing != null && pricingQty === quantity
+  // The backend's finalPrice already reflects the full priority waterfall
+  // (Contract > Role Custom > Tier > Discount > Base) — trust it directly once current.
+  const displayPrice = pricingIsCurrent ? pricing!.finalPrice : effectivePrice
+  const priceLabel = pricingIsCurrent && (pricing!.appliedRule === "role" || pricing!.appliedRule === "contract") ? pricing!.appliedRoleName : null
+
+  if (pricingIsCurrent) {
+    console.log("[PricingEngine:ProductDetails]", {
+      productId: product?.id,
+      quantity,
+      loggedInRole: pricing!.appliedRoleName,
+      basePrice: pricing!.basePrice,
+      rolePrice: pricing!.rolePrice,
+      tierPrice: pricing!.tierPrice,
+      finalPrice: pricing!.finalPrice,
+      appliedRule: pricing!.appliedRule,
+    })
+  }
 
   const productJsonLd = product ? {
     "@context": "https://schema.org", "@type": "Product", name: product.title,
@@ -299,7 +330,7 @@ export default function ProductDetailPage() {
 
   // Collect all offer/rule sections for collapsible area
   const hasOffers = productBogo.length > 0 || productQtyDiscount || productExtraCharges.length > 0 || productShipping || productTaxes.length > 0 || (minQtyRule || maxQtyRule)
-  const hasPricingInfo = (pricing && (pricing.rolePrice !== null || pricing.contractPrice !== null || pricing.seasonalDiscount > 0)) || ruleDiscount
+  const hasPricingInfo = (pricingIsCurrent && (pricing!.rolePrice !== null || pricing!.contractPrice !== null || pricing!.seasonalDiscount > 0)) || ruleDiscount
 
   return (
     <>
@@ -319,11 +350,30 @@ export default function ProductDetailPage() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12">
             {/* Left: Images — 3 cols on lg */}
             <div className="lg:col-span-3 space-y-4">
-              {/* Main image */}
+              {/* Main image — hover to zoom, click to open lightbox */}
               <div className="card-base-static overflow-hidden">
                 {mainImage ? (
-                  <div className="relative w-full aspect-square">
-                    <Image src={mainImage} alt={product.title} fill className="object-cover" sizes="(max-width: 1024px) 100vw, 60vw" priority />
+                  <div
+                    className="relative w-full aspect-square overflow-hidden cursor-zoom-in"
+                    onMouseMove={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const x = ((e.clientX - rect.left) / rect.width) * 100
+                      const y = ((e.clientY - rect.top) / rect.height) * 100
+                      setZoomOrigin(`${x}% ${y}%`)
+                    }}
+                    onMouseEnter={() => setIsZooming(true)}
+                    onMouseLeave={() => setIsZooming(false)}
+                    onClick={() => setLightboxOpen(true)}
+                  >
+                    <Image
+                      src={mainImage}
+                      alt={product.title}
+                      fill
+                      className={`object-cover transition-transform duration-200 ease-out ${isZooming ? "scale-[1.8]" : "scale-100"}`}
+                      style={{ transformOrigin: zoomOrigin }}
+                      sizes="(max-width: 1024px) 100vw, 60vw"
+                      priority
+                    />
                   </div>
                 ) : (
                   <div className="w-full aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
@@ -360,7 +410,7 @@ export default function ProductDetailPage() {
                         <tbody>
                           {product.tierPrices.map((tp) => {
                             const saving = Number(product.unitPrice) - Number(tp.price)
-                            const isActive = quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty)
+                            const isActive = tp === activeTier
                             return (
                               <tr key={tp.id} className={`border-b border-gray-50 ${isActive ? "bg-primary-50" : ""}`}>
                                 <td className="px-4 py-3 font-medium">{tp.minQty}{tp.maxQty ? ` - ${tp.maxQty}` : "+"} units</td>
@@ -454,21 +504,21 @@ export default function ProductDetailPage() {
                 {hasPricingInfo && (
                   <CollapsibleSection title="Pricing Details">
                     <div className="space-y-2">
-                      {pricing?.rolePrice != null && pricing.rolePrice < pricing.basePrice && (
-                        <p className="text-sm text-purple-700 font-medium">Your {pricing.appliedRoleName} Price: {formatPrice(pricing.rolePrice)}/unit <span className="font-normal text-purple-500">(saved {formatPrice(pricing.basePrice - pricing.rolePrice)}/unit)</span></p>
+                      {pricingIsCurrent && pricing!.appliedRule === "role" && pricing!.rolePrice != null && (
+                        <p className="text-sm text-purple-700 font-medium">Your {pricing!.appliedRoleName} Price: {formatPrice(pricing!.rolePrice)}/unit <span className="font-normal text-purple-500">{pricing!.rolePrice < pricing!.basePrice ? `(saved ${formatPrice(pricing!.basePrice - pricing!.rolePrice)}/unit)` : ""}</span></p>
                       )}
-                      {pricing?.contractPrice != null && pricing.contractPrice < pricing.basePrice && (
-                        <p className="text-sm text-blue-700 font-medium">Contract Price: {formatPrice(pricing.contractPrice)}/unit <span className="font-normal text-blue-500">(saved {formatPrice(pricing.basePrice - pricing.contractPrice)}/unit)</span></p>
+                      {pricingIsCurrent && pricing!.appliedRule === "contract" && pricing!.contractPrice != null && (
+                        <p className="text-sm text-blue-700 font-medium">Contract Price: {formatPrice(pricing!.contractPrice)}/unit <span className="font-normal text-blue-500">{pricing!.contractPrice < pricing!.basePrice ? `(saved ${formatPrice(pricing!.basePrice - pricing!.contractPrice)}/unit)` : ""}</span></p>
                       )}
-                      {(pricing?.seasonalDiscount ?? 0) > 0 && (
+                      {pricingIsCurrent && (pricing?.seasonalDiscount ?? 0) > 0 && (
                         <p className="text-sm text-orange-700 font-medium">Seasonal Discount: -{formatPrice(pricing!.seasonalDiscount)}/unit ({pricing!.discountPercent.toFixed(1)}% off)</p>
                       )}
                       {ruleDiscount && (
                         <p className="text-sm text-green-700 font-medium">{ruleDiscount.ruleName}: {ruleDiscount.discountPercent}% off — save {formatPrice(ruleDiscount.discountAmount)}/unit</p>
                       )}
-                      {pricing?.appliedDiscounts && pricing.appliedDiscounts.length > 0 && (
+                      {pricingIsCurrent && pricing!.appliedDiscounts && pricing!.appliedDiscounts.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
-                          {pricing.appliedDiscounts.map((d, i) => (
+                          {pricing!.appliedDiscounts.map((d, i) => (
                             <span key={i} className="badge badge-primary">{d}</span>
                           ))}
                         </div>
@@ -546,7 +596,7 @@ export default function ProductDetailPage() {
 
             {/* Right: Sticky sidebar — 2 cols on lg */}
             <div className="lg:col-span-2">
-              <div className="lg:sticky lg:top-24 space-y-5">
+              <div className="lg:sticky lg:top-32 space-y-5 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
                 {/* Main product info card */}
                 <div className="card-base-static p-6 space-y-5">
                   {/* Category + Badges */}
@@ -592,6 +642,54 @@ export default function ProductDetailPage() {
                     )}
                   </div>
 
+                  {/* MOQ — front-loaded near price (B2B/Alibaba-style hierarchy) */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-lg">
+                      <Package size={13} className="text-gray-400" /> MOQ: {product.moq} units
+                    </span>
+                  </div>
+
+                  {/* Tier pricing ladder — current price + upcoming slabs, active tier highlighted */}
+                  {product.tierPrices.length > 0 && (() => {
+                    const sortedTiers = sortTierPrices(product.tierPrices)
+                    return (
+                      <div className="rounded-xl border border-gray-100 bg-white p-4">
+                        <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                          <p className="text-sm text-gray-500">
+                            Current <span className="text-lg font-bold text-gray-900">{formatPrice(effectivePrice)}</span>/piece
+                          </p>
+                          {totalSavings > 0 && (
+                            <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                              You saved {formatPrice(totalSavings)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-3 space-y-1.5">
+                          {sortedTiers.map((tp, idx) => {
+                            const isActive = tp === activeTier
+                            const isBest = idx === sortedTiers.length - 1
+                            return (
+                              <div
+                                key={tp.id ?? `${tp.minQty}-${idx}`}
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                                  isActive ? "bg-primary-600 text-white font-bold shadow-sm" : "bg-gray-50 text-gray-600"
+                                }`}
+                              >
+                                <span>Buy {tp.minQty}+</span>
+                                <span>
+                                  {formatPrice(Number(tp.price))}/piece
+                                  {isBest && (
+                                    <span className={isActive ? "text-primary-100 font-semibold" : "text-primary-600 font-semibold"}> (Best Price)</span>
+                                  )}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
                   {/* Price warnings */}
                   {isNonPurchasable && (
                     <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3">
@@ -629,8 +727,15 @@ export default function ProductDetailPage() {
                   {/* Meta info */}
                   <div className="space-y-2">
                     {product.sku && <p className="body-sm">SKU: {product.sku}</p>}
-                    {product.vendorName && <p className="body-sm">Vendor: {product.vendorName}</p>}
-                    <div className="flex items-center gap-2 text-sm text-gray-600"><Package size={15} className="text-gray-400" /><span>MOQ: {product.moq} units</span></div>
+                    {product.vendorName && (
+                      product.vendorId ? (
+                        <Link href={`/vendors/${product.vendorId}`} className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-primary-600 transition-colors">
+                          <Store size={14} className="text-gray-400" /> {product.vendorName}
+                        </Link>
+                      ) : (
+                        <p className="body-sm flex items-center gap-1.5"><Store size={14} className="text-gray-400" /> {product.vendorName}</p>
+                      )
+                    )}
                     <div className="flex items-center gap-2 text-sm text-gray-600"><Truck size={15} className="text-gray-400" /><span>{product.inventoryQuantity > 0 ? `${product.inventoryQuantity} in stock` : "Out of stock"}</span></div>
                     <div className="flex items-center gap-2 text-sm text-gray-600"><ShieldCheck size={15} className="text-gray-400" /><span>Secure checkout</span></div>
                   </div>
@@ -640,7 +745,7 @@ export default function ProductDetailPage() {
                     priceHidden={isPriceHidden}
                     nonPurchasable={isNonPurchasable}
                     nonPurchasableMessage={nonPurchasableMsg}
-                    hasRolePrice={!!(pricing?.rolePrice && pricing.rolePrice < pricing.basePrice)}
+                    hasRolePrice={pricingIsCurrent && (pricing!.appliedRule === "role" || pricing!.appliedRule === "contract")}
                     roleLabel={pricing?.appliedRoleName || undefined}
                     bogoLabel={productBogo.length > 0 ? `Buy ${productBogo[0].buyQuantity} Get ${productBogo[0].freeQuantity} Free` : undefined}
                     quantityDiscountLabel={productQtyDiscount ? productQtyDiscount.ruleName : undefined}
@@ -655,14 +760,30 @@ export default function ProductDetailPage() {
                     <>
                       <div className="flex items-center gap-3">
                         <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
-                          <button onClick={() => setQuantity(Math.max(effectiveMinQty, quantity - 1))} className="px-3.5 py-2.5 hover:bg-gray-50 transition-colors"><Minus size={16} /></button>
-                          <input type="number" min={effectiveMinQty} max={effectiveMaxQty} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="w-16 text-center border-x border-gray-200 py-2.5 text-sm font-medium focus:outline-none" />
-                          <button onClick={() => setQuantity(Math.min(effectiveMaxQty, quantity + 1))} className="px-3.5 py-2.5 hover:bg-gray-50 transition-colors"><Plus size={16} /></button>
+                          <button
+                            onClick={decrement}
+                            disabled={atMin}
+                            title={atMin ? `Minimum order quantity is ${product.moq}` : undefined}
+                            className="px-3.5 py-2.5 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                          ><Minus size={16} /></button>
+                          <input
+                            type="number" min={effectiveMinQty} max={effectiveMaxQty} value={quantity}
+                            onChange={(e) => setTyped(Number(e.target.value))}
+                            onBlur={flush}
+                            onKeyDown={(e) => { if (e.key === "Enter") flush() }}
+                            className="w-16 text-center border-x border-gray-200 py-2.5 text-sm font-medium focus:outline-none"
+                          />
+                          <button onClick={increment} className="px-3.5 py-2.5 hover:bg-gray-50 transition-colors"><Plus size={16} /></button>
                         </div>
                         <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < effectiveMinQty || quantity > effectiveMaxQty || isNonPurchasable} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                           {added ? <><Check size={18} /> Added!</> : adding ? "Adding..." : isNonPurchasable ? (nonPurchasableMsg || "Not Available") : quantity < effectiveMinQty ? "Adjust Quantity" : <><ShoppingCart size={18} /> Add to Cart</>}
                         </button>
                       </div>
+                      {quantity < effectiveMinQty && (
+                        <p className="text-xs text-amber-600 flex items-center gap-1 -mt-2">
+                          <AlertTriangle size={12} /> Minimum order quantity is {effectiveMinQty} units — quantity can't go lower.
+                        </p>
+                      )}
                       <div className="flex gap-3">
                         <button onClick={toggleWishlist} disabled={wishlistLoading} className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-sm font-medium ${inWishlist ? "border-red-200 text-red-600 bg-red-50 hover:bg-red-100" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
                           <Heart size={16} fill={inWishlist ? "currentColor" : "none"} /> {inWishlist ? "Saved" : "Wishlist"}
@@ -722,6 +843,23 @@ export default function ProductDetailPage() {
         </main>
       </div>
       {showOffersModal && <BankOffersModal offers={paymentOffers} onClose={() => setShowOffersModal(false)} />}
+      {lightboxOpen && mainImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 sm:p-10 animate-scale-in"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            onClick={() => setLightboxOpen(false)}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+            aria-label="Close"
+          >
+            <X size={20} />
+          </button>
+          <div className="relative w-full h-full max-w-4xl max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            <Image src={mainImage} alt={product.title} fill className="object-contain" sizes="90vw" />
+          </div>
+        </div>
+      )}
     </>
   )
 }

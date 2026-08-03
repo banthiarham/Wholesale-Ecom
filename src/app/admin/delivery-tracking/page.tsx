@@ -256,7 +256,8 @@ export default function AdminDeliveryTrackingPage() {
       </div>
 
       {/* Shipments table */}
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+      <div className="admin-card-static overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-800/50">
             <tr>
@@ -318,6 +319,7 @@ export default function AdminDeliveryTrackingPage() {
             })}
           </tbody>
         </table>
+        </div>
         {filtered.length === 0 && (
           <div className="text-center py-12 text-gray-400 dark:text-gray-500">
             <PackageCheck size={40} className="mx-auto mb-3" />

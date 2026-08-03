@@ -49,10 +49,13 @@ enum PaymentStatus {
   FAILED
   REFUNDED
   CANCELLED
+  REFUND_PENDING
 }
 
 enum RefundStatus {
   PENDING
+  APPROVED
+  REJECTED
   PROCESSED
   FAILED
 }

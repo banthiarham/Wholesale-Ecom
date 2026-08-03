@@ -160,4 +160,37 @@ export class OrdersController {
     const order = await this.ordersService.cancelOrder(id, user.id);
     return { order };
   }
+
+  @Put(':id/refund/approve')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Approve a pending refund for an order (Admin)' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  async approveRefund(@Param('id') id: string) {
+    const order = await this.ordersService.approveRefund(id);
+    return { order };
+  }
+
+  @Put(':id/refund/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reject a pending refund for an order (Admin)' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  async rejectRefund(@Param('id') id: string, @Body('reason') reason?: string) {
+    const order = await this.ordersService.rejectRefund(id, reason);
+    return { order };
+  }
+
+  @Put(':id/refund/mark-refunded')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Mark an approved refund as refunded (Admin) - the actual Razorpay refund is issued manually' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  async markRefunded(@Param('id') id: string) {
+    const order = await this.ordersService.markRefunded(id);
+    return { order };
+  }
 }

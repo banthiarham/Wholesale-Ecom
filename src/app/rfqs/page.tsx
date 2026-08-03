@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, FileText, ArrowLeft } from "lucide-react"
+import { Plus, FileText } from "lucide-react"
+import { RfqStatusBadge } from "@/components/rfqs/StatusBadge"
 
 interface Rfq {
   id: string
@@ -27,25 +28,16 @@ export default function RfqsPage() {
       .then((data) => { setRfqs(Array.isArray(data) ? data : []); setLoading(false) })
   }, [router])
 
-  const statusBadge = (status: string) => {
-    const map: Record<string, string> = {
-      DRAFT: "bg-gray-100 text-gray-700",
-      SUBMITTED: "bg-blue-100 text-blue-700",
-      UNDER_REVIEW: "bg-yellow-100 text-yellow-700",
-      QUOTED: "bg-purple-100 text-purple-700",
-      ACCEPTED: "bg-green-100 text-green-700",
-      REJECTED: "bg-red-100 text-red-700",
-      EXPIRED: "bg-gray-100 text-gray-500",
-    }
-    return <span className={`px-2 py-1 rounded text-xs font-medium ${map[status] || "bg-gray-100"}`}>{status}</span>
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Request for Quotes (RFQs)</h1>
-          <Link href="/rfqs/new" className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+          <div>
+            <span className="eyebrow">B2B Marketplace</span>
+            <h1 className="heading-xl">Request for Quotes</h1>
+            <p className="body-sm mt-1">{rfqs.length} RFQ{rfqs.length !== 1 ? "s" : ""} submitted</p>
+          </div>
+          <Link href="/rfqs/new" className="btn-primary">
             <Plus size={18} /> New RFQ
           </Link>
         </div>
@@ -53,36 +45,42 @@ export default function RfqsPage() {
         {loading ? (
           <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div></div>
         ) : rfqs.length === 0 ? (
-          <div className="bg-white rounded-lg border border-gray-100 p-12 text-center">
+          <div className="card-base-static p-12 text-center">
             <FileText size={48} className="text-gray-300 mx-auto mb-4" />
             <p className="text-gray-600 mb-4">No RFQs found.</p>
-            <Link href="/rfqs/new" className="text-primary-600 hover:underline">Create your first RFQ</Link>
+            <Link href="/rfqs/new" className="text-primary-600 font-semibold hover:underline">Create your first RFQ</Link>
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+          <div className="card-base-static overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Title</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Quotes</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Date</th>
+              <thead>
+                <tr className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                  <th className="px-6 py-3">Title</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Quotes</th>
+                  <th className="px-6 py-3">Date</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-50">
                 {rfqs.map((rfq) => (
-                  <tr key={rfq.id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <Link href={`/rfqs/${rfq.id}`} className="font-medium text-gray-900 hover:text-primary-600">{rfq.title}</Link>
-                      <p className="text-xs text-gray-500">{rfq.items.map((i) => i.product?.title).filter(Boolean).join(", ")}</p>
+                  <tr key={rfq.id} className="hover:bg-gray-50/60 transition-colors">
+                    <td className="px-6 py-4">
+                      <Link href={`/rfqs/${rfq.id}`} className="font-semibold text-gray-900 hover:text-primary-600 transition-colors">{rfq.title}</Link>
+                      <p className="text-xs text-gray-400 mt-0.5">{rfq.items.map((i) => i.product?.title).filter(Boolean).join(", ")}</p>
                     </td>
-                    <td className="px-4 py-3">{statusBadge(rfq.status)}</td>
-                    <td className="px-4 py-3 text-gray-600">{rfq._count.quotes}</td>
-                    <td className="px-4 py-3 text-gray-500">{new Date(rfq.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-4"><RfqStatusBadge status={rfq.status} /></td>
+                    <td className="px-4 py-4">
+                      <span className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-full bg-primary-50 text-primary-700 text-xs font-bold">
+                        {rfq._count.quotes}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-500">{new Date(rfq.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </main>

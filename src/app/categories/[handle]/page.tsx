@@ -15,14 +15,6 @@ import {
   BookOpen,
   Dumbbell,
   Paintbrush,
-  Search,
-  SlidersHorizontal,
-  X,
-  Grid3X3,
-  List,
-  ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react"
 import { getCartSessionId } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
@@ -34,6 +26,9 @@ import { useCartDrawer } from "@/components/ui/CartDrawer"
 import { ProductCard } from "@/components/ui/ProductCard"
 import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 import { EmptyState } from "@/components/ui/EmptyState"
+import { FilterSidebar } from "@/components/storefront/FilterSidebar"
+import { ListingToolbar, SortOption, ViewMode } from "@/components/storefront/ListingToolbar"
+import { Pagination } from "@/components/storefront/Pagination"
 
 interface Product {
   id: string
@@ -61,8 +56,6 @@ interface Category {
   description: string | null
 }
 
-type SortOption = "newest" | "price_asc" | "price_desc" | "rating" | "name"
-type ViewMode = "grid" | "list"
 const PRODUCTS_PER_PAGE = 12
 
 const categoryMeta: Record<string, { icon: any; gradient: string }> = {
@@ -98,7 +91,7 @@ export default function CategoryPage() {
   const [search, setSearch] = useState("")
   const [addingId, setAddingId] = useState<string | null>(null)
   const [filters, setFilters] = useState({ minPrice: "", maxPrice: "", inStock: false })
-  const [showFilters, setShowFilters] = useState(false)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set())
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
@@ -327,155 +320,76 @@ export default function CategoryPage() {
           </div>
         </section>
 
-        {/* Filter panel */}
-        {showFilters && (
-          <div className="bg-white border-b border-gray-100 shadow-sm animate-fade-in-up">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="heading-sm">Filters</h3>
-                <button onClick={() => setShowFilters(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition"><X size={18} /></button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label className="body-sm font-medium text-gray-700 mb-1.5 block">Min Price</label>
-                  <input type="number" value={filters.minPrice} onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })} className="input-base" placeholder="0" />
-                </div>
-                <div>
-                  <label className="body-sm font-medium text-gray-700 mb-1.5 block">Max Price</label>
-                  <input type="number" value={filters.maxPrice} onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })} className="input-base" placeholder="999999" />
-                </div>
-                <div className="flex items-end gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={filters.inStock} onChange={(e) => setFilters({ ...filters, inStock: e.target.checked })} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                    <span className="body-sm">In Stock Only</span>
-                  </label>
-                </div>
-              </div>
-              <div className="flex gap-3 mt-5">
-                <button onClick={() => { loadProducts(); setShowFilters(false); }} className="btn-primary">Apply Filters</button>
-                {hasActiveFilters && (
-                  <button onClick={clearFilters} className="btn-outline">Clear All</button>
+        <main className="section-container py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-8 items-start">
+            <FilterSidebar
+              filters={filters}
+              onChange={setFilters}
+              onApply={() => { loadProducts(); setMobileFiltersOpen(false) }}
+              onClear={() => { clearFilters(); setMobileFiltersOpen(false) }}
+              hasActiveFilters={!!hasActiveFilters}
+              mobileOpen={mobileFiltersOpen}
+              onMobileClose={() => setMobileFiltersOpen(false)}
+            />
+
+            <div className="min-w-0">
+              <ListingToolbar
+                resultCount={visibleProducts.length}
+                search={search}
+                onSearchChange={setSearch}
+                onSearchSubmit={() => loadProducts()}
+                searchPlaceholder={t("products.search")}
+                sort={sort}
+                onSortChange={(s) => { setSort(s); setPage(1) }}
+                view={view}
+                onViewChange={setView}
+                hasActiveFilters={!!hasActiveFilters}
+                onToggleMobileFilters={() => setMobileFiltersOpen(true)}
+              />
+
+              <div className="pt-6">
+                {productsLoading ? (
+                  <ProductGridSkeleton view={view} count={PRODUCTS_PER_PAGE} />
+                ) : visibleProducts.length === 0 ? (
+                  <EmptyState
+                    icon={Package}
+                    title="No products found"
+                    description={hasActiveFilters || search ? "Try adjusting your search or filter criteria" : "No products in this category yet"}
+                    action={hasActiveFilters ? { label: "Clear All Filters", onClick: clearFilters } : { label: "Browse all products", href: "/products" }}
+                  />
+                ) : (
+                  <>
+                    <div className={view === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5" : "space-y-3"}>
+                      {paginatedProducts.map((product) => (
+                        <ProductCard
+                          key={product.id}
+                          product={product}
+                          view={view}
+                          isPriceHidden={hiddenPriceProductIds.has(product.id)}
+                          isNonPurchasable={nonPurchasableProducts.has(product.id)}
+                          nonPurchasableMsg={nonPurchasableProducts.get(product.id) || ""}
+                          rolePricing={rolePricingMap[product.id]}
+                          ruleDiscount={ruleDiscountMap.get(product.id)}
+                          bogo={bogoMap.get(product.id)}
+                          quantityDiscount={qtyDiscountMap.get(product.id)}
+                          seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)}
+                          paymentOffers={paymentOffers}
+                          isWishlisted={wishlistIds.has(product.id)}
+                          onToggleWishlist={toggleWishlist}
+                          isAdding={addingId === product.id}
+                          onAddToCart={handleAddToCart}
+                          addToCartLabel={t("product.addToCart")}
+                          outOfStockLabel={t("product.outOfStock")}
+                        />
+                      ))}
+                    </div>
+
+                    <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+                  </>
                 )}
               </div>
             </div>
           </div>
-        )}
-
-        <main className="section-container py-8">
-          {/* Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <p className="body-sm">{visibleProducts.length} products found</p>
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                <input
-                  type="text"
-                  placeholder={t("products.search")}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && loadProducts()}
-                  className="pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm w-40 sm:w-52 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-                />
-              </div>
-              {/* Sort */}
-              <div className="relative hidden sm:block">
-                <ArrowUpDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <select
-                  value={sort}
-                  onChange={(e) => { setSort(e.target.value as SortOption); setPage(1) }}
-                  className="pl-8 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-pointer"
-                >
-                  <option value="newest">Newest</option>
-                  <option value="price_asc">Price: Low → High</option>
-                  <option value="price_desc">Price: High → Low</option>
-                  <option value="rating">Top Rated</option>
-                  <option value="name">Name A–Z</option>
-                </select>
-              </div>
-              {/* Filter toggle */}
-              <button onClick={() => setShowFilters(!showFilters)} className={`p-2.5 rounded-xl border transition-all ${hasActiveFilters ? "border-primary-300 text-primary-600 bg-primary-50" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"}`}>
-                <SlidersHorizontal size={18} />
-              </button>
-              {/* View toggle */}
-              <div className="hidden sm:flex border border-gray-200 rounded-xl overflow-hidden">
-                <button onClick={() => setView("grid")} className={`p-2.5 transition-all ${view === "grid" ? "bg-primary-50 text-primary-600" : "text-gray-400 hover:text-gray-600"}`}>
-                  <Grid3X3 size={18} />
-                </button>
-                <button onClick={() => setView("list")} className={`p-2.5 transition-all ${view === "list" ? "bg-primary-50 text-primary-600" : "text-gray-400 hover:text-gray-600"}`}>
-                  <List size={18} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Loading */}
-          {productsLoading ? (
-            <ProductGridSkeleton view={view} count={PRODUCTS_PER_PAGE} />
-          ) : visibleProducts.length === 0 ? (
-            <EmptyState
-              icon={Package}
-              title="No products found"
-              description={hasActiveFilters || search ? "Try adjusting your search or filter criteria" : "No products in this category yet"}
-              action={hasActiveFilters ? { label: "Clear All Filters", onClick: clearFilters } : { label: "Browse all products", href: "/products" }}
-            />
-          ) : (
-            <>
-              <div className={view === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" : "space-y-3"}>
-                {paginatedProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    view={view}
-                    isPriceHidden={hiddenPriceProductIds.has(product.id)}
-                    isNonPurchasable={nonPurchasableProducts.has(product.id)}
-                    nonPurchasableMsg={nonPurchasableProducts.get(product.id) || ""}
-                    rolePricing={rolePricingMap[product.id]}
-                    ruleDiscount={ruleDiscountMap.get(product.id)}
-                    bogo={bogoMap.get(product.id)}
-                    quantityDiscount={qtyDiscountMap.get(product.id)}
-                    seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)}
-                    paymentOffers={paymentOffers}
-                    isWishlisted={wishlistIds.has(product.id)}
-                    onToggleWishlist={toggleWishlist}
-                    isAdding={addingId === product.id}
-                    onAddToCart={handleAddToCart}
-                    addToCartLabel={t("product.addToCart")}
-                    outOfStockLabel={t("product.outOfStock")}
-                  />
-                ))}
-              </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-10">
-                  <button
-                    onClick={() => setPage(Math.max(1, page - 1))}
-                    disabled={page === 1}
-                    className="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      className={`w-10 h-10 rounded-xl text-sm font-medium transition-all ${p === page ? "bg-primary-600 text-white" : "border border-gray-200 text-gray-600 hover:border-primary-300"}`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setPage(Math.min(totalPages, page + 1))}
-                    disabled={page === totalPages}
-                    className="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
-              )}
-            </>
-          )}
         </main>
       </div>
     </>

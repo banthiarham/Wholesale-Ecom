@@ -116,14 +116,15 @@ export default function AddressesPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container max-w-4xl py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">My Addresses</h1>
-            <p className="text-sm text-gray-500 mt-1">Manage your shipping and billing addresses</p>
+            <span className="eyebrow">Account</span>
+            <h1 className="heading-xl">My Addresses</h1>
+            <p className="body-sm mt-1">Manage your shipping and billing addresses</p>
           </div>
-          <button onClick={() => { resetForm(); setShowForm(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">
+          <button onClick={() => { resetForm(); setShowForm(true) }} className="btn-primary">
             <Plus size={16} /> Add Address
           </button>
         </div>
@@ -165,10 +166,10 @@ export default function AddressesPage() {
                 <span className="text-sm text-gray-700">Set as default address</span>
               </label>
               <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={saving} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">
+                <button type="submit" disabled={saving} className="btn-primary">
                   {saving ? "Saving..." : editingId ? "Update" : "Save Address"}
                 </button>
-                <button type="button" onClick={resetForm} className="px-6 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm">
+                <button type="button" onClick={resetForm} className="btn-outline">
                   Cancel
                 </button>
               </div>
@@ -186,20 +187,20 @@ export default function AddressesPage() {
         ) : (
           <div className="space-y-4">
             {addresses.map((addr) => (
-              <div key={addr.id} className={`card-base-static p-5 ${addr.isDefault ? "border-primary-200" : ""}`}>
+              <div key={addr.id} className={`card-interactive p-5 ${addr.isDefault ? "ring-2 ring-primary-100 border-primary-200" : ""}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${addr.isDefault ? "bg-primary-50" : "bg-gray-100"}`}>
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${addr.isDefault ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-400"}`}>
                       {addr.label?.toLowerCase().includes("office") || addr.label?.toLowerCase().includes("warehouse")
-                        ? <Building2 size={18} className={addr.isDefault ? "text-primary-600" : "text-gray-400"} />
-                        : <Home size={18} className={addr.isDefault ? "text-primary-600" : "text-gray-400"} />
+                        ? <Building2 size={18} />
+                        : <Home size={18} />
                       }
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        {addr.label && <span className="text-sm font-semibold text-gray-900">{addr.label}</span>}
+                        {addr.label && <span className="text-sm font-bold text-gray-900">{addr.label}</span>}
                         {addr.isDefault && (
-                          <span className="inline-flex items-center gap-1 text-xs text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full font-medium">
+                          <span className="inline-flex items-center gap-1 text-xs text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full font-semibold">
                             <Check size={12} /> Default
                           </span>
                         )}
@@ -211,12 +212,12 @@ export default function AddressesPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     {!addr.isDefault && (
-                      <button onClick={() => handleSetDefault(addr.id)} className="text-xs text-primary-600 hover:underline px-2 py-1">Set default</button>
+                      <button onClick={() => handleSetDefault(addr.id)} className="text-xs text-primary-600 hover:underline px-2 py-1 font-medium">Set default</button>
                     )}
-                    <button onClick={() => startEdit(addr)} className="p-1.5 text-gray-400 hover:text-primary-600 rounded-lg hover:bg-gray-50 transition" title="Edit">
+                    <button onClick={() => startEdit(addr)} className="p-1.5 text-gray-400 hover:text-primary-600 rounded-lg hover:bg-gray-50 transition-colors" title="Edit">
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => handleDelete(addr.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition" title="Delete">
+                    <button onClick={() => handleDelete(addr.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors" title="Delete">
                       <Trash2 size={14} />
                     </button>
                   </div>

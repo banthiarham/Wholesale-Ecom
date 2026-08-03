@@ -1,17 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { ArrowRight, Package } from "lucide-react"
-
-interface Category {
-  id: string
-  name: string
-  handle: string
-  image: string | null
-  _count?: { products: number }
-  children?: Category[]
-}
+import { useCategories } from "@/lib/categories/CategoriesProvider"
 
 interface ShopByCategoryGridProps {
   columns?: number
@@ -33,17 +25,7 @@ const COLORS = [
 ]
 
 export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridProps) {
-  const [categories, setCategories] = useState<Category[]>([])
-
-  useEffect(() => {
-    fetch("/api/categories")
-      .then((res) => res.json())
-      .then((data) => {
-        const roots: Category[] = data.categories || []
-        setCategories(roots)
-      })
-      .catch((err) => { console.error("Failed to fetch categories:", err) })
-  }, [])
+  const { categories } = useCategories()
 
   if (categories.length === 0) return null
 
@@ -72,7 +54,7 @@ export default function ShopByCategoryGrid({ columns = 4 }: ShopByCategoryGridPr
             >
               <div className="h-40 sm:h-48 relative overflow-hidden">
                 {cat.image ? (
-                  <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" />
+                  <Image src={cat.image} alt={cat.name} fill className="img-zoom object-cover" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" />
                 ) : (
                   <div className={`w-full h-full bg-gradient-to-br ${COLORS[i % COLORS.length]} flex items-center justify-center`}>
                     <Package size={44} className="text-white/70" />

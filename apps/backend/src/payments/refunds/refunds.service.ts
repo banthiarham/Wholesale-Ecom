@@ -91,7 +91,12 @@ export class RefundsService {
       const totalRefunded = alreadyRefunded + amount;
       if (totalRefunded >= Number(payment.amount)) {
         await this.prisma.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.REFUNDED } });
-        await this.prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.REFUNDED } });
+
+        // A refund tied to a cancelled order should stay Cancelled - REFUNDED is only
+        // for orders that weren't already cancelled.
+        if (payment.order.status !== OrderStatus.CANCELLED) {
+          await this.prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.REFUNDED } });
+        }
       }
 
       await this.notificationsService.createNotification(

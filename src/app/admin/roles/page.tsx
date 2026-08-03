@@ -339,12 +339,12 @@ export default function AdminRolesPage() {
       {loading ? (
         <SkeletonTable rows={4} cols={7} />
       ) : filteredRoles.length === 0 ? (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-8 text-center">
+        <div className="admin-card-static p-8 text-center">
           <Shield size={40} className="mx-auto text-gray-300 dark:text-gray-600 mb-3" />
           <p className="text-gray-500 dark:text-gray-400">No roles found.</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">

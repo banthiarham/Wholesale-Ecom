@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { ShieldCheck, ShieldAlert, ShieldX, Clock, User, ChevronRight, X, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
 type RequestStatus = "PENDING" | "APPROVED" | "REJECTED"
 
@@ -31,10 +32,10 @@ interface RoleChangeRequest {
   }
 }
 
-const statusConfig: Record<RequestStatus, { label: string; color: string; icon: React.ReactNode }> = {
-  PENDING: { label: "Pending", color: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400", icon: <Clock size={12} /> },
-  APPROVED: { label: "Approved", color: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400", icon: <CheckCircle2 size={12} /> },
-  REJECTED: { label: "Rejected", color: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400", icon: <XCircle size={12} /> },
+const statusConfig: Record<RequestStatus, { label: string; variant: AdminBadgeVariant; icon: React.ReactNode }> = {
+  PENDING: { label: "Pending", variant: "warning", icon: <Clock size={12} /> },
+  APPROVED: { label: "Approved", variant: "success", icon: <CheckCircle2 size={12} /> },
+  REJECTED: { label: "Rejected", variant: "danger", icon: <XCircle size={12} /> },
 }
 
 const roleIconMap: Record<string, React.ReactNode> = {
@@ -160,12 +161,7 @@ export default function AdminRoleRequestsPage() {
 
   const renderStatusBadge = (status: RequestStatus) => {
     const cfg = statusConfig[status]
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold uppercase ${cfg.color}`}>
-        {cfg.icon}
-        {cfg.label}
-      </span>
-    )
+    return <AdminStatusBadge status={status} variant={cfg.variant} label={cfg.label.toUpperCase()} icon={cfg.icon} />
   }
 
   return (
@@ -215,7 +211,7 @@ export default function AdminRoleRequestsPage() {
         </div>
       ) : (
         /* Requests Table */
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">

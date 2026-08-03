@@ -15,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
 interface PackageGroup {
   id?: string
@@ -265,12 +266,12 @@ export default function AdminPackagesPage() {
     })
   }
 
-  const statusColor = (s: string) => {
+  const packageStatusBadgeProps = (s: string): { variant?: AdminBadgeVariant } => {
     switch (s) {
-      case "PUBLISHED": return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-      case "DRAFT": return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-      case "ARCHIVED": return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
-      default: return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
+      case "PUBLISHED": return { variant: "success" }
+      case "DRAFT": return { variant: "warning" }
+      case "ARCHIVED": return { variant: "neutral" }
+      default: return { variant: "neutral" }
     }
   }
 
@@ -293,7 +294,7 @@ export default function AdminPackagesPage() {
 
       {/* Package List */}
       {packages.length === 0 ? (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-12 text-center">
+        <div className="admin-card-static p-12 text-center">
           <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-3">
             <Layers size={28} className="text-gray-300 dark:text-gray-600" />
           </div>
@@ -301,7 +302,8 @@ export default function AdminPackagesPage() {
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Create a package to let customers configure their own products</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
@@ -321,9 +323,7 @@ export default function AdminPackagesPage() {
                   <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">₹{Number(pkg.basePrice).toLocaleString("en-IN")}</td>
                   <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{pkg.groups?.length || 0} groups</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor(pkg.status)}`}>
-                      {pkg.status}
-                    </span>
+                    <AdminStatusBadge status={pkg.status} {...packageStatusBadgeProps(pkg.status)} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => handleEdit(pkg)} className="text-primary-600 dark:text-primary-400 hover:underline text-sm mr-3">Edit</button>
@@ -333,12 +333,13 @@ export default function AdminPackagesPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {/* Create/Edit Form */}
       {showForm && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingId ? "Edit Package" : "Create Package"}</h2>
             <button onClick={resetForm} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">

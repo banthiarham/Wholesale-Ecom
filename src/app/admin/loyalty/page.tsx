@@ -155,7 +155,8 @@ export default function AdminLoyaltyPage() {
       {filtered.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-12 text-center"><Award size={48} className="text-gray-300 dark:text-gray-600 mx-auto mb-4" /><p className="text-gray-600 dark:text-gray-400">No loyalty accounts found.</p></div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800"><tr><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Rank</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">User</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Tier</th><th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Points</th><th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Lifetime</th><th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Wallet</th></tr></thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -171,6 +172,7 @@ export default function AdminLoyaltyPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

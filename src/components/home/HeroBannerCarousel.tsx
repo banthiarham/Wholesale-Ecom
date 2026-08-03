@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { ChevronLeft, ChevronRight, ArrowRight, Zap, ShieldCheck, Truck } from "lucide-react"
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 
@@ -166,7 +167,14 @@ export default function HeroBannerCarousel() {
             href={banner.linkUrl || "#"}
             className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${index === current ? "opacity-100 z-10" : "opacity-0 z-0"}`}
           >
-            <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" loading={index === 0 ? "eager" : "lazy"} />
+            <Image
+              src={banner.imageUrl}
+              alt={banner.title}
+              fill
+              className="object-cover"
+              sizes="100vw"
+              priority={index === 0}
+            />
             <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/35 to-transparent" />
             <div className="absolute inset-0 flex items-center">
               <div className="section-container w-full">

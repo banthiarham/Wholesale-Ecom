@@ -158,6 +158,7 @@ export default function Header() {
           : []),
         { href: "/orders", label: t("nav.orders"), icon: ShoppingBag, permission: "read:orders" },
         { href: "/wishlist", label: "Wishlist", icon: Heart },
+        { href: "/account/profile", label: "My Profile", icon: User },
         { href: "/account/role-request", label: "Role & Access", icon: Shield },
         { href: "/account/addresses", label: "Addresses", icon: MapPin },
         { href: "/account/returns", label: "Returns", icon: RotateCcw },
@@ -176,23 +177,23 @@ export default function Header() {
 
   return (
     <header
-      className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${
-        scrolled ? "shadow-md" : "border-b border-gray-100"
+      className={`sticky top-0 z-50 transition-all duration-300 ${
+        scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-white border-b border-gray-100"
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Top bar */}
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-16 lg:h-[72px]">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 shrink-0">
+          <Link href="/" className="flex items-center gap-2.5 shrink-0">
             {logoUrl ? (
-              <img src={logoUrl} alt={siteName} className="h-8 w-auto object-contain" />
+              <img src={logoUrl} alt={siteName} className="h-8 lg:h-9 w-auto object-contain" />
             ) : (
               <>
-                <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+                <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center shadow-[0_2px_8px_-2px_rgba(2,84,129,0.4)]">
                   <Package size={18} className="text-white" />
                 </div>
-                <span className="text-xl font-bold text-gray-900">
+                <span className="text-xl font-bold text-gray-900 tracking-tight">
                   {siteName.replace(/(.)(.*)$/, (_, first, rest) => `${first}${rest.slice(0, -1)}`)}
                   <span className="text-primary-600">{siteName.slice(-1)}</span>
                 </span>
@@ -201,31 +202,21 @@ export default function Header() {
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden lg:flex items-center gap-1">
-            {navLinks.map((link) => (
+          <nav className="hidden lg:flex items-center gap-0.5">
+            {[...navLinks, ...userLinks.slice(0, 2)].map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
-                  isActive(link.href)
-                    ? "text-primary-600 bg-primary-50"
-                    : "text-gray-600 hover:text-primary-600 hover:bg-gray-50"
+                className={`group relative px-3.5 py-2 text-sm font-medium transition-colors duration-200 ${
+                  isActive(link.href) ? "text-primary-600" : "text-gray-600 hover:text-primary-600"
                 }`}
               >
                 {link.label}
-              </Link>
-            ))}
-            {userLinks.slice(0, 2).map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
-                  isActive(link.href)
-                    ? "text-primary-600 bg-primary-50"
-                    : "text-gray-600 hover:text-primary-600 hover:bg-gray-50"
-                }`}
-              >
-                {link.label}
+                <span
+                  className={`absolute left-3.5 right-3.5 -bottom-[1px] h-0.5 rounded-full bg-primary-600 origin-left transition-transform duration-200 ${
+                    isActive(link.href) ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
+                  }`}
+                />
               </Link>
             ))}
           </nav>
@@ -235,16 +226,16 @@ export default function Header() {
             {/* Search toggle */}
             <button
               onClick={() => setSearchOpen(!searchOpen)}
-              className="p-2 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition"
+              className={`p-2.5 rounded-xl transition-all duration-200 ${searchOpen ? "text-primary-600 bg-primary-50" : "text-gray-500 hover:text-primary-600 hover:bg-gray-50"}`}
               aria-label="Search"
             >
-              <Search size={20} />
+              <Search size={19} />
             </button>
 
             {/* Language toggle */}
             <button
               onClick={toggleLang}
-              className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition"
+              className="hidden sm:flex items-center gap-1 px-2.5 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition-all duration-200"
             >
               <Globe size={16} />
               {locale === "en" ? "HI" : "EN"}
@@ -253,12 +244,12 @@ export default function Header() {
             {/* Cart */}
             <button
               onClick={openCartDrawer}
-              className="relative p-2 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition"
+              className="relative p-2.5 rounded-xl text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition-all duration-200"
               aria-label="Open cart"
             >
-              <ShoppingCart size={20} />
+              <ShoppingCart size={19} />
               {cartCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-primary-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-primary-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
                   {cartCount > 99 ? "99+" : cartCount}
                 </span>
               )}
@@ -269,25 +260,28 @@ export default function Header() {
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg hover:bg-gray-50 transition"
+                  className="flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-xl hover:bg-gray-50 transition-all duration-200"
                 >
                   <span className="hidden sm:block text-sm font-medium text-gray-700 max-w-[100px] truncate">
                     {user.firstName}
                   </span>
-                  <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                  <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center ring-2 ring-white">
                     <span className="text-sm font-semibold text-primary-600">
                       {user.firstName?.[0]?.toUpperCase() || "U"}
                     </span>
                   </div>
-                  <ChevronDown size={14} className={`text-gray-400 transition ${userMenuOpen ? "rotate-180" : ""}`} />
+                  <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-gray-100 shadow-lg py-2 animate-fade-in-up">
-                    <div className="px-4 py-2 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-900">{user.firstName} {user.lastName}</p>
-                      <p className="text-xs text-gray-400">{user.email}</p>
-                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold uppercase rounded" style={{ backgroundColor: role?.color || '#6B7280', color: getContrastTextColor(role?.color || '#6B7280') }}>
+                  <div
+                    className="absolute right-0 top-full mt-2.5 w-60 bg-white rounded-2xl border border-gray-100 py-2 animate-fade-in-up"
+                    style={{ boxShadow: "var(--shadow-elevated)" }}
+                  >
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-sm font-semibold text-gray-900">{user.firstName} {user.lastName}</p>
+                      <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                      <span className="inline-block mt-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-md" style={{ backgroundColor: role?.color || '#6B7280', color: getContrastTextColor(role?.color || '#6B7280') }}>
                         {role?.label || user.role}
                       </span>
                     </div>
@@ -295,7 +289,7 @@ export default function Header() {
                       <Link
                         key={link.href}
                         href={link.href}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-primary-600 transition"
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-primary-600 transition-colors duration-150"
                       >
                         <link.icon size={16} className="text-gray-400" />
                         {link.label}
@@ -304,7 +298,7 @@ export default function Header() {
                     <div className="border-t border-gray-100 mt-1 pt-1">
                       <button
                         onClick={logout}
-                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition"
+                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors duration-150"
                       >
                         <LogOut size={16} />
                         {t("nav.signout")}
@@ -317,13 +311,13 @@ export default function Header() {
               <div className="flex items-center gap-2">
                 <Link
                   href="/login"
-                  className="hidden sm:inline-flex px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-lg transition"
+                  className="hidden sm:inline-flex px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-xl transition-all duration-200"
                 >
                   {t("nav.signin")}
                 </Link>
                 <Link
                   href="/register"
-                  className="px-4 py-2 text-sm font-semibold bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                  className="px-4 py-2 text-sm font-semibold bg-primary-600 text-white rounded-xl hover:bg-primary-700 hover:-translate-y-0.5 transition-all duration-200 shadow-[0_1px_2px_rgba(2,84,129,0.06),0_6px_16px_-4px_rgba(2,84,129,0.28)]"
                 >
                   {t("nav.signup")}
                 </Link>
@@ -333,7 +327,7 @@ export default function Header() {
             {/* Mobile menu toggle */}
             <button
               onClick={() => setMobileMenu(!mobileMenu)}
-              className="lg:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-50 transition"
+              className="lg:hidden p-2.5 rounded-xl text-gray-500 hover:bg-gray-50 transition-all duration-200"
             >
               {mobileMenu ? <X size={22} /> : <Menu size={22} />}
             </button>
@@ -342,22 +336,22 @@ export default function Header() {
 
         {/* Search bar (expandable) */}
         {searchOpen && (
-          <div className="pb-3 animate-fade-in-up">
+          <div className="pb-4 animate-fade-in-up">
             <form onSubmit={handleSearch} className="relative">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={19} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search products, categories, vendors..."
-                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition"
+                className="w-full pl-11 pr-11 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-md"
                 autoFocus
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <X size={16} />
                 </button>
@@ -432,8 +426,8 @@ export default function Header() {
 
       {/* Breadcrumb bar */}
       {breadcrumbItems.length > 1 && (
-        <div className="border-t border-gray-100 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-1.5 text-sm overflow-x-auto">
+        <div className="border-t border-gray-100 bg-gray-50/60">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center gap-1.5 text-sm overflow-x-auto">
             {breadcrumbItems.map((item, i) => {
               const isLast = i === breadcrumbItems.length - 1
               return (
@@ -442,7 +436,7 @@ export default function Header() {
                   {isLast ? (
                     <span className="text-gray-900 font-medium">{item.label}</span>
                   ) : (
-                    <Link href={item.href} className="text-gray-400 hover:text-primary-600 transition flex items-center gap-1">
+                    <Link href={item.href} className="text-gray-500 hover:text-primary-600 transition-colors duration-150 flex items-center gap-1">
                       {item.icon && <item.icon size={14} />}
                       {item.label}
                     </Link>

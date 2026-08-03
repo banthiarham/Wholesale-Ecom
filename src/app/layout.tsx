@@ -3,6 +3,7 @@ import { Poppins, Open_Sans } from "next/font/google"
 import "./globals.css"
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider"
 import { SiteSettingsProvider } from "@/lib/settings/SiteSettingsProvider"
+import { CategoriesProvider } from "@/lib/categories/CategoriesProvider"
 import { AuthProvider } from "@/lib/auth"
 import { ToastProvider } from "@/components/ui/Toast"
 import { CartDrawerProvider } from "@/components/ui/CartDrawer"
@@ -92,17 +93,19 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${poppins.variable} ${openSans.variable}`}>
         <SiteSettingsProvider>
-          <LanguageProvider>
-            <AuthProvider>
-              <ToastProvider>
-                <CartDrawerProvider>
-                  <Header />
-                  {children}
-                  <Footer />
-                </CartDrawerProvider>
-              </ToastProvider>
-            </AuthProvider>
-          </LanguageProvider>
+          <CategoriesProvider>
+            <LanguageProvider>
+              <AuthProvider>
+                <ToastProvider>
+                  <CartDrawerProvider>
+                    <Header />
+                    {children}
+                    <Footer />
+                  </CartDrawerProvider>
+                </ToastProvider>
+              </AuthProvider>
+            </LanguageProvider>
+          </CategoriesProvider>
           <Analytics />
         </SiteSettingsProvider>
       </body>

@@ -6,6 +6,7 @@ import Link from "next/link"
 import { ArrowLeft, Printer, Package } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
+import { OrderStatusBadge, PaymentStatusBadge } from "@/components/orders/StatusBadge"
 
 interface InvoiceOrder {
   id: string
@@ -72,15 +73,15 @@ export default function InvoicePage() {
         </button>
       </div>
 
-      <div className="max-w-3xl mx-auto bg-white shadow-sm print:shadow-none rounded-2xl print:rounded-none p-8 sm:p-12">
+      <div className="max-w-3xl mx-auto card-base-static print:shadow-none print:rounded-none print:border-none p-8 sm:p-12">
         {/* Header */}
-        <div className="flex items-start justify-between pb-6 border-b border-gray-200">
+        <div className="flex items-start justify-between pb-6 border-b-2 border-gray-900/5">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{siteName}</h1>
+            <h1 className="heading-md">{siteName}</h1>
             <p className="text-xs text-gray-500 mt-1">B2B Wholesale E-Commerce Platform</p>
           </div>
           <div className="text-right">
-            <h2 className="text-lg font-bold text-gray-900 uppercase tracking-wide">Tax Invoice</h2>
+            <h2 className="text-lg font-extrabold text-primary-700 uppercase tracking-wide">Tax Invoice</h2>
             <p className="text-xs text-gray-500 mt-1">Invoice #{order.orderNumber.slice(0, 8).toUpperCase()}</p>
             <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p>
           </div>
@@ -101,7 +102,7 @@ export default function InvoicePage() {
         </div>
 
         {/* Items table */}
-        <div className="py-6">
+        <div className="py-6 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-[11px] font-bold text-gray-400 uppercase tracking-wide">
@@ -140,15 +141,15 @@ export default function InvoicePage() {
         <div className="pt-6 grid grid-cols-2 gap-8 text-sm">
           <div>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Payment Details</p>
-            <div className="text-xs text-gray-600 space-y-1">
+            <div className="text-xs text-gray-600 space-y-1.5">
               <p>Method: <span className="text-gray-900 font-medium">{order.payment?.provider || "COD"}</span></p>
-              <p>Status: <span className="text-gray-900 font-medium">{order.payment?.status || "PENDING"}</span></p>
+              <div className="flex items-center gap-1.5">Status: <PaymentStatusBadge status={order.payment?.status || "PENDING"} size="sm" /></div>
               {order.payment?.providerRef && <p>Transaction ID: <span className="text-gray-900 font-medium">{order.payment.providerRef}</span></p>}
             </div>
           </div>
           <div className="text-right">
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Order Status</p>
-            <p className="text-xs text-gray-900 font-medium">{order.status}</p>
+            <OrderStatusBadge status={order.status} size="sm" />
           </div>
         </div>
 

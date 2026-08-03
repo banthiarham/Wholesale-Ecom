@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Search, CreditCard, Eye, X } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
 interface PaymentGateway {
   id: string
@@ -72,22 +73,28 @@ const PROVIDER_LABELS: Record<string, string> = {
   COD: "Cash on Delivery",
 }
 
-const statusColor: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  AUTHORIZED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  CAPTURED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  FAILED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  REFUNDED: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-  CANCELLED: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+function paymentStatusBadgeProps(status: string): { variant?: AdminBadgeVariant; colorClassName?: string } {
+  switch (status) {
+    case "PENDING": return { variant: "warning" }
+    case "AUTHORIZED": return { variant: "primary" }
+    case "CAPTURED": return { variant: "success" }
+    case "FAILED": return { variant: "danger" }
+    case "REFUNDED": return { colorClassName: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" }
+    case "CANCELLED": return { variant: "neutral" }
+    default: return { variant: "neutral" }
+  }
 }
 
-const orderStatusColor: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  CONFIRMED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  PROCESSING: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-  SHIPPED: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
-  DELIVERED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  CANCELLED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+function orderStatusBadgeProps(status: string | undefined): { variant?: AdminBadgeVariant; colorClassName?: string } {
+  switch (status) {
+    case "PENDING": return { variant: "warning" }
+    case "CONFIRMED": return { variant: "primary" }
+    case "PROCESSING": return { colorClassName: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" }
+    case "SHIPPED": return { colorClassName: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" }
+    case "DELIVERED": return { variant: "success" }
+    case "CANCELLED": return { variant: "danger" }
+    default: return { variant: "neutral" }
+  }
 }
 
 const providerColor: Record<string, string> = {
@@ -289,7 +296,7 @@ export default function AdminPaymentsPage() {
           { label: "Pending", count: payments.filter((p) => p.status === "PENDING").length, amount: payments.filter((p) => p.status === "PENDING").reduce((s, p) => s + Number(p.amount), 0) },
           { label: "Failed", count: payments.filter((p) => p.status === "FAILED").length, amount: payments.filter((p) => p.status === "FAILED").reduce((s, p) => s + Number(p.amount), 0) },
         ].map((card) => (
-          <div key={card.label} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-4">
+          <div key={card.label} className="admin-card-static p-4">
             <p className="text-xs text-gray-500 dark:text-gray-400">{card.label}</p>
             <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{card.count}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">{formatPrice(card.amount)}</p>
@@ -305,7 +312,7 @@ export default function AdminPaymentsPage() {
             { label: "Monthly Revenue", value: formatPrice(stats.monthRevenue), sub: "" },
             { label: "Success Rate", value: `${stats.successRate}%`, sub: `${stats.successfulPayments}/${stats.totalPayments}` },
           ].map((card) => (
-            <div key={card.label} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-4">
+            <div key={card.label} className="admin-card-static p-4">
               <p className="text-xs text-gray-500 dark:text-gray-400">{card.label}</p>
               <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{card.value}</p>
               {card.sub && <p className="text-xs text-gray-500 dark:text-gray-400">{card.sub}</p>}
@@ -320,7 +327,8 @@ export default function AdminPaymentsPage() {
           <p className="text-gray-600 dark:text-gray-400">No payments found.</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
               <tr>
@@ -355,14 +363,10 @@ export default function AdminPaymentsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${orderStatusColor[p.order?.status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>
-                      {p.order?.status}
-                    </span>
+                    <AdminStatusBadge status={p.order?.status ?? ""} {...orderStatusBadgeProps(p.order?.status)} />
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor[p.status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>
-                      {p.status}
-                    </span>
+                    <AdminStatusBadge status={p.status} {...paymentStatusBadgeProps(p.status)} />
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
                     {p.providerRef ? (p.providerRef.length > 12 ? `${p.providerRef.slice(0, 12)}...` : p.providerRef) : "—"}
@@ -380,6 +384,7 @@ export default function AdminPaymentsPage() {
               ))}
             </tbody>
           </table>
+          </div>
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 text-sm">
               <span className="text-gray-500 dark:text-gray-400">
@@ -430,7 +435,7 @@ export default function AdminPaymentsPage() {
                 )}
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600 dark:text-gray-400">Status:</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor[selected.status] || "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}>{selected.status}</span>
+                  <AdminStatusBadge status={selected.status} {...paymentStatusBadgeProps(selected.status)} />
                 </div>
                 {selected.providerRef && (
                   <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Ref:</span><span className="font-mono text-xs">{selected.providerRef}</span></div>
@@ -444,7 +449,7 @@ export default function AdminPaymentsPage() {
                 {selected.metadata?.verifiedAt && (
                   <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Verified At:</span><span className="text-xs">{new Date(selected.metadata.verifiedAt).toLocaleString()}</span></div>
                 )}
-                <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Order Status:</span><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${orderStatusColor[selected.order?.status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>{selected.order?.status}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Order Status:</span><AdminStatusBadge status={selected.order?.status ?? ""} {...orderStatusBadgeProps(selected.order?.status)} /></div>
               </div>
 
               {selected.provider === "RAZORPAY" && selected.status === "CAPTURED" && (

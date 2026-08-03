@@ -36,7 +36,7 @@ export default function TrustBadgesSection({ items }: TrustBadgesSectionProps) {
   return (
     <section className="section-padding-tight">
       <div className="section-container">
-        <div className="mb-6 lg:mb-8 text-center sm:text-left">
+        <div className="mb-6 lg:mb-8 text-center">
           <span className="eyebrow">Trust &amp; Reliability</span>
           <h2 className="heading-lg">Why Choose Us</h2>
           <p className="body-sm mt-1.5">Everything you need for reliable wholesale buying</p>

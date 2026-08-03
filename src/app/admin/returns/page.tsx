@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Search, RotateCcw, X } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
 interface ReturnItem {
   id: string
@@ -25,12 +26,15 @@ interface ReturnRequest {
   items?: ReturnItem[]
 }
 
-const statusColor: Record<string, string> = {
-  REQUESTED: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  APPROVED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  REJECTED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  PROCESSING: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-  COMPLETED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+function returnStatusBadgeProps(status: string): { variant?: AdminBadgeVariant; colorClassName?: string } {
+  switch (status) {
+    case "REQUESTED": return { variant: "warning" }
+    case "APPROVED": return { variant: "primary" }
+    case "REJECTED": return { variant: "danger" }
+    case "PROCESSING": return { colorClassName: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" }
+    case "COMPLETED": return { variant: "success" }
+    default: return { variant: "neutral" }
+  }
 }
 
 export default function AdminReturnsPage() {
@@ -84,7 +88,8 @@ export default function AdminReturnsPage() {
       {filtered.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-12 text-center"><RotateCcw size={48} className="text-gray-300 dark:text-gray-600 mx-auto mb-4" /><p className="text-gray-600 dark:text-gray-400">No returns found.</p></div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800"><tr><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Order</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Buyer</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Reason</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Date</th><th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th></tr></thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -93,13 +98,14 @@ export default function AdminReturnsPage() {
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{r.order?.orderNumber || r.orderId?.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.user?.firstName} {r.user?.lastName}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400 max-w-xs truncate">{r.reason}</td>
-                  <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor[r.status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>{r.status}</span></td>
+                  <td className="px-4 py-3"><AdminStatusBadge status={r.status} {...returnStatusBadgeProps(r.status)} /></td>
                   <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{new Date(r.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3 text-right"><button onClick={() => { setSelected(r); setActionStatus(""); setRefundAmount("") }} className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition dark:text-gray-300">Review</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -111,7 +117,7 @@ export default function AdminReturnsPage() {
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1">
                 <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Order:</span><span className="font-medium dark:text-gray-100">{selected.order?.orderNumber || selected.orderId?.slice(0, 8)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Buyer:</span><span className="dark:text-gray-200">{selected.user?.firstName} {selected.user?.lastName}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Status:</span><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor[selected.status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>{selected.status}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Status:</span><AdminStatusBadge status={selected.status} {...returnStatusBadgeProps(selected.status)} /></div>
                 <div><span className="text-gray-600 dark:text-gray-400">Reason:</span> <span className="dark:text-gray-200">{selected.reason}</span></div>
                 {selected.notes && <div><span className="text-gray-600 dark:text-gray-400">Notes:</span> <span className="dark:text-gray-200">{selected.notes}</span></div>}
                 {selected.refundAmount && <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Refund Amount:</span><span className="font-medium dark:text-gray-100">₹{selected.refundAmount.toLocaleString("en-IN")}</span></div>}

@@ -66,7 +66,7 @@ export default function MyReviewsPage() {
   )
 
   if (reviews.length === 0) return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50/50">
       <EmptyState
         icon={MessageSquare}
         title="No reviews yet"
@@ -77,19 +77,20 @@ export default function MyReviewsPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container max-w-4xl py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">My Reviews</h1>
-          <p className="text-sm text-gray-500 mt-1">{reviews.length} review{reviews.length !== 1 ? "s" : ""} written</p>
+          <span className="eyebrow">Account</span>
+          <h1 className="heading-xl">My Reviews</h1>
+          <p className="body-sm mt-1">{reviews.length} review{reviews.length !== 1 ? "s" : ""} written</p>
         </div>
 
         <div className="space-y-4">
           {reviews.map((review) => (
-            <div key={review.id} className="card-base-static p-5">
+            <div key={review.id} className="card-interactive p-5">
               <div className="flex items-start gap-4">
                 <Link href={`/products/${review.product.handle}`} className="shrink-0">
-                  <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden">
+                  <div className="w-14 h-14 bg-gray-100 rounded-xl overflow-hidden">
                     {review.product.thumbnail ? (
                       <img src={review.product.thumbnail} alt={review.product.title} className="w-full h-full object-cover" />
                     ) : (
@@ -98,24 +99,24 @@ export default function MyReviewsPage() {
                   </div>
                 </Link>
                 <div className="flex-1 min-w-0">
-                  <Link href={`/products/${review.product.handle}`} className="font-semibold text-gray-900 hover:text-primary-600 transition">
+                  <Link href={`/products/${review.product.handle}`} className="font-semibold text-gray-900 hover:text-primary-600 transition-colors">
                     {review.product.title}
                   </Link>
                   <div className="flex items-center gap-2 mt-1">
-                    <div className="flex text-yellow-500">
+                    <div className="flex">
                       {Array.from({ length: 5 }).map((_, i) => (
-                        <Star key={i} size={14} fill={i < review.rating ? "currentColor" : "none"} className={i < review.rating ? "" : "text-gray-300"} />
+                        <Star key={i} size={14} fill={i < review.rating ? "currentColor" : "none"} className={i < review.rating ? "text-amber-400" : "text-gray-200"} />
                       ))}
                     </div>
-                    <span className="text-xs text-gray-400">{new Date(review.createdAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-gray-400">{new Date(review.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
                   </div>
-                  {review.title && <h4 className="font-medium text-gray-900 mt-2">{review.title}</h4>}
+                  {review.title && <h4 className="font-bold text-gray-900 mt-2">{review.title}</h4>}
                   {review.body && <p className="text-sm text-gray-600 mt-1 leading-relaxed">{review.body}</p>}
                 </div>
                 <button
                   onClick={() => handleDelete(review.id)}
                   disabled={deletingId === review.id}
-                  className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition shrink-0"
+                  className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
                   title="Delete review"
                 >
                   <Trash2 size={16} />

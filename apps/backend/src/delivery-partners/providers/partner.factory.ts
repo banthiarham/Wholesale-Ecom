@@ -1,28 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { DeliveryPartnerProvider } from './partner.interface';
-import { DelhiveryProviderService } from './delhivery.service';
-import { BlueDartProviderService } from './bluedart.service';
-import { EcomExpressProviderService } from './ecom-express.service';
-import { DtdcProviderService } from './dtdc.service';
+import { ShiprocketProviderService } from './shiprocket.service';
+import { ShipmozoProviderService } from './shipmozo.service';
 import { CustomPartnerProviderService } from './custom-partner.service';
 
-const BUILTIN_PROVIDERS = ['DELHIVERY', 'BLUEDART', 'ECOM_EXPRESS', 'DTDC'];
+const BUILTIN_PROVIDERS = ['SHIPROCKET', 'SHIPMOZO'];
 
 @Injectable()
 export class DeliveryPartnerFactory {
   private providers: Map<string, DeliveryPartnerProvider> = new Map();
 
   constructor(
-    private delhiveryService: DelhiveryProviderService,
-    private blueDartService: BlueDartProviderService,
-    private ecomExpressService: EcomExpressProviderService,
-    private dtdcService: DtdcProviderService,
+    private shiprocketService: ShiprocketProviderService,
+    private shipmozoService: ShipmozoProviderService,
     private customPartnerService: CustomPartnerProviderService,
   ) {
-    this.providers.set('DELHIVERY', delhiveryService);
-    this.providers.set('BLUEDART', blueDartService);
-    this.providers.set('ECOM_EXPRESS', ecomExpressService);
-    this.providers.set('DTDC', dtdcService);
+    this.providers.set('SHIPROCKET', shiprocketService);
+    this.providers.set('SHIPMOZO', shipmozoService);
   }
 
   getProvider(code: string): DeliveryPartnerProvider {

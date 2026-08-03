@@ -4,13 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import {
-  ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, AlertCircle, RotateCcw, ShoppingCart,
-  Navigation, ExternalLink, Circle, Clock, Layers, Download, RefreshCcw, ClipboardCheck, PackageCheck, Home, ReceiptText,
+  ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, RotateCcw, ShoppingCart,
+  Navigation, ExternalLink, Circle, Layers, Download, RefreshCcw, ClipboardCheck, PackageCheck, Home, ReceiptText,
 } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
 import { EmptyState } from "@/components/ui/EmptyState"
+import { OrderStatusBadge, PaymentStatusBadge } from "@/components/orders/StatusBadge"
+import Image from "next/image"
 
 interface OrderDetail {
   id: string
@@ -34,10 +36,21 @@ interface OrderDetail {
     totalPrice: number
     product: { id: string; title: string; thumbnail: string | null; sku: string | null }
   }[]
-  payment: { provider: string; status: string; amount: number; providerRef: string | null; metadata: any } | null
+  payment: {
+    provider: string; status: string; amount: number; providerRef: string | null; metadata: any
+    refunds?: { id: string; amount: number; status: string; reason: string | null; createdAt: string }[]
+  } | null
   user: { firstName: string; lastName: string; email: string; phone: string | null }
   deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null; logo: string | null } | null
   deliveryTracking?: { status: string; currentLocation: string | null; estimatedDelivery: string | null; events: { status: string; location: string | null; notes: string | null; occurredAt: string }[] } | null
+}
+
+const REFUND_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  PENDING: { label: "Refund Pending", className: "bg-orange-50 text-orange-700 border-orange-200" },
+  APPROVED: { label: "Approved", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  REJECTED: { label: "Rejected", className: "bg-red-50 text-red-700 border-red-200" },
+  PROCESSED: { label: "Refunded", className: "bg-green-50 text-green-700 border-green-200" },
+  FAILED: { label: "Failed", className: "bg-red-50 text-red-700 border-red-200" },
 }
 
 const TIMELINE_STEPS = [
@@ -123,33 +136,6 @@ export default function OrderDetailPage() {
     if (payment === "error") setPaymentAlert("Something went wrong with the payment. Contact support if amount was deducted.")
     if (searchParams.get("action") === "return") setShowReturnForm(true)
   }, [searchParams])
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "DELIVERED": return "badge-success"
-      case "SHIPPED": return "badge-primary"
-      case "PROCESSING": return "badge-warning"
-      case "CANCELLED": return "badge-danger"
-      default: return "badge bg-gray-100 text-gray-700"
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "DELIVERED": return <Package size={18} />
-      case "SHIPPED": return <Truck size={18} />
-      default: return <Package size={18} />
-    }
-  }
-
-  const getPaymentStatusBadge = (status: string) => {
-    switch (status) {
-      case "CAPTURED": case "AUTHORIZED": return <span className="inline-flex items-center gap-1 text-green-600 text-sm font-medium"><CheckCircle size={14} /> Paid</span>
-      case "FAILED": return <span className="inline-flex items-center gap-1 text-red-600 text-sm font-medium"><XCircle size={14} /> Failed</span>
-      case "CANCELLED": return <span className="inline-flex items-center gap-1 text-gray-500 text-sm font-medium"><XCircle size={14} /> Cancelled</span>
-      default: return <span className="inline-flex items-center gap-1 text-yellow-600 text-sm font-medium"><AlertCircle size={14} /> Pending</span>
-    }
-  }
 
   const cancelOrder = async () => {
     if (!order || !confirm("Are you sure you want to cancel this order?")) return
@@ -297,8 +283,8 @@ export default function OrderDetailPage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="min-h-screen bg-gray-50/60">
+      <main className="section-container max-w-5xl py-8 space-y-6">
         <div className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
         <div className="h-32 rounded-2xl bg-gray-100 animate-pulse" />
       </main>
@@ -325,7 +311,7 @@ export default function OrderDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/60">
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="section-container max-w-5xl py-8">
         <div className="flex items-center justify-between mb-6">
           <Link href="/orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 text-sm font-medium"><ArrowLeft size={16} /> Back to orders</Link>
           <Link href={`/orders/${order.id}/invoice`} target="_blank" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
@@ -346,9 +332,7 @@ export default function OrderDetailPage() {
               <p className="text-sm text-gray-500 mt-1">Placed on {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`badge inline-flex items-center gap-1.5 ${getStatusColor(order.status)}`}>
-                {getStatusIcon(order.status)} {order.status}
-              </span>
+              <OrderStatusBadge status={order.status} />
               {canCancel && <button onClick={cancelOrder} disabled={cancelling} className="px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition disabled:opacity-50">{cancelling ? "Cancelling..." : "Cancel"}</button>}
             </div>
           </div>
@@ -414,10 +398,12 @@ export default function OrderDetailPage() {
 
           {/* Live shipment tracking */}
           {(order.trackingNumber || order.carrier || order.shippingEta || order.deliveryPartner || order.deliveryTracking) && (
-            <div className="mt-6 bg-blue-50 border border-blue-100 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Navigation size={16} className="text-blue-600" />
-                <span className="text-sm font-semibold text-blue-800">Shipment Tracking</span>
+            <div className="mt-6 bg-blue-50/70 border border-blue-100 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                  <Navigation size={13} className="text-white" />
+                </div>
+                <span className="text-sm font-bold text-blue-900">Shipment Tracking</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 {(order.deliveryPartner?.name || order.carrier) && <div><span className="text-blue-600">Carrier:</span> <span className="font-medium text-blue-900">{order.deliveryPartner?.name || order.carrier}</span></div>}
@@ -513,7 +499,7 @@ export default function OrderDetailPage() {
                               </div>
                             )) : items.map((item: any) => (
                               <div key={item.id} className="px-4 py-2 flex items-center gap-3">
-                                {item.product.thumbnail ? <img src={item.product.thumbnail} alt={item.product.title} className="w-10 h-10 rounded object-cover" /> : <Package size={20} className="text-gray-400" />}
+                                {item.product.thumbnail ? <Image src={item.product.thumbnail} alt={item.product.title} width={40} height={40} className="w-10 h-10 rounded object-cover" /> : <Package size={20} className="text-gray-400" />}
                                 <span className="text-sm font-medium text-gray-900 flex-1">{item.product.title}</span>
                                 <span className="text-sm text-gray-700">{formatPrice(Number(item.totalPrice))}</span>
                               </div>
@@ -539,7 +525,7 @@ export default function OrderDetailPage() {
                     {standaloneItems.map((item) => (
                       <div key={item.id} className="flex items-center gap-4">
                         <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                          {item.product.thumbnail ? <img src={item.product.thumbnail} alt={item.product.title} className="w-full h-full object-cover" /> : <Package size={24} className="text-gray-400" />}
+                          {item.product.thumbnail ? <Image src={item.product.thumbnail} alt={item.product.title} width={64} height={64} className="w-full h-full object-cover" /> : <Package size={24} className="text-gray-400" />}
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-gray-900">{item.product.title}</p>
@@ -665,7 +651,7 @@ export default function OrderDetailPage() {
             </div>
             <div className="text-sm text-gray-700 space-y-2">
               <div className="flex justify-between"><span>Method</span><span className="font-medium">{order.payment?.provider || "COD"}</span></div>
-              <div className="flex justify-between"><span>Status</span>{getPaymentStatusBadge(order.payment?.status || "PENDING")}</div>
+              <div className="flex justify-between items-center"><span>Status</span><PaymentStatusBadge status={order.payment?.status || "PENDING"} /></div>
               {order.payment?.providerRef && <div className="flex justify-between"><span>Transaction ID</span><span className="font-medium text-xs">{order.payment.providerRef}</span></div>}
               {order.payment?.metadata?.razorpayOrderId && (
                 <div className="flex justify-between"><span>Razorpay Order ID</span><span className="font-medium text-xs">{order.payment.metadata.razorpayOrderId}</span></div>
@@ -677,6 +663,25 @@ export default function OrderDetailPage() {
                 <div className="flex justify-between"><span>Verified At</span><span className="font-medium text-xs">{new Date(order.payment.metadata.verifiedAt).toLocaleString()}</span></div>
               )}
               <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span>Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
+
+              {order.payment?.refunds && order.payment.refunds.length > 0 && (() => {
+                const refund = order.payment!.refunds![0]
+                const cfg = REFUND_STATUS_CONFIG[refund.status] || REFUND_STATUS_CONFIG.PENDING
+                return (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Refund</p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between"><span>Refund Amount</span><span className="font-medium text-gray-900">{formatPrice(Number(refund.amount))}</span></div>
+                      <div className="flex justify-between items-center">
+                        <span>Refund Status</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${cfg.className}`}>{cfg.label}</span>
+                      </div>
+                      <div className="flex justify-between"><span>Requested Date</span><span className="font-medium text-gray-900">{new Date(refund.createdAt).toLocaleDateString()}</span></div>
+                    </div>
+                  </div>
+                )
+              })()}
+
               {order.payment?.provider === "RAZORPAY" && ["FAILED", "PENDING"].includes(order.payment?.status || "") && !["CANCELLED", "DELIVERED", "REFUNDED"].includes(order.status) && (
                 <button
                   onClick={retryPayment}

@@ -102,15 +102,15 @@ export default function WishlistPage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container py-8">
         <ProductGridSkeleton count={8} />
       </main>
     </div>
   )
 
   if (error) return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50/50">
       <EmptyState
         icon={Heart}
         title="Failed to load wishlist"
@@ -122,7 +122,7 @@ export default function WishlistPage() {
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
   if (!token) return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50/50">
       <EmptyState
         icon={Heart}
         title="Sign in to view your wishlist"
@@ -133,7 +133,7 @@ export default function WishlistPage() {
   )
 
   if (items.length === 0) return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50/50">
       <EmptyState
         icon={Heart}
         title="Your wishlist is empty"
@@ -144,8 +144,8 @@ export default function WishlistPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="heading-lg">My Wishlist</h1>

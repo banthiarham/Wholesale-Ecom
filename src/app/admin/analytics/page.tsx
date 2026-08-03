@@ -5,15 +5,19 @@ import Link from "next/link"
 import { BarChart3, TrendingUp, Package, ShoppingBag, IndianRupee, Activity, ChevronRight } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { DashboardSkeleton } from "@/components/admin/Skeleton"
+import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
-const statusColor: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  CONFIRMED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  PROCESSING: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-  SHIPPED: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
-  DELIVERED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  CANCELLED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  REFUNDED: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+function orderStatusBadgeProps(status: string): { variant?: AdminBadgeVariant; colorClassName?: string } {
+  switch (status) {
+    case "PENDING": return { variant: "warning" }
+    case "CONFIRMED": return { variant: "primary" }
+    case "PROCESSING": return { colorClassName: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" }
+    case "SHIPPED": return { colorClassName: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" }
+    case "DELIVERED": return { variant: "success" }
+    case "CANCELLED": return { variant: "danger" }
+    case "REFUNDED": return { colorClassName: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" }
+    default: return { variant: "neutral" }
+  }
 }
 
 export default function AdminAnalyticsPage() {
@@ -89,19 +93,19 @@ export default function AdminAnalyticsPage() {
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm">
+        <div className="admin-card-static p-5">
           <div className="flex items-center gap-3 mb-2"><IndianRupee size={20} className="text-green-600" /><span className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</span></div>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatPrice(totalRevenue)}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm">
+        <div className="admin-card-static p-5">
           <div className="flex items-center gap-3 mb-2"><ShoppingBag size={20} className="text-blue-600" /><span className="text-sm text-gray-600 dark:text-gray-400">Total Orders</span></div>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalOrders}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm">
+        <div className="admin-card-static p-5">
           <div className="flex items-center gap-3 mb-2"><Package size={20} className="text-purple-600" /><span className="text-sm text-gray-600 dark:text-gray-400">Products Sold</span></div>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalProductsSold}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm">
+        <div className="admin-card-static p-5">
           <div className="flex items-center gap-3 mb-2"><TrendingUp size={20} className="text-amber-600" /><span className="text-sm text-gray-600 dark:text-gray-400">Avg Order Value</span></div>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatPrice(avgOrderValue)}</p>
         </div>
@@ -109,12 +113,12 @@ export default function AdminAnalyticsPage() {
 
       {/* Orders by Status */}
       {ordersByStatus && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Orders by Status</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
             {Object.entries(ordersByStatus).map(([status, count]) => (
               <div key={status} className="text-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold mb-2 ${statusColor[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>{status}</span>
+                <div className="mb-2"><AdminStatusBadge status={status} {...orderStatusBadgeProps(status)} /></div>
                 <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{count as number}</p>
               </div>
             ))}
@@ -123,12 +127,13 @@ export default function AdminAnalyticsPage() {
       )}
 
       {/* Top Products */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
+      <div className="admin-card-static">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold text-gray-900 dark:text-gray-100">Top Products</h2>
           <Link href="/admin/products" className="text-sm text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1">View All <ChevronRight size={14} /></Link>
         </div>
         {topProducts.length > 0 ? (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
               <tr>
@@ -149,6 +154,7 @@ export default function AdminAnalyticsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           <div className="px-6 py-12 text-center"><BarChart3 size={32} className="mx-auto text-gray-300 dark:text-gray-600 mb-3" /><p className="text-sm text-gray-400 dark:text-gray-500">No product data available</p></div>
         )}
@@ -156,7 +162,7 @@ export default function AdminAnalyticsPage() {
 
       {/* Recent Activity */}
       {activity.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Recent Activity</h2>
           <div className="space-y-3">
             {activity.map((a: any, i: number) => {

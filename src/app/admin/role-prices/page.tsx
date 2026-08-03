@@ -383,7 +383,7 @@ export default function AdminRolePricesPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Role-Based Pricing</h1>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-12 text-center">
+        <div className="admin-card-static p-12 text-center">
           <div className="w-14 h-14 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
             <Package size={26} className="text-gray-300 dark:text-gray-600" />
           </div>
@@ -414,7 +414,7 @@ export default function AdminRolePricesPage() {
       </div>
 
       {/* Product Selector */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+      <div className="admin-card-static p-6">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Product</label>
         <div className="relative" ref={dropdownRef}>
           <div className="relative">
@@ -478,7 +478,7 @@ export default function AdminRolePricesPage() {
 
       {/* Product Info */}
       {selectedProduct && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+        <div className="admin-card-static p-5">
           <div className="flex flex-wrap items-center gap-6">
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">Product</p>
@@ -498,7 +498,7 @@ export default function AdminRolePricesPage() {
 
       {/* Role Price Table */}
       {selectedProduct && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
           {loadingPrices ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -515,6 +515,7 @@ export default function AdminRolePricesPage() {
               </Link>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                 <tr>
@@ -678,13 +679,14 @@ export default function AdminRolePricesPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
 
       {/* Price Preview */}
       {selectedProduct && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <div className="flex items-center gap-2 mb-4">
             <Eye size={18} className="text-primary-600 dark:text-primary-400" />
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Price Preview</h2>
@@ -770,6 +772,7 @@ export default function AdminRolePricesPage() {
               {" | "}Base Price: <span className="font-medium text-gray-700 dark:text-gray-300">{formatPrice(selectedProduct.unitPrice)}</span>
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-4">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -825,6 +828,7 @@ export default function AdminRolePricesPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800">
               <button

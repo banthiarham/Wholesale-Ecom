@@ -25,19 +25,13 @@ export class DeliveryPartnersService {
       orderBy: { name: 'asc' },
       include: { _count: { select: { orders: true } } },
     });
-    return partners.map((p) => ({
-      ...p,
-      credentials: p.credentials ? this.maskCredentials(this.decryptCredentials(String(p.credentials))) : null,
-    }));
+    return partners.map((p) => this.maskPartner(p));
   }
 
   async findById(id: string) {
     const partner = await this.prisma.deliveryPartner.findUnique({ where: { id } });
     if (!partner) throw new NotFoundException('Delivery partner not found');
-    return {
-      ...partner,
-      credentials: partner.credentials ? this.maskCredentials(this.decryptCredentials(String(partner.credentials))) : null,
-    };
+    return this.maskPartner(partner);
   }
 
   async create(data: {
@@ -80,7 +74,8 @@ export class DeliveryPartnersService {
       createData.credentials = this.encryptCredentials(data.credentials);
     }
 
-    return this.prisma.deliveryPartner.create({ data: createData, include: { _count: { select: { orders: true } } } });
+    const created = await this.prisma.deliveryPartner.create({ data: createData, include: { _count: { select: { orders: true } } } });
+    return this.maskPartner(created);
   }
 
   async update(id: string, data: {
@@ -117,17 +112,29 @@ export class DeliveryPartnersService {
     if (data.settings !== undefined) updateData.settings = data.settings;
     if (data.credentialFields !== undefined) updateData.credentialFields = data.credentialFields;
 
-    if (data.credentials) {
-      const code = data.code || partner.code;
-      const provider = this.factory.getProvider(code);
-      if (!provider.validateCredentials(data.credentials)) {
-        throw new BadRequestException(`Invalid credentials for ${code}. Required fields are missing.`);
+    if (data.credentials !== undefined) {
+      if (Object.keys(data.credentials).length === 0) {
+        // Explicit empty object = clear stored credentials and disable API integration.
+        updateData.credentials = null;
+        updateData.apiEnabled = false;
+      } else {
+        const code = data.code || partner.code;
+        const provider = this.factory.getProvider(code);
+        // Merge onto the existing (decrypted) credentials so a partial update
+        // (e.g. rotating just the password) doesn't drop previously saved fields -
+        // the frontend never has the real values for unchanged masked fields.
+        const existing = partner.credentials ? this.decryptCredentials(String(partner.credentials)) : {};
+        const merged = { ...existing, ...data.credentials };
+        if (!provider.validateCredentials(merged)) {
+          throw new BadRequestException(`Invalid credentials for ${code}. Required fields are missing.`);
+        }
+        updateData.credentials = this.encryptCredentials(merged);
+        updateData.apiEnabled = true;
       }
-      updateData.credentials = this.encryptCredentials(data.credentials);
-      updateData.apiEnabled = true;
     }
 
-    return this.prisma.deliveryPartner.update({ where: { id }, data: updateData, include: { _count: { select: { orders: true } } } });
+    const updated = await this.prisma.deliveryPartner.update({ where: { id }, data: updateData, include: { _count: { select: { orders: true } } } });
+    return this.maskPartner(updated);
   }
 
   async remove(id: string) {
@@ -135,11 +142,12 @@ export class DeliveryPartnersService {
     if (!partner) throw new NotFoundException('Delivery partner not found');
     const orderCount = await this.prisma.order.count({ where: { deliveryPartnerId: id } });
     if (orderCount > 0) {
-      return this.prisma.deliveryPartner.update({
+      const deactivated = await this.prisma.deliveryPartner.update({
         where: { id },
         data: { isActive: false },
         include: { _count: { select: { orders: true } } },
       });
+      return this.maskPartner(deactivated);
     }
     return this.prisma.deliveryPartner.delete({ where: { id } });
   }
@@ -468,6 +476,16 @@ export class DeliveryPartnersService {
       });
       throw err;
     }
+  }
+
+  // Ensures every path that returns a partner to the client (list/get/create/
+  // update/deactivate) masks stored secrets the same way - never the raw
+  // encrypted blob, never the plaintext value.
+  private maskPartner<T extends { credentials: unknown }>(partner: T): T & { credentials: Record<string, string> | null } {
+    return {
+      ...partner,
+      credentials: partner.credentials ? this.maskCredentials(this.decryptCredentials(String(partner.credentials))) : null,
+    };
   }
 
   private encryptCredentials(credentials: Record<string, string>): string {

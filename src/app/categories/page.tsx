@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import {
   ChevronRight,
@@ -17,16 +17,8 @@ import {
   Search,
 } from "lucide-react"
 import { EmptyState } from "@/components/ui/EmptyState"
-
-interface Category {
-  id: string
-  name: string
-  handle: string
-  description: string | null
-  image: string | null
-  children: Category[]
-  _count: { products: number }
-}
+import Image from "next/image"
+import { useCategories } from "@/lib/categories/CategoriesProvider"
 
 const categoryMeta: Record<string, { icon: any; gradient: string; accent: string }> = {
   electronics: { icon: Cpu, gradient: "from-blue-600 to-cyan-500", accent: "bg-blue-500/20" },
@@ -49,21 +41,9 @@ function getMeta(handle: string) {
 }
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const { categories, loaded, error } = useCategories()
+  const loading = !loaded
   const [search, setSearch] = useState("")
-
-  useEffect(() => {
-    fetch("/api/categories")
-      .then(async (res) => {
-        if (!res.ok) { setError(true); setLoading(false); return }
-        const data = await res.json()
-        setCategories(Array.isArray(data.categories) ? data.categories : [])
-        setLoading(false)
-      })
-      .catch(() => { setError(true); setLoading(false) })
-  }, [])
 
   const filtered = search.trim()
     ? categories.filter((c) =>
@@ -75,12 +55,13 @@ export default function CategoriesPage() {
   const totalProducts = categories.reduce((sum, c) => sum + (c._count?.products || 0), 0)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container py-10">
         {/* Page header */}
         <div className="mb-10">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Shop by Category</h1>
-          <p className="text-gray-500">Browse {totalProducts} products across {categories.length} categories</p>
+          <span className="eyebrow">Browse</span>
+          <h1 className="heading-xl mb-2">Shop by Category</h1>
+          <p className="body-lg">Browse {totalProducts} products across {categories.length} categories</p>
         </div>
 
         {/* Search / Filter bar */}
@@ -100,7 +81,7 @@ export default function CategoriesPage() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-52 rounded-2xl bg-gray-100 animate-pulse" />
+              <div key={i} className="h-56 lg:h-60 rounded-2xl bg-gray-100 animate-pulse" />
             ))}
           </div>
         ) : error ? (
@@ -127,19 +108,19 @@ export default function CategoriesPage() {
                 <Link
                   key={cat.id}
                   href={`/categories/${cat.handle}`}
-                  className="group relative rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                  className="card-base group relative overflow-hidden block"
                 >
                   {/* Card body */}
-                  <div className={`relative h-52 bg-gradient-to-br ${meta.gradient} p-6 flex flex-col justify-between`}>
+                  <div className={`relative h-56 lg:h-60 bg-gradient-to-br ${meta.gradient} p-6 flex flex-col justify-between overflow-hidden`}>
                     {/* Decorative circles */}
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-8 translate-x-8" />
                     <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-6 -translate-x-6" />
 
                     {/* Top row: icon + product count */}
                     <div className="relative flex items-start justify-between">
-                      <div className={`w-14 h-14 ${meta.accent} backdrop-blur-sm rounded-2xl flex items-center justify-center`}>
+                      <div className={`relative w-14 h-14 ${meta.accent} backdrop-blur-sm rounded-2xl flex items-center justify-center overflow-hidden`}>
                         {cat.image ? (
-                          <img src={cat.image} alt={cat.name} className="w-full h-full object-cover rounded-2xl" />
+                          <Image src={cat.image} alt={cat.name} fill className="img-zoom object-cover" sizes="56px" />
                         ) : (
                           <Icon size={26} className="text-white" />
                         )}
@@ -151,7 +132,7 @@ export default function CategoriesPage() {
 
                     {/* Bottom: name + description */}
                     <div className="relative">
-                      <h3 className="text-xl font-bold text-white mb-1">{cat.name}</h3>
+                      <h3 className="text-xl lg:text-2xl font-bold text-white mb-1 tracking-tight">{cat.name}</h3>
                       {cat.description && (
                         <p className="text-sm text-white/70 line-clamp-2">{cat.description}</p>
                       )}
@@ -175,11 +156,11 @@ export default function CategoriesPage() {
                   </div>
 
                   {/* Footer strip */}
-                  <div className="bg-white px-6 py-3.5 flex items-center justify-between group-hover:bg-gray-50 transition">
-                    <span className="text-sm font-medium text-gray-500 group-hover:text-primary-600 transition">
+                  <div className="bg-white px-6 py-4 flex items-center justify-between group-hover:bg-gray-50 transition-colors duration-200">
+                    <span className="text-sm font-semibold text-gray-600 group-hover:text-primary-600 transition-colors">
                       Browse collection
                     </span>
-                    <ChevronRight size={16} className="text-gray-300 group-hover:text-primary-600 group-hover:translate-x-1 transition-all" />
+                    <ChevronRight size={16} className="text-gray-300 group-hover:text-primary-600 group-hover:translate-x-1 transition-all duration-200" />
                   </div>
                 </Link>
               )

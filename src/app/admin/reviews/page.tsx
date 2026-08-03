@@ -59,7 +59,7 @@ export default function AdminReviewsPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((r) => (
-            <div key={r.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+            <div key={r.id} className="admin-card-static p-5">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">

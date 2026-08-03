@@ -14,8 +14,20 @@ export class CustomPartnerProviderService implements DeliveryPartnerProvider {
     return Object.keys(credentials).length > 0;
   }
 
+  // Fallback for any provider code that isn't one of the built-ins
+  // (Shiprocket, Shipmozo). Offers the full canonical field palette, all
+  // optional, so a future/custom partner can be configured without any
+  // frontend or backend changes - just add a real provider service later
+  // and register it in the factory to narrow this down to its own fields.
   getCredentialFields() {
-    return [];
+    return [
+      { key: 'apiKey', label: 'API Key', required: false },
+      { key: 'apiSecret', label: 'API Secret', required: false },
+      { key: 'clientId', label: 'Client ID', required: false },
+      { key: 'clientSecret', label: 'Client Secret', required: false },
+      { key: 'email', label: 'Email / Login ID', required: false },
+      { key: 'password', label: 'Password / Token', required: false },
+    ];
   }
 
   getApiUrl(testMode: boolean): string {

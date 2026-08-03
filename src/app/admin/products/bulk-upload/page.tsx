@@ -215,7 +215,7 @@ export default function AdminBulkProductUploadPage() {
       </div>
 
       {/* Template Download */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+      <div className="admin-card-static p-5">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Excel Columns Reference</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -258,7 +258,7 @@ export default function AdminBulkProductUploadPage() {
       </div>
 
       {/* Upload Area */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6 space-y-5">
+      <div className="admin-card-static p-6 space-y-5">
         {/* Excel File */}
         <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-8 text-center">
           <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" id="product-excel-upload" />
@@ -345,7 +345,7 @@ export default function AdminBulkProductUploadPage() {
 
       {/* Results */}
       {result && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">Upload Results</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
             <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center">

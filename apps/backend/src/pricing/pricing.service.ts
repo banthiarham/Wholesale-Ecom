@@ -20,6 +20,7 @@ export class PricingService {
     discountAmount: number;
     discountPercent: number;
     appliedDiscounts: string[];
+    appliedRule: 'contract' | 'role' | 'tier' | 'discount' | 'base';
   }> {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -33,21 +34,24 @@ export class PricingService {
 
     const basePrice = Number(product.unitPrice);
 
-    // 1. Tier price
+    // Product Tier Pricing (priority 3) — computed regardless of what wins, so the
+    // UI can still show "bulk pricing available" even when a higher-priority rule applies.
     const tier = product.tierPrices.find(
       (tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty),
     );
     const tierPrice = tier ? Number(tier.price) : basePrice;
 
-    // 2. Role-based price
+    // Role Custom Price (priority 1, after contract) — Admin → Role Pricing.
     let rolePrice: number | null = null;
     let appliedRoleName: string | null = null;
+    let loggedInRole: string | null = null;
     if (userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         include: { roleRel: true },
       });
       if (user?.roleId) {
+        loggedInRole = user.roleRel?.label || user.roleRel?.name || null;
         const rolePriceRecord = await this.prisma.rolePrice.findUnique({
           where: { productId_roleId: { productId, roleId: user.roleId } },
         });
@@ -58,7 +62,7 @@ export class PricingService {
       }
     }
 
-    // 3. Contract price
+    // Contract Price (priority 0 — a per-user negotiated price, more specific than role pricing)
     let contractPrice: number | null = null;
     if (userId) {
       const contract = await this.prisma.contractPrice.findFirst({
@@ -74,14 +78,8 @@ export class PricingService {
       if (contract) contractPrice = Number(contract.price);
     }
 
-    // Start with best price among tier/role/contract — lowest wins
-    const candidates = [tierPrice];
-    if (rolePrice !== null) candidates.push(rolePrice);
-    if (contractPrice !== null) candidates.push(contractPrice);
-    const currentPrice = Math.min(...candidates);
-
-    // 4. Seasonal discount
-    let seasonalDiscount = 0;
+    // Product Discount (priority 4) — seasonal/product discount off the base price.
+    // Only ever used as a fallback price source, never stacked on top of a higher-priority rule.
     const now = new Date();
     const seasonal = await this.prisma.seasonalDiscount.findFirst({
       where: {
@@ -96,29 +94,64 @@ export class PricingService {
       },
       orderBy: { value: 'desc' },
     });
+    let discountedBasePrice: number | null = null;
+    if (seasonal) {
+      const discountValue =
+        seasonal.type === 'PERCENTAGE'
+          ? basePrice * (Number(seasonal.value) / 100)
+          : Number(seasonal.value);
+      discountedBasePrice = Math.max(0, basePrice - discountValue);
+    }
+
+    // Strict priority waterfall — the first applicable rule wins outright; nothing stacks:
+    // Contract Price > Role Custom Price > (Role Tier Pricing — not implemented) > Product Tier Pricing > Product Discount > Base Price
+    let finalPrice: number;
+    let appliedRule: 'contract' | 'role' | 'tier' | 'discount' | 'base';
+    if (contractPrice !== null) {
+      finalPrice = contractPrice;
+      appliedRule = 'contract';
+    } else if (rolePrice !== null) {
+      finalPrice = rolePrice;
+      appliedRule = 'role';
+    } else if (tier) {
+      finalPrice = tierPrice;
+      appliedRule = 'tier';
+    } else if (discountedBasePrice !== null) {
+      finalPrice = discountedBasePrice;
+      appliedRule = 'discount';
+    } else {
+      finalPrice = basePrice;
+      appliedRule = 'base';
+    }
 
     const appliedDiscounts: string[] = [];
-
-    // Track which pricing tier was actually applied
-    if (rolePrice !== null && rolePrice < tierPrice) {
-      appliedDiscounts.push(`Role (${appliedRoleName}): ₹${rolePrice.toLocaleString('en-IN')}`);
+    if (appliedRule === 'contract') {
+      appliedDiscounts.push(`Contract: ₹${finalPrice.toLocaleString('en-IN')}`);
     }
-    if (contractPrice !== null && contractPrice < tierPrice) {
-      appliedDiscounts.push(`Contract: ₹${contractPrice.toLocaleString('en-IN')}`);
+    if (appliedRule === 'role') {
+      appliedDiscounts.push(`Role (${appliedRoleName}): ₹${finalPrice.toLocaleString('en-IN')}`);
     }
-
-    if (seasonal) {
-      if (seasonal.type === 'PERCENTAGE') {
-        seasonalDiscount = currentPrice * (Number(seasonal.value) / 100);
-      } else {
-        seasonalDiscount = Number(seasonal.value);
-      }
+    if (appliedRule === 'discount' && seasonal) {
       appliedDiscounts.push(`Seasonal: ${seasonal.name}`);
     }
 
-    const finalPrice = Math.max(0, currentPrice - seasonalDiscount);
+    const seasonalDiscount = appliedRule === 'discount' ? basePrice - finalPrice : 0;
     const discountAmount = basePrice - finalPrice;
     const discountPercent = basePrice > 0 ? (discountAmount / basePrice) * 100 : 0;
+
+    // eslint-disable-next-line no-console
+    console.log('[PricingEngine] calculateEffectivePrice', {
+      productId,
+      quantity,
+      loggedInRole,
+      basePrice,
+      rolePrice,
+      tierPrice,
+      contractPrice,
+      productDiscountPrice: discountedBasePrice,
+      finalPrice,
+      appliedRule,
+    });
 
     return {
       basePrice,
@@ -131,6 +164,7 @@ export class PricingService {
       discountAmount,
       discountPercent,
       appliedDiscounts,
+      appliedRule,
     };
   }
 
@@ -151,6 +185,7 @@ export class PricingService {
     finalPrice: number;
     discountAmount: number;
     discountPercent: number;
+    appliedRule: 'role' | 'tier' | 'discount' | 'base';
   }> {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -164,13 +199,13 @@ export class PricingService {
 
     const basePrice = Number(product.unitPrice);
 
-    // Tier price
+    // Product Tier Pricing
     const tier = product.tierPrices.find(
       (tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty),
     );
     const tierPrice = tier ? Number(tier.price) : basePrice;
 
-    // Role price
+    // Role Custom Price
     let rolePrice: number | null = null;
     let appliedRoleName: string | null = null;
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
@@ -182,13 +217,7 @@ export class PricingService {
       appliedRoleName = role?.label || role?.name || null;
     }
 
-    // Best price
-    const candidates = [tierPrice];
-    if (rolePrice !== null) candidates.push(rolePrice);
-    const currentPrice = Math.min(...candidates);
-
-    // Seasonal discount
-    let seasonalDiscount = 0;
+    // Product Discount — fallback price source only, same waterfall as calculateEffectivePrice.
     const now = new Date();
     const seasonal = await this.prisma.seasonalDiscount.findFirst({
       where: {
@@ -203,18 +232,49 @@ export class PricingService {
       },
       orderBy: { value: 'desc' },
     });
-
+    let discountedBasePrice: number | null = null;
     if (seasonal) {
-      if (seasonal.type === 'PERCENTAGE') {
-        seasonalDiscount = currentPrice * (Number(seasonal.value) / 100);
-      } else {
-        seasonalDiscount = Number(seasonal.value);
-      }
+      const discountValue =
+        seasonal.type === 'PERCENTAGE'
+          ? basePrice * (Number(seasonal.value) / 100)
+          : Number(seasonal.value);
+      discountedBasePrice = Math.max(0, basePrice - discountValue);
     }
 
-    const finalPrice = Math.max(0, currentPrice - seasonalDiscount);
+    // Priority: Role Custom Price > Product Tier Pricing > Product Discount > Base Price
+    let finalPrice: number;
+    let appliedRule: 'role' | 'tier' | 'discount' | 'base';
+    if (rolePrice !== null) {
+      finalPrice = rolePrice;
+      appliedRule = 'role';
+    } else if (tier) {
+      finalPrice = tierPrice;
+      appliedRule = 'tier';
+    } else if (discountedBasePrice !== null) {
+      finalPrice = discountedBasePrice;
+      appliedRule = 'discount';
+    } else {
+      finalPrice = basePrice;
+      appliedRule = 'base';
+    }
+
+    const seasonalDiscount = appliedRule === 'discount' ? basePrice - finalPrice : 0;
     const discountAmount = basePrice - finalPrice;
     const discountPercent = basePrice > 0 ? (discountAmount / basePrice) * 100 : 0;
+
+    // eslint-disable-next-line no-console
+    console.log('[PricingEngine] calculatePriceForRole (admin preview)', {
+      productId,
+      quantity,
+      roleId,
+      appliedRoleName,
+      basePrice,
+      rolePrice,
+      tierPrice,
+      productDiscountPrice: discountedBasePrice,
+      finalPrice,
+      appliedRule,
+    });
 
     return {
       basePrice,
@@ -225,6 +285,7 @@ export class PricingService {
       finalPrice,
       discountAmount,
       discountPercent,
+      appliedRule,
     };
   }
 

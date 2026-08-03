@@ -68,7 +68,7 @@ export default function AdminNotificationsPage() {
     <div className="space-y-6 max-w-2xl">
       <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Notifications</h1>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+      <div className="admin-card-static p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Send Notification</h2>
 
         {error && <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">{error}</div>}
@@ -117,7 +117,7 @@ export default function AdminNotificationsPage() {
       </div>
 
       {sentLog.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Recently Sent</h2>
           <div className="space-y-3">
             {sentLog.map((n, i) => (

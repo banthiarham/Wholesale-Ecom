@@ -9,8 +9,8 @@ import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
 import { useStorefrontRules } from "@/lib/rules"
 import { useToast } from "@/components/ui/Toast"
 import { EmptyState } from "@/components/ui/EmptyState"
-import { PaymentOffer, fetchPaymentOffers, checkOfferEligibility, calcOfferDiscount } from "@/lib/pricing"
-import { BankOfferCard } from "@/components/ui/BankOffers"
+import { PaymentOffer, fetchPaymentOffers, checkOfferEligibility, calcOfferDiscount, calcLineTotal } from "@/lib/pricing"
+import { BankOfferCard, OfferVerifyModal } from "@/components/ui/BankOffers"
 
 interface CartItem {
   id: string; quantity: number; unitPrice: number;
@@ -61,6 +61,28 @@ interface WalletCreditInfo {
   limitReached: boolean
 }
 
+// Parses an API response body, surfacing a clear error instead of letting a non-JSON
+// response (e.g. a proxy/server error page) blow up with an opaque "Something went wrong".
+async function parseApiResponse(res: Response): Promise<any> {
+  const text = await res.text()
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error(`Server returned an unexpected response (status ${res.status}). Please try again in a moment.`)
+  }
+}
+
+/* Numbered step indicator for checkout section headers — purely visual, the
+   underlying flow is still a single scrollable page, not a gated wizard. */
+function StepBadge({ n }: { n: number }) {
+  return (
+    <span className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+      {n}
+    </span>
+  )
+}
+
 export default function CheckoutPage() {
   const router = useRouter()
   const [cart, setCart] = useState<CartData | null>(null)
@@ -92,6 +114,7 @@ export default function CheckoutPage() {
   const [pointsRedeeming, setPointsRedeeming] = useState(false)
   const [bankOffers, setBankOffers] = useState<PaymentOffer[]>([])
   const [selectedBankOfferId, setSelectedBankOfferId] = useState<string | null>(null)
+  const [verifyingOfferId, setVerifyingOfferId] = useState<string | null>(null)
   const { showToast } = useToast()
 
   // Evaluate dynamic rules for checkout
@@ -327,9 +350,10 @@ export default function CheckoutPage() {
           bankOfferId: selectedBankOfferEntry?.eligible ? selectedBankOfferId : undefined,
         }),
       })
-      const data = await res.json()
+      const data = await parseApiResponse(res)
       if (!res.ok) {
-        showToast("error", data.message || "Failed to place order")
+        console.error("Order creation failed:", res.status, data)
+        showToast("error", data.message || `Failed to place order (status ${res.status})`)
         setPlacing(false)
         return
       }
@@ -350,8 +374,9 @@ export default function CheckoutPage() {
           }),
         })
         if (!walletRes.ok) {
-          const walletErr = await walletRes.json()
-          showToast("error", walletErr.message || "Wallet payment failed. Please try another payment method.")
+          const walletErr = await parseApiResponse(walletRes)
+          console.error("Wallet payment failed:", walletRes.status, walletErr)
+          showToast("error", walletErr.message || `Wallet payment failed (status ${walletRes.status}). Please try another payment method.`)
           setPlacing(false)
           return
         }
@@ -376,10 +401,11 @@ export default function CheckoutPage() {
         `/api/payments/initiate/${orderId}?provider=${selectedProvider}&returnUrl=${encodeURIComponent(returnUrl)}`,
         { method: "POST", headers: { Authorization: `Bearer ${token}` } }
       )
-      const initData = await initRes.json()
+      const initData = await parseApiResponse(initRes)
 
       if (!initRes.ok) {
-        showToast("error", initData.message || "Failed to initiate payment. Please try COD or contact support.")
+        console.error("Payment initiation failed:", initRes.status, initData)
+        showToast("error", initData.message || `Failed to initiate payment (status ${initRes.status}). Please try COD or contact support.`)
         setPlacing(false)
         return
       }
@@ -411,7 +437,9 @@ export default function CheckoutPage() {
       showToast("error", "Payment initiated but no redirect was received. Please check your order status.")
       router.push(`/orders/${orderId}`)
     } catch (err) {
-      showToast("error", "Something went wrong")
+      console.error("Checkout failed:", err)
+      const message = err instanceof Error && err.message ? err.message : "Something went wrong while placing your order. Please try again."
+      showToast("error", message)
       setPlacing(false)
     }
   }
@@ -532,10 +560,10 @@ export default function CheckoutPage() {
   const selectedGateway = gateways.find((g) => g.provider === selectedProvider)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container py-8">
         <Link href="/cart" className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-primary-600 mb-6 transition-colors"><ArrowLeft size={16} /> Back to cart</Link>
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Checkout</h1>
+        <h1 className="heading-lg mb-6">Checkout</h1>
 
         {redirectData && (
           <form ref={formRef} method={redirectData.method} action={redirectData.url} style={{ display: "none" }}>
@@ -559,9 +587,10 @@ export default function CheckoutPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <div className="card-base-static p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <MapPin className="text-primary-600" size={20} />
-                <h2 className="font-semibold">Shipping Address</h2>
+              <div className="flex items-center gap-2.5 mb-5">
+                <StepBadge n={1} />
+                <MapPin className="text-primary-600" size={19} />
+                <h2 className="font-bold text-gray-900">Shipping Address</h2>
               </div>
               <div className="space-y-4">
                 {/* Contact Info */}
@@ -655,8 +684,8 @@ export default function CheckoutPage() {
             <div className="card-base-static p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <CreditCard className="text-primary-600" size={20} />
-                  <h2 className="font-semibold">Billing Address</h2>
+                  <CreditCard className="text-primary-600" size={19} />
+                  <h2 className="font-bold text-gray-900">Billing Address</h2>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer text-sm">
                   <input type="checkbox" checked={billingSameAsShipping} onChange={(e) => setBillingSameAsShipping(e.target.checked)} className="rounded border-gray-300 accent-primary-600" />
@@ -748,21 +777,24 @@ export default function CheckoutPage() {
             </div>
 
             <div className="card-base-static p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <CreditCard className="text-primary-600" size={20} />
-                <h2 className="font-semibold">Payment Method</h2>
+              <div className="flex items-center gap-2.5 mb-5">
+                <StepBadge n={2} />
+                <CreditCard className="text-primary-600" size={19} />
+                <h2 className="font-bold text-gray-900">Payment Method</h2>
               </div>
               <div className="space-y-3">
                 {isPaymentAllowed("COD") && (
                   <label
                     onClick={() => setPaymentMethod("COD")}
-                    className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "COD" ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                    className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === "COD" ? "border-primary-600 bg-primary-50 shadow-sm" : "border-gray-200 hover:border-gray-300 hover:shadow-sm"}`}
                   >
-                    <input type="radio" name="payment" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} className="accent-primary-600" />
-                    <div className="flex items-center gap-3">
-                      <Banknote size={20} className="text-gray-600" />
+                    <input type="radio" name="payment" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} className="accent-primary-600 w-4 h-4" />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${paymentMethod === "COD" ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                        <Banknote size={18} />
+                      </div>
                       <div>
-                        <p className="font-medium text-gray-900">Cash on Delivery (COD)</p>
+                        <p className="font-semibold text-gray-900">Cash on Delivery (COD)</p>
                         <p className="text-xs text-gray-500">Pay when your order arrives</p>
                       </div>
                     </div>
@@ -772,13 +804,15 @@ export default function CheckoutPage() {
                 {walletCreditInfo && (
                   <label
                     onClick={() => setPaymentMethod("WALLET")}
-                    className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "WALLET" ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                    className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === "WALLET" ? "border-primary-600 bg-primary-50 shadow-sm" : "border-gray-200 hover:border-gray-300 hover:shadow-sm"}`}
                   >
-                    <input type="radio" name="payment" checked={paymentMethod === "WALLET"} onChange={() => setPaymentMethod("WALLET")} className="accent-primary-600" />
-                    <div className="flex items-center gap-3">
-                      <Wallet size={20} className="text-gray-600" />
+                    <input type="radio" name="payment" checked={paymentMethod === "WALLET"} onChange={() => setPaymentMethod("WALLET")} className="accent-primary-600 w-4 h-4" />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${paymentMethod === "WALLET" ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                        <Wallet size={18} />
+                      </div>
                       <div>
-                        <p className="font-medium text-gray-900">Pay from Wallet</p>
+                        <p className="font-semibold text-gray-900">Pay from Wallet</p>
                         <p className="text-xs text-gray-500">Available credit: {formatPrice(walletCreditInfo.availableCredit)}</p>
                         {walletCreditInfo.outstanding > 0 && (
                           <p className="text-xs text-amber-600">Outstanding: {formatPrice(walletCreditInfo.outstanding)}</p>
@@ -795,22 +829,24 @@ export default function CheckoutPage() {
                   <label
                     key={gw.id}
                     onClick={() => { setPaymentMethod("ONLINE"); setSelectedProvider(gw.provider) }}
-                    className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${paymentMethod === "ONLINE" && selectedProvider === gw.provider ? "border-primary-600 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                    className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === "ONLINE" && selectedProvider === gw.provider ? "border-primary-600 bg-primary-50 shadow-sm" : "border-gray-200 hover:border-gray-300 hover:shadow-sm"}`}
                   >
                     <input
                       type="radio"
                       name="payment"
                       checked={paymentMethod === "ONLINE" && selectedProvider === gw.provider}
                       onChange={() => { setPaymentMethod("ONLINE"); setSelectedProvider(gw.provider) }}
-                      className="accent-primary-600"
+                      className="accent-primary-600 w-4 h-4"
                     />
-                    <div className="flex items-center gap-3">
-                      <Smartphone size={20} className="text-gray-600" />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${paymentMethod === "ONLINE" && selectedProvider === gw.provider ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                        <Smartphone size={18} />
+                      </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="font-medium text-gray-900">{gw.label || PROVIDER_LABELS[gw.provider] || gw.provider}</p>
-                          {gw.isDefault && <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-medium rounded">Default</span>}
-                          {gw.testMode && <span className="px-1.5 py-0.5 bg-yellow-50 text-yellow-700 text-[10px] font-medium rounded">Test</span>}
+                          <p className="font-semibold text-gray-900">{gw.label || PROVIDER_LABELS[gw.provider] || gw.provider}</p>
+                          {gw.isDefault && <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-md uppercase tracking-wide">Default</span>}
+                          {gw.testMode && <span className="px-1.5 py-0.5 bg-yellow-50 text-yellow-700 text-[10px] font-bold rounded-md uppercase tracking-wide">Test</span>}
                         </div>
                         <p className="text-xs text-gray-500">{gw.description || PROVIDER_DESCRIPTIONS[gw.provider] || "Online payment"}</p>
                       </div>
@@ -819,7 +855,7 @@ export default function CheckoutPage() {
                 ))}
 
                 {!isPaymentAllowed("COD") && gateways.filter(gw => isPaymentAllowed(gw.provider) || isPaymentAllowed("ONLINE")).length === 0 && (
-                  <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 text-center">
+                  <div className="p-4 border border-gray-200 rounded-xl bg-gray-50 text-center">
                     <p className="text-sm text-gray-500">No payment methods available for your order. Please check order requirements.</p>
                   </div>
                 )}
@@ -845,9 +881,10 @@ export default function CheckoutPage() {
             {/* Bank & UPI Offers */}
             {bankOffers.length > 0 && (
               <div className="card-base-static p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Landmark className="text-primary-600" size={20} />
-                  <h2 className="font-semibold">Bank &amp; UPI Offers</h2>
+                <div className="flex items-center gap-2.5 mb-4">
+                  <StepBadge n={3} />
+                  <Landmark className="text-primary-600" size={19} />
+                  <h2 className="font-bold text-gray-900">Bank &amp; UPI Offers <span className="text-gray-400 font-normal">(optional)</span></h2>
                 </div>
                 <div className="space-y-2.5">
                   {evaluatedBankOffers.map(({ offer, eligible, reason }) => (
@@ -856,18 +893,35 @@ export default function CheckoutPage() {
                       offer={offer}
                       selectable
                       selected={selectedBankOfferId === offer.id}
-                      onSelect={() => setSelectedBankOfferId((prev) => (prev === offer.id ? null : offer.id))}
+                      onApply={() => setVerifyingOfferId(offer.id)}
+                      onRemove={() => setSelectedBankOfferId(null)}
                       ineligibleReason={eligible ? undefined : reason}
                     />
                   ))}
                 </div>
               </div>
             )}
+
+            {verifyingOfferId && (() => {
+              const entry = evaluatedBankOffers.find((e) => e.offer.id === verifyingOfferId)
+              if (!entry) return null
+              return (
+                <OfferVerifyModal
+                  offer={entry.offer}
+                  discountAmount={calcOfferDiscount(entry.offer, bankOfferBasis)}
+                  onClose={() => setVerifyingOfferId(null)}
+                  onApplied={() => {
+                    setSelectedBankOfferId(verifyingOfferId)
+                    setVerifyingOfferId(null)
+                  }}
+                />
+              )
+            })()}
           </div>
 
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 sticky-rail">
             <div className="card-base-static p-6">
-              <h2 className="font-semibold mb-4">Order Summary</h2>
+              <h2 className="font-bold text-gray-900 mb-4">Order Summary</h2>
               <div className="space-y-2 text-sm mb-4">
                 {cart.cart.items.map((item) => {
                   const disc = ruleProductDiscountMap.get(item.product.id)
@@ -875,7 +929,7 @@ export default function CheckoutPage() {
                   return (
                     <div key={item.id} className="flex justify-between">
                       <span className="text-gray-600">{item.product.title} x{item.quantity}</span>
-                      <span className="font-medium">{formatPrice(unitPrice * item.quantity)}</span>
+                      <span className="font-medium">{formatPrice(calcLineTotal(unitPrice, item.quantity))}</span>
                     </div>
                   )
                 })}
@@ -981,8 +1035,8 @@ export default function CheckoutPage() {
               </div>
 
               <div className="mt-4 flex gap-2">
-                <input type="text" placeholder="Coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-                <button onClick={applyCoupon} disabled={!couponCode} className="px-4 py-2 bg-primary-600 text-white rounded-xl text-sm hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 font-medium"><Tag size={16} /></button>
+                <input type="text" placeholder="Coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} className="input-base flex-1" />
+                <button onClick={applyCoupon} disabled={!couponCode} className="px-4 rounded-xl bg-primary-600 text-white hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 font-medium shrink-0"><Tag size={16} /></button>
               </div>
               {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
 
@@ -1016,15 +1070,19 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              <hr className="my-4" />
+              <div className="border-t border-gray-100 my-5" />
               <div className="flex justify-between items-center">
-                <span className="text-lg font-bold">Total</span>
-                <span className="text-xl font-bold text-primary-700">{formatPrice(finalTotal)}</span>
+                <span className="text-xl font-bold text-gray-900">Total</span>
+                <span className="text-2xl font-bold text-primary-700">{formatPrice(finalTotal)}</span>
               </div>
               <button
                 onClick={placeOrder}
                 disabled={placing || redirectData !== null || isCheckoutBlocked}
-                className={`w-full mt-6 py-3 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 ${isCheckoutBlocked ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800"}`}
+                className={`w-full mt-5 ${
+                  isCheckoutBlocked
+                    ? "py-3.5 rounded-xl font-semibold bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : "btn-primary justify-center text-base py-3.5"
+                } disabled:opacity-50 transition-all duration-200`}
               >
                 {placing ? (redirectData ? "Redirecting to payment..." : "Placing Order...") : walletInsufficient ? "Insufficient Wallet Credit" : isCheckoutBlocked ? "Checkout Restricted" : (paymentMethod === "ONLINE" ? "Pay Now" : paymentMethod === "WALLET" ? "Pay from Wallet" : "Place Order")}
               </button>

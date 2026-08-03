@@ -1,6 +1,7 @@
 "use client"
 
 import { Check } from "lucide-react"
+import Image from "next/image"
 import { formatPrice } from "@/lib/utils"
 
 interface PackageGroup {
@@ -82,7 +83,7 @@ export default function PackageGroupSelector({ group, selectedProductId, onSelec
               <div className="flex-1 min-w-0">
                 <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden shrink-0 mb-2">
                   {product.thumbnail || product.images?.[0] ? (
-                    <img src={product.thumbnail || product.images[0]} alt={product.title} className="w-full h-full object-cover" />
+                    <Image src={product.thumbnail || product.images[0]} alt={product.title} width={48} height={48} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600 text-lg">📦</div>
                   )}

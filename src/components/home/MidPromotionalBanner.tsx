@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 
 interface Banner {
   id: string
@@ -28,8 +29,8 @@ export default function MidPromotionalBanner() {
   if (!banner) return null
 
   const content = (
-    <div className="relative overflow-hidden rounded-2xl group">
-      <img src={banner.imageUrl} alt={banner.title} className="w-full h-52 sm:h-64 md:h-80 object-cover group-hover:scale-105 transition-transform duration-700" />
+    <div className="relative overflow-hidden rounded-2xl group h-52 sm:h-64 md:h-80">
+      <Image src={banner.imageUrl} alt={banner.title} fill className="img-zoom object-cover" sizes="100vw" />
       <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
       <div className="absolute inset-0 flex items-center">
         <div className="max-w-md pl-6 sm:pl-10 lg:pl-14">

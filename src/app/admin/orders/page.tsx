@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Search, ChevronDown, ChevronUp, Eye, Truck, X, ExternalLink, Plug, Layers } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
 interface Order {
   id: string
@@ -19,7 +20,33 @@ interface Order {
   carrier?: string | null
   deliveryPartnerId?: string | null
   deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null } | null
-  payment?: { status: string } | null
+  payment?: {
+    status: string
+    amount?: number
+    refunds?: { id: string; amount: number; status: string; reason: string | null; createdAt: string }[]
+  } | null
+}
+
+const REFUND_STATUSES = ["PENDING", "APPROVED", "REJECTED", "PROCESSED"] as const
+
+const REFUND_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Refund Pending",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  PROCESSED: "Refunded",
+  FAILED: "Failed",
+}
+
+const REFUND_STATUS_BADGE: Record<string, string> = {
+  PENDING: "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400",
+  APPROVED: "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400",
+  REJECTED: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
+  PROCESSED: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
+  FAILED: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
+}
+
+function latestRefund(o: Order) {
+  return o.payment?.refunds?.[0] || null
 }
 
 interface Partner {
@@ -39,6 +66,7 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const [refundFilter, setRefundFilter] = useState("")
   const [sortKey, setSortKey] = useState<keyof Order>("createdAt")
   const [sortDesc, setSortDesc] = useState(true)
   const [detailOrder, setDetailOrder] = useState<Order | null>(null)
@@ -49,6 +77,7 @@ export default function AdminOrdersPage() {
   const [partners, setPartners] = useState<Partner[]>([])
   const [trackingLoading, setTrackingLoading] = useState(false)
   const [createShipmentLoading, setCreateShipmentLoading] = useState(false)
+  const [refundActionLoading, setRefundActionLoading] = useState<string | null>(null)
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   useEffect(() => {
@@ -70,13 +99,16 @@ export default function AdminOrdersPage() {
     if (statusFilter) {
       result = result.filter((o) => o.status === statusFilter)
     }
+    if (refundFilter) {
+      result = result.filter((o) => latestRefund(o)?.status === refundFilter)
+    }
     result.sort((a, b) => {
       const av = (a[sortKey] ?? "") as string
       const bv = (b[sortKey] ?? "") as string
       return sortDesc ? (bv > av ? 1 : -1) : av > bv ? 1 : -1
     })
     setFiltered(result)
-  }, [orders, search, statusFilter, sortKey, sortDesc])
+  }, [orders, search, statusFilter, refundFilter, sortKey, sortDesc])
 
   const loadOrders = async () => {
     setLoading(true)
@@ -109,15 +141,36 @@ export default function AdminOrdersPage() {
   const cancelOrder = async (id: string) => {
     if (!confirm("Cancel this order?")) return
     try {
-      await fetch(`/api/orders/${id}/cancel`, {
+      const res = await fetch(`/api/orders/${id}/cancel`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       })
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "CANCELLED" } : o)))
-      if (detailOrder?.id === id) setDetailOrder((prev) => (prev ? { ...prev, status: "CANCELLED" } : null))
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || "Failed to cancel order")
+      setOrders((prev) => prev.map((o) => (o.id === id ? data.order : o)))
+      if (detailOrder?.id === id) setDetailOrder(data.order)
     } catch (err) {
       console.error(err)
       alert("Failed to cancel order")
+    }
+  }
+
+  const runRefundAction = async (id: string, action: "approve" | "reject" | "mark-refunded") => {
+    setRefundActionLoading(action)
+    try {
+      const res = await fetch(`/api/orders/${id}/refund/${action}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || `Failed to ${action.replace("-", " ")}`)
+      setOrders((prev) => prev.map((o) => (o.id === id ? data.order : o)))
+      if (detailOrder?.id === id) setDetailOrder(data.order)
+    } catch (err: any) {
+      console.error(err)
+      alert(err.message || "Something went wrong")
+    } finally {
+      setRefundActionLoading(null)
     }
   }
 
@@ -174,20 +227,18 @@ export default function AdminOrdersPage() {
     return sortDesc ? <ChevronDown size={14} className="text-primary-600 dark:text-primary-400" /> : <ChevronUp size={14} className="text-primary-600 dark:text-primary-400" />
   }
 
-  const statusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      PENDING: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-      PROCESSING: "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400",
-      SHIPPED: "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400",
-      DELIVERED: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
-      CANCELLED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  function orderStatusBadgeProps(status: string): { variant?: AdminBadgeVariant; colorClassName?: string } {
+    switch (status) {
+      case "PENDING": return { variant: "warning" }
+      case "PROCESSING": return { variant: "primary" }
+      case "SHIPPED": return { colorClassName: "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400" }
+      case "DELIVERED": return { variant: "success" }
+      case "CANCELLED": return { variant: "neutral" }
+      default: return { variant: "neutral" }
     }
-    return (
-      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium uppercase ${colors[status] || "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}>
-        {status}
-      </span>
-    )
   }
+
+  const statusBadge = (status: string) => <AdminStatusBadge status={status} {...orderStatusBadgeProps(status)} />
 
   return (
     <div className="space-y-4">
@@ -212,13 +263,23 @@ export default function AdminOrdersPage() {
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+        <select
+          value={refundFilter}
+          onChange={(e) => setRefundFilter(e.target.value)}
+          className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm"
+        >
+          <option value="">All Refunds</option>
+          {REFUND_STATUSES.map((s) => (
+            <option key={s} value={s}>{REFUND_STATUS_LABELS[s]}</option>
+          ))}
+        </select>
         <span className="text-sm text-gray-500 dark:text-gray-400">{filtered.length} order{filtered.length !== 1 ? "s" : ""}</span>
       </div>
 
       {loading ? (
         <SkeletonTable rows={5} cols={6} />
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
@@ -302,6 +363,62 @@ export default function AdminOrdersPage() {
                   </div>
                 </div>
               )}
+
+              {(() => {
+                const refund = latestRefund(detailOrder)
+                if (!refund) return null
+                return (
+                  <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Refund</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Refund Amount</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{formatPrice(Number(refund.amount))}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Refund Status</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${REFUND_STATUS_BADGE[refund.status] || REFUND_STATUS_BADGE.PENDING}`}>
+                          {REFUND_STATUS_LABELS[refund.status] || refund.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Requested Date</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{new Date(refund.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+
+                    {refund.status === "PENDING" && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button
+                          onClick={() => runRefundAction(detailOrder.id, "approve")}
+                          disabled={!!refundActionLoading}
+                          className="px-3 py-1.5 text-xs font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition"
+                        >
+                          {refundActionLoading === "approve" ? "Approving..." : "Approve Refund"}
+                        </button>
+                        <button
+                          onClick={() => runRefundAction(detailOrder.id, "reject")}
+                          disabled={!!refundActionLoading}
+                          className="px-3 py-1.5 text-xs font-medium border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition"
+                        >
+                          {refundActionLoading === "reject" ? "Rejecting..." : "Reject Refund"}
+                        </button>
+                      </div>
+                    )}
+                    {refund.status === "APPROVED" && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button
+                          onClick={() => runRefundAction(detailOrder.id, "mark-refunded")}
+                          disabled={!!refundActionLoading}
+                          className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+                        >
+                          {refundActionLoading === "mark-refunded" ? "Saving..." : "Mark as Refunded"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Items</h4>

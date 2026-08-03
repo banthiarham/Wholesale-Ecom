@@ -2,10 +2,8 @@ import { Module } from '@nestjs/common';
 import { DeliveryPartnersController } from './delivery-partners.controller';
 import { DeliveryPartnersService } from './delivery-partners.service';
 import { DeliveryPartnerFactory } from './providers/partner.factory';
-import { DelhiveryProviderService } from './providers/delhivery.service';
-import { BlueDartProviderService } from './providers/bluedart.service';
-import { EcomExpressProviderService } from './providers/ecom-express.service';
-import { DtdcProviderService } from './providers/dtdc.service';
+import { ShiprocketProviderService } from './providers/shiprocket.service';
+import { ShipmozoProviderService } from './providers/shipmozo.service';
 import { CustomPartnerProviderService } from './providers/custom-partner.service';
 
 @Module({
@@ -13,10 +11,8 @@ import { CustomPartnerProviderService } from './providers/custom-partner.service
   providers: [
     DeliveryPartnersService,
     DeliveryPartnerFactory,
-    DelhiveryProviderService,
-    BlueDartProviderService,
-    EcomExpressProviderService,
-    DtdcProviderService,
+    ShiprocketProviderService,
+    ShipmozoProviderService,
     CustomPartnerProviderService,
   ],
   exports: [DeliveryPartnersService, DeliveryPartnerFactory],

@@ -170,18 +170,18 @@ export function ProductCard({
   if (view === "list") {
     const listLowStock = !isOutOfStock && (product.inventoryQuantity ?? Infinity) <= Math.max(product.moq * 2, 20)
     return (
-      <Link href={`/products/${product.handle}`} className="card-base flex group">
-        <div className="relative w-44 sm:w-52 flex-shrink-0 bg-gray-50 overflow-hidden rounded-l-2xl">
+      <Link href={`/products/${product.handle}`} className="card-interactive flex group">
+        <div className="relative w-44 sm:w-52 flex-shrink-0 bg-gray-50 overflow-hidden">
           <div className="relative w-full h-full min-h-[160px]">
             {product.thumbnail ? (
-              <Image src={product.thumbnail} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out" sizes="208px" />
+              <Image src={product.thumbnail} alt={product.title} fill className="img-zoom object-cover" sizes="208px" />
             ) : (
               <div className="w-full h-full min-h-[160px] flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
                 <Package size={32} className="text-gray-200" />
               </div>
             )}
-            {seasonalDiscount && <span className="absolute top-2.5 left-2.5 badge badge-warning shadow-sm">{discountBadge(seasonalDiscount)}</span>}
-            {product.tierPrices && product.tierPrices.length > 0 && <span className="absolute top-2.5 right-2.5 badge badge-success shadow-sm">Bulk</span>}
+            {seasonalDiscount && <span className="absolute top-2.5 left-2.5 chip-sale">{discountBadge(seasonalDiscount)}</span>}
+            {product.tierPrices && product.tierPrices.length > 0 && <span className="absolute top-2.5 right-2.5 chip-bulk">Bulk</span>}
             {onToggleWishlist && (
               <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {wishlistButton}
@@ -195,10 +195,12 @@ export function ProductCard({
             {ratingRow(12, "text-xs text-gray-400")}
             {product.sku && <span className="text-xs text-gray-400">SKU: {product.sku}</span>}
           </div>
-          <div className="mt-2.5">{priceDisplay("md")}</div>
+          <div className="flex items-end justify-between gap-3 mt-2.5 flex-wrap">
+            {priceDisplay("md")}
+            <span className="text-xs font-bold text-gray-600 bg-gray-50 border border-gray-100 px-2 py-1 rounded-lg">MOQ {product.moq}</span>
+          </div>
           <div className="flex flex-wrap gap-1.5 mt-2.5">{ruleBadge("md")}</div>
           <div className="mt-auto pt-4 flex items-center gap-4 flex-wrap">
-            <span className="body-sm">MOQ: <span className="font-semibold text-gray-700">{product.moq}</span></span>
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
               {stockDot(isOutOfStock, listLowStock)}
               {isOutOfStock ? (
@@ -219,10 +221,10 @@ export function ProductCard({
   const lowStock = !isOutOfStock && (product.inventoryQuantity ?? Infinity) <= Math.max(product.moq * 2, 20)
 
   return (
-    <Link href={`/products/${product.handle}`} className="card-base overflow-hidden group flex flex-col h-full">
+    <Link href={`/products/${product.handle}`} className="card-interactive group flex flex-col h-full">
       <div className="relative aspect-square bg-gray-50 overflow-hidden">
         {product.thumbnail ? (
-          <Image src={product.thumbnail} alt={product.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
+          <Image src={product.thumbnail} alt={product.title} fill className="img-zoom object-cover" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
             <Package size={40} className="text-gray-200" />
@@ -231,12 +233,12 @@ export function ProductCard({
         {/* Subtle top scrim keeps badges legible over busy photography */}
         <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/[0.08] to-transparent pointer-events-none" />
         <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
-          {seasonalDiscount && <span className="badge badge-warning shadow-sm">{discountBadge(seasonalDiscount)}</span>}
-          {product.tierPrices && product.tierPrices.length > 0 && <span className="badge badge-success shadow-sm">Bulk</span>}
-          {product.tags?.includes("best-seller") && <span className="badge badge-primary shadow-sm">Best Seller</span>}
+          {seasonalDiscount && <span className="chip-sale">{discountBadge(seasonalDiscount)}</span>}
+          {product.tierPrices && product.tierPrices.length > 0 && <span className="chip-bulk">Bulk</span>}
+          {product.tags?.includes("best-seller") && <span className="chip-bestseller">Best Seller</span>}
         </div>
         {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
-          <span className="absolute bottom-2.5 left-2.5 badge badge-danger shadow-sm">Sale</span>
+          <span className="absolute bottom-2.5 left-2.5 chip-sale">Sale</span>
         )}
         {onToggleWishlist && (
           <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -254,10 +256,12 @@ export function ProductCard({
         <div className="flex items-center gap-1.5 mt-1.5">{ratingRow(11, "text-[11px] text-gray-400")}
           {product.sku && <span className="text-[11px] text-gray-400">· {product.sku}</span>}
         </div>
-        <div className="mt-2">{priceDisplay("sm")}</div>
+        <div className="flex items-end justify-between gap-2 mt-2">
+          <div className="min-w-0">{priceDisplay("sm")}</div>
+          <span className="shrink-0 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-100 px-1.5 py-1 rounded-md">MOQ {product.moq}</span>
+        </div>
         <div className="flex flex-wrap gap-1 mt-1.5">{ruleBadge("sm")}</div>
         <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-semibold">
-          <span className="body-sm !text-[11px]">MOQ: {product.moq}</span>
           <span className="inline-flex items-center gap-1">
             {stockDot(isOutOfStock, lowStock)}
             {isOutOfStock ? (

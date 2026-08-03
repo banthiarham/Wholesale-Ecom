@@ -48,20 +48,32 @@ export function useRolePricing(
       fetchPricing(p.id, quantity, user.id)
         .then((result) => {
           if (!result) return null
-          // Only include if there's a meaningful role price that's lower than base
-          if (result.rolePrice && result.rolePrice < result.basePrice) {
+
+          console.log("[PricingEngine:useRolePricing]", {
+            productId: p.id,
+            loggedInRole: result.appliedRoleName,
+            basePrice: result.basePrice,
+            rolePrice: result.rolePrice,
+            tierPrice: result.tierPrice,
+            finalPrice: result.finalPrice,
+            appliedRule: result.appliedRule,
+          })
+
+          // Role/contract custom price always wins — show it regardless of whether it's
+          // higher or lower than the base/tier price (a custom price is not a "deal").
+          if (result.appliedRule === "role" || result.appliedRule === "contract") {
             return {
               productId: p.id,
               info: {
-                rolePrice: result.rolePrice,
+                rolePrice: result.finalPrice,
                 appliedRoleName: result.appliedRoleName,
-                savings: result.basePrice - result.rolePrice,
+                savings: result.basePrice - result.finalPrice,
                 savingsPercent: result.discountPercent,
                 finalPrice: result.finalPrice,
               } as RolePricingInfo,
             }
           }
-          // Even without a role price, if there's a final price different from base, include it
+          // Otherwise, if the final price is a genuine discount off base (tier/seasonal), include it
           if (result.finalPrice < result.basePrice) {
             return {
               productId: p.id,

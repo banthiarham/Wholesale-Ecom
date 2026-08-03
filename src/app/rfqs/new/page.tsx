@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, FileText } from "lucide-react"
 
 interface RfqItem {
   productId: string
@@ -73,62 +73,69 @@ export default function NewRfqPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/rfqs" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6">
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container max-w-3xl py-8">
+        <Link href="/rfqs" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6 text-sm font-medium transition-colors">
           <ArrowLeft size={16} /> Back to RFQs
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Create New RFQ</h1>
+        <span className="eyebrow">B2B Marketplace</span>
+        <h1 className="heading-xl mb-6">Create New RFQ</h1>
 
-        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg" placeholder="e.g., Q2 Electronics Procurement" />
+        <div className="card-base-static p-6 space-y-5">
+          <div className="flex items-center gap-2.5 pb-1">
+            <FileText className="text-primary-600" size={19} />
+            <h2 className="font-bold text-gray-900">Request Details</h2>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg" rows={3} placeholder="Describe your requirements..." />
+            <label className="block text-xs font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="input-base" placeholder="e.g., Q2 Electronics Procurement" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg" placeholder="Any additional notes for vendors" />
+            <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="input-base resize-none" rows={3} placeholder="Describe your requirements..." />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="input-base" placeholder="Any additional notes for vendors" />
           </div>
 
-          <div className="pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-medium text-gray-900">Items</span>
-              <button onClick={addItem} className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700">
+          <div className="pt-2 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-3 pt-3">
+              <span className="font-bold text-gray-900">Items</span>
+              <button onClick={addItem} className="flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors">
                 <Plus size={16} /> Add Item
               </button>
             </div>
-            {items.map((item, index) => (
-              <div key={index} className="grid grid-cols-1 sm:grid-cols-6 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
-                <div className="sm:col-span-2">
-                  <input type="text" placeholder="Product ID (optional)" value={item.productId} onChange={(e) => updateItem(index, "productId", e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+            <div className="space-y-3">
+              {items.map((item, index) => (
+                <div key={index} className="grid grid-cols-1 sm:grid-cols-6 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                  <div className="sm:col-span-2">
+                    <input type="text" placeholder="Product ID (optional)" value={item.productId} onChange={(e) => updateItem(index, "productId", e.target.value)} className="input-base text-sm py-2" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <input type="text" placeholder="Description" value={item.description} onChange={(e) => updateItem(index, "description", e.target.value)} className="input-base text-sm py-2" />
+                  </div>
+                  <div>
+                    <input type="number" placeholder="Qty" value={item.quantity} onChange={(e) => updateItem(index, "quantity", Number(e.target.value))} className="input-base text-sm py-2" />
+                  </div>
+                  <div>
+                    <input type="number" placeholder="Target ₹" value={item.targetPrice} onChange={(e) => updateItem(index, "targetPrice", e.target.value)} className="input-base text-sm py-2" />
+                  </div>
+                  <div className="sm:col-span-5">
+                    <input type="text" placeholder="Notes" value={item.notes} onChange={(e) => updateItem(index, "notes", e.target.value)} className="input-base text-sm py-2" />
+                  </div>
+                  <div className="flex items-center justify-end">
+                    <button onClick={() => removeItem(index)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                  </div>
                 </div>
-                <div className="sm:col-span-2">
-                  <input type="text" placeholder="Description" value={item.description} onChange={(e) => updateItem(index, "description", e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <input type="number" placeholder="Qty" value={item.quantity} onChange={(e) => updateItem(index, "quantity", Number(e.target.value))} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <input type="number" placeholder="Target ₹" value={item.targetPrice} onChange={(e) => updateItem(index, "targetPrice", e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div className="sm:col-span-5">
-                  <input type="text" placeholder="Notes" value={item.notes} onChange={(e) => updateItem(index, "notes", e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div className="flex items-center justify-end">
-                  <button onClick={() => removeItem(index)} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <button
             onClick={handleSubmit}
             disabled={submitting || !title || items.length === 0}
-            className="w-full py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+            className="btn-primary w-full justify-center"
           >
             {submitting ? "Creating..." : "Create RFQ"}
           </button>

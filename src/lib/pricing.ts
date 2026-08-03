@@ -1,5 +1,57 @@
 "use client"
 
+export interface TierPrice {
+  id?: string
+  minQty: number
+  maxQty: number | null
+  price: number | string
+}
+
+function toNumber(value: number | string | null | undefined): number {
+  return typeof value === "number" ? value : Number(value ?? 0)
+}
+
+export function sortTierPrices(tierPrices: TierPrice[]): TierPrice[] {
+  return [...tierPrices].sort((a, b) => a.minQty - b.minQty)
+}
+
+// Single source of truth for "which slab applies at this quantity" — used by the
+// Product page, Mini Cart, Cart, and Checkout so they can never disagree.
+export function findApplicableTier(tierPrices: TierPrice[], qty: number): TierPrice | null {
+  if (!tierPrices || tierPrices.length === 0) return null
+  const sorted = sortTierPrices(tierPrices)
+  return sorted.find((tp) => qty >= tp.minQty && (tp.maxQty == null || qty <= tp.maxQty)) || null
+}
+
+export function findNextTier(tierPrices: TierPrice[], qty: number): TierPrice | null {
+  if (!tierPrices || tierPrices.length === 0) return null
+  const sorted = sortTierPrices(tierPrices)
+  return sorted.find((tp) => tp.minQty > qty) || null
+}
+
+export function getEffectiveUnitPrice(tierPrices: TierPrice[], qty: number, basePrice: number): number {
+  const tier = findApplicableTier(tierPrices, qty)
+  return tier ? toNumber(tier.price) : basePrice
+}
+
+export function calcLineTotal(unitPrice: number, qty: number): number {
+  return unitPrice * qty
+}
+
+export function clampQuantity(qty: number, moq: number, maxQty: number): number {
+  if (!Number.isFinite(qty)) return moq
+  return Math.max(moq, Math.min(maxQty, Math.round(qty)))
+}
+
+// Step is always exactly 1 — never the MOQ — so +/- can never jump or double.
+export function incrementQuantity(qty: number, moq: number, maxQty: number): number {
+  return clampQuantity(qty + 1, moq, maxQty)
+}
+
+export function decrementQuantity(qty: number, moq: number, maxQty: number): number {
+  return clampQuantity(qty - 1, moq, maxQty)
+}
+
 export interface PricingBreakdown {
   basePrice: number
   tierPrice: number
@@ -11,6 +63,7 @@ export interface PricingBreakdown {
   discountAmount: number
   discountPercent: number
   appliedDiscounts: string[]
+  appliedRule?: "contract" | "role" | "tier" | "discount" | "base"
 }
 
 export interface SeasonalDiscount {

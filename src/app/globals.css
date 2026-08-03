@@ -32,6 +32,9 @@
   --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05);
   --shadow-card-hover: 0 4px 8px -2px rgba(15, 23, 42, 0.06), 0 16px 32px -12px rgba(15, 23, 42, 0.16);
   --shadow-premium: 0 24px 48px -16px rgba(2, 6, 23, 0.28);
+  /* Deeper elevation steps for product cards / galleries / open surfaces */
+  --shadow-card-lg: 0 8px 16px -4px rgba(15, 23, 42, 0.08), 0 24px 48px -16px rgba(15, 23, 42, 0.18);
+  --shadow-elevated: 0 32px 64px -20px rgba(2, 6, 23, 0.32);
 }
 
 .dark {
@@ -235,6 +238,121 @@ h1, h2, h3, h4, h5, h6 {
 
   .section-header a {
     @apply text-sm font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1 transition-colors duration-200;
+  }
+
+  /* ── Storefront product surfaces ── */
+
+  /* Product card wrapper: lighter whole-card lift than .card-base — the image
+     itself carries the zoom via .img-zoom, so the card doesn't feel heavy in
+     dense grids. */
+  .card-interactive {
+    @apply bg-white rounded-2xl border border-gray-100 overflow-hidden;
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+  }
+
+  .card-interactive:hover {
+    box-shadow: var(--shadow-card-lg);
+    border-color: rgb(var(--color-primary-100));
+    transform: translateY(-2px);
+  }
+
+  /* Image zoom-on-hover — apply directly to the <Image>/<img>; relies on an
+     `overflow-hidden` ancestor and a `group` class on the card for group-hover. */
+  .img-zoom {
+    @apply transition-transform duration-500 ease-out group-hover:scale-105;
+  }
+
+  /* Corner-tag product badges (Amazon/Alibaba style) — solid fill instead of
+     the soft badge-* tint, for stronger at-a-glance scanning on dense grids.
+     Semantic colors (sale=red, bulk=green) match the existing badge-danger/
+     badge-success convention; bestseller stays on the theme-driven primary
+     color since it's a brand endorsement, not a semantic state. */
+  .chip-sale {
+    @apply inline-flex items-center px-2 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md bg-red-600 text-white shadow-sm;
+  }
+
+  .chip-bulk {
+    @apply inline-flex items-center px-2 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md bg-emerald-600 text-white shadow-sm;
+  }
+
+  .chip-bestseller {
+    @apply inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md bg-primary-600 text-white shadow-sm;
+  }
+
+  /* Sticky search/sort/filter toolbar on listing pages — sits below the
+     Header (h-16 lg:h-[72px]) + its breadcrumb bar, with a little clearance. */
+  .sticky-toolbar {
+    @apply sticky top-28 lg:top-32 z-30 py-3 bg-white/90 backdrop-blur-md border-b border-gray-100;
+  }
+
+  /* Sticky desktop filter sidebar — same top offset as .sticky-toolbar, but
+     also caps its own height and scrolls internally so a long filter list
+     never pushes below the viewport. */
+  .sticky-rail {
+    @apply sticky top-28 lg:top-32 max-h-[calc(100vh-8rem)] overflow-y-auto pb-8;
+  }
+
+  /* ── Admin surface tokens ──
+     Separate from the customer-facing card, badge, and button family
+     above: admin has a real, working dark mode (toggled via a scoped `.dark`
+     class in AdminShell, independent of the storefront) that those tokens
+     never carry `dark:` variants for. These consolidate the ad-hoc
+     `bg-white dark:bg-gray-900 rounded-xl border ... shadow-sm` idiom that
+     was hand-repeated across ~30 admin pages, without dropping dark mode. */
+  .admin-card-static {
+    @apply bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm;
+  }
+
+  .admin-card {
+    @apply admin-card-static transition-shadow duration-200;
+  }
+
+  .admin-card:hover {
+    @apply shadow-md;
+  }
+
+  .admin-btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .admin-btn-outline {
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .admin-badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-full tracking-wide;
+  }
+
+  .admin-badge-neutral {
+    @apply admin-badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400;
+  }
+
+  .admin-badge-primary {
+    @apply admin-badge bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300;
+  }
+
+  .admin-badge-success {
+    @apply admin-badge bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400;
+  }
+
+  .admin-badge-warning {
+    @apply admin-badge bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400;
+  }
+
+  .admin-badge-danger {
+    @apply admin-badge bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+  }
+
+  /* Admin modal panel — consolidates the rounded-lg/xl/2xl + shadow-lg/xl/2xl
+     split found across ~17 admin dialogs onto one convention, all at the
+     shared z-50 tier admin already uses consistently. */
+  .admin-modal-overlay {
+    @apply fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4;
+  }
+
+  .admin-modal-panel {
+    @apply admin-card-static shadow-xl animate-scale-in;
   }
 }
 

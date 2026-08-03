@@ -151,42 +151,33 @@ export default function LoyaltyPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="text-xl font-bold text-primary-700">WholesaleX Pro</div>
-          <div className="flex gap-4">
-            <Link href="/" className="text-gray-600 hover:text-primary-600">Home</Link>
-            <Link href="/products" className="text-gray-600 hover:text-primary-600">Products</Link>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gray-50/50">
+      <main className="section-container py-8">
+        <Link href="/" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6 text-sm font-medium transition-colors"><ArrowLeft size={16} /> Back to home</Link>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link href="/" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 mb-6"><ArrowLeft size={16} /> Back to home</Link>
-
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Loyalty Program</h1>
+        <span className="eyebrow">Account</span>
+        <h1 className="heading-xl mb-6">Loyalty Program</h1>
 
         {account ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="card-base-static p-6">
                 <div className="flex items-center gap-3 mb-2">
-                  <Gift size={20} className="text-primary-600" />
+                  <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center"><Gift size={17} className="text-primary-600" /></div>
                   <span className="text-sm text-gray-500">Available Points</span>
                 </div>
                 <div className="text-3xl font-bold text-gray-900">{account.points}</div>
               </div>
-              <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="card-base-static p-6">
                 <div className="flex items-center gap-3 mb-2">
-                  {tierIcon(account.tier)}
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">{tierIcon(account.tier)}</div>
                   <span className="text-sm text-gray-500">Tier</span>
                 </div>
                 <div className="text-3xl font-bold text-gray-900 capitalize">{account.tier}</div>
               </div>
-              <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="card-base-static p-6">
                 <div className="flex items-center gap-3 mb-2">
-                  <Wallet size={20} className="text-green-600" />
+                  <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center"><Wallet size={17} className="text-green-600" /></div>
                   <span className="text-sm text-gray-500">Wallet Balance</span>
                 </div>
                 <div className="text-3xl font-bold text-gray-900">₹{Number(account.walletBalance).toFixed(2)}</div>
@@ -195,7 +186,7 @@ export default function LoyaltyPage() {
 
             {/* Tier Progress */}
             {nextTier && (
-              <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
+              <div className="card-base-static p-6 mb-8">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${currentTier?.color}`}>{currentTier?.name}</span>
@@ -213,7 +204,7 @@ export default function LoyaltyPage() {
 
             {/* How to Earn Points */}
             {earningRules.length > 0 && (
-              <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
+              <div className="card-base-static p-6 mb-8">
                 <div className="flex items-center gap-2 mb-4">
                   <Zap size={20} className="text-primary-600" />
                   <h2 className="text-xl font-semibold">How to Earn Points</h2>
@@ -234,7 +225,7 @@ export default function LoyaltyPage() {
 
             {/* Referral Code */}
             {account && referralCode && (
-              <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
+              <div className="card-base-static p-6 mb-8">
                 <div className="flex items-center gap-2 mb-4">
                   <Users size={20} className="text-primary-600" />
                   <h2 className="text-xl font-semibold">Refer a Friend</h2>
@@ -252,7 +243,7 @@ export default function LoyaltyPage() {
                   <div className="border-t border-gray-100 pt-4 mt-4">
                     <p className="text-sm text-gray-600 mb-2">Have a referral code? Enter it below:</p>
                     <div className="flex gap-2">
-                      <input type="text" value={referralInput} onChange={(e) => setReferralInput(e.target.value)} placeholder="Enter referral code" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="text" value={referralInput} onChange={(e) => setReferralInput(e.target.value)} placeholder="Enter referral code" className="input-base flex-1" />
                       <button onClick={handleApplyReferral} disabled={!referralInput.trim()} className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium">Apply</button>
                     </div>
                     {referralMsg && (
@@ -265,7 +256,7 @@ export default function LoyaltyPage() {
 
             {/* Redeem Points */}
             {account.points > 0 && (
-              <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
+              <div className="card-base-static p-6 mb-8">
                 <div className="flex items-center gap-2 mb-4">
                   <Zap size={20} className="text-primary-600" />
                   <h2 className="text-xl font-semibold">Redeem Points</h2>
@@ -277,8 +268,8 @@ export default function LoyaltyPage() {
                 )}
                 <p className="text-sm text-gray-600 mb-4">Points are converted to wallet credit at a rate of <strong>1 point = ₹1</strong>. Use your wallet balance during checkout to reduce order total.</p>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <input type="number" min={1} max={account.points} value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} placeholder={`Max ${account.points} points`} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  <input type="text" value={redeemDesc} onChange={(e) => setRedeemDesc(e.target.value)} placeholder="Note (optional)" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  <input type="number" min={1} max={account.points} value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} placeholder={`Max ${account.points} points`} className="input-base flex-1" />
+                  <input type="text" value={redeemDesc} onChange={(e) => setRedeemDesc(e.target.value)} placeholder="Note (optional)" className="input-base flex-1" />
                   <button onClick={handleRedeem} disabled={redeeming || !redeemPoints} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium whitespace-nowrap">
                     {redeeming ? "Redeeming..." : `Redeem${redeemPoints ? ` for ₹${redeemPoints}` : ""}`}
                   </button>
@@ -297,39 +288,43 @@ export default function LoyaltyPage() {
               </div>
             )}
 
-            <div className="bg-white rounded-lg p-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp size={20} className="text-primary-600" />
-                <h2 className="text-xl font-semibold">Transaction History</h2>
+            <div className="card-base-static overflow-hidden">
+              <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
+                <TrendingUp size={18} className="text-primary-600" />
+                <h2 className="font-bold text-gray-900">Transaction History</h2>
               </div>
               {account.transactions.length === 0 ? (
-                <p className="text-gray-500">No transactions yet.</p>
+                <p className="text-gray-500 p-6">No transactions yet.</p>
               ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr><th className="px-4 py-2 text-left">Type</th><th className="px-4 py-2 text-left">Description</th><th className="px-4 py-2 text-right">Points</th><th className="px-4 py-2 text-right">Amount</th><th className="px-4 py-2 text-right">Date</th></tr>
+                  <thead>
+                    <tr className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                      <th className="px-6 py-3">Type</th><th className="px-4 py-3">Description</th><th className="px-4 py-3 text-right">Points</th><th className="px-4 py-3 text-right">Amount</th><th className="px-6 py-3 text-right">Date</th>
+                    </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-gray-50">
                     {account.transactions.map((t) => (
-                      <tr key={t.id} className="border-b">
-                        <td className="px-4 py-2 font-medium">{t.type}</td>
-                        <td className="px-4 py-2 text-gray-600">{t.description || "-"}</td>
-                        <td className={`px-4 py-2 text-right font-bold ${t.points >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      <tr key={t.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-6 py-3 font-medium text-gray-900">{t.type}</td>
+                        <td className="px-4 py-3 text-gray-600">{t.description || "-"}</td>
+                        <td className={`px-4 py-3 text-right font-bold ${t.points >= 0 ? "text-green-600" : "text-red-600"}`}>
                           {t.points > 0 ? `+${t.points}` : t.points}
                         </td>
-                        <td className="px-4 py-2 text-right text-gray-600">{t.amount ? formatPrice(Number(t.amount)) : "-"}</td>
-                        <td className="px-4 py-2 text-right text-gray-500">{new Date(t.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">{t.amount ? formatPrice(Number(t.amount)) : "-"}</td>
+                        <td className="px-6 py-3 text-right text-gray-500">{new Date(t.createdAt).toLocaleDateString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </>
         ) : (
-          <div className="bg-white rounded-lg p-8 text-center shadow-sm">
+          <div className="card-base-static p-8 text-center">
             <p className="text-gray-600 mb-4">Please sign in to view your loyalty account.</p>
-            <Link href="/login" className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">Sign In</Link>
+            <Link href="/login" className="btn-primary">Sign In</Link>
           </div>
         )}
       </main>

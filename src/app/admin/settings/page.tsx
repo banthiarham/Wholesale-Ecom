@@ -251,7 +251,7 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* Tab Content */}
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+      <div className="admin-card-static p-6">
         {activeTab === "branding" && (
           <div className="space-y-6">
             <div>

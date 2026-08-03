@@ -2,9 +2,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { X, ShoppingCart, ShoppingBag, Minus, Plus, Trash2, Package, ArrowRight } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
+import { clampQuantity, calcLineTotal } from "@/lib/pricing"
+import { useQuantityStepper } from "@/lib/pricing/useQuantityStepper"
 import { useToast } from "./Toast"
+import { EmptyState } from "./EmptyState"
 
 interface DrawerCartItem {
   id: string
@@ -40,6 +44,74 @@ function buildHeaders(extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = { "x-session-id": getCartSessionId(), ...extra }
   if (token) headers["Authorization"] = `Bearer ${token}`
   return headers
+}
+
+// Extracted so useQuantityStepper (a hook) can be called once per row, not inside
+// the parent's .map() callback — hooks can't be called conditionally/in a loop.
+function CartDrawerRow({
+  item,
+  updating,
+  onCommitQty,
+  onRemove,
+  onNavigate,
+}: {
+  item: DrawerCartItem
+  updating: boolean
+  onCommitQty: (quantity: number) => void
+  onRemove: () => void
+  onNavigate: () => void
+}) {
+  // Shared stepper: reseeds from the server-confirmed item.quantity whenever it changes,
+  // steps by exactly 1 via functional state updates, and debounces the commit.
+  const { qty, increment, decrement, atMin } = useQuantityStepper(
+    item.quantity, item.quantity, item.product.moq, item.product.inventoryQuantity, onCommitQty
+  )
+
+  return (
+    <div className="flex gap-3 p-4 hover:bg-gray-50/60 transition-colors">
+      <Link href={`/products/${item.product.handle}`} onClick={onNavigate} className="shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-50">
+        {item.product.thumbnail ? (
+          <Image src={item.product.thumbnail} alt={item.product.title} width={64} height={64} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+            <Package size={22} className="text-gray-300" />
+          </div>
+        )}
+      </Link>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <Link href={`/products/${item.product.handle}`} onClick={onNavigate} className="text-sm font-medium text-gray-900 line-clamp-2 hover:text-primary-600 transition-colors">
+            {item.product.title}
+          </Link>
+          <button onClick={onRemove} disabled={updating} className="shrink-0 text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50" aria-label="Remove item">
+            <Trash2 size={15} />
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mt-0.5">{formatPrice(item.unitPrice)} / unit</p>
+        <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={decrement}
+              disabled={updating || atMin}
+              title={atMin ? `Minimum order quantity is ${item.product.moq}` : undefined}
+              className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              <Minus size={12} />
+            </button>
+            <span className="w-7 text-center text-sm font-medium tabular-nums">{qty}</span>
+            <button
+              onClick={increment}
+              disabled={updating}
+              className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
+          <span className="text-sm font-semibold text-gray-900">{formatPrice(calcLineTotal(item.unitPrice, qty))}</span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function CartDrawerProvider({ children }: { children: ReactNode }) {
@@ -89,7 +161,7 @@ export function CartDrawerProvider({ children }: { children: ReactNode }) {
   }, [isOpen, closeCartDrawer])
 
   const updateQty = async (item: DrawerCartItem, quantity: number) => {
-    const clamped = Math.max(item.product.moq, Math.min(item.product.inventoryQuantity, quantity))
+    const clamped = clampQuantity(quantity, item.product.moq, item.product.inventoryQuantity)
     if (clamped === item.quantity) return
     setUpdatingId(item.id)
     try {
@@ -134,14 +206,14 @@ export function CartDrawerProvider({ children }: { children: ReactNode }) {
       {children}
       <div className={`fixed inset-0 z-[95] ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!isOpen}>
         <div
-          className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"}`}
+          className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"}`}
           onClick={closeCartDrawer}
         />
         <div
           role="dialog"
           aria-modal="true"
           aria-label="Cart"
-          className={`absolute right-0 top-0 h-full w-full sm:w-[420px] bg-white shadow-2xl flex flex-col transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"}`}
+          className={`absolute right-0 top-0 h-full w-full sm:w-[420px] bg-white shadow-[var(--shadow-elevated)] flex flex-col transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"}`}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-2.5">
@@ -168,61 +240,25 @@ export function CartDrawerProvider({ children }: { children: ReactNode }) {
                 ))}
               </div>
             ) : items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center h-full px-6 py-16">
-                <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center mb-4">
-                  <ShoppingBag size={28} className="text-gray-300" />
-                </div>
-                <h3 className="heading-sm mb-1.5">Your cart is empty</h3>
-                <p className="body-sm mb-6">Add some products to get started.</p>
-                <Link href="/products" onClick={closeCartDrawer} className="btn-primary">
-                  Browse Products
-                </Link>
+              <div className="h-full">
+                <EmptyState
+                  icon={ShoppingBag}
+                  title="Your cart is empty"
+                  description="Add some products to get started."
+                  action={{ label: "Browse Products", href: "/products" }}
+                />
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
                 {items.map((item) => (
-                  <div key={item.id} className="flex gap-3 p-4">
-                    <Link href={`/products/${item.product.handle}`} onClick={closeCartDrawer} className="shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-50">
-                      {item.product.thumbnail ? (
-                        <img src={item.product.thumbnail} alt={item.product.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-                          <Package size={22} className="text-gray-300" />
-                        </div>
-                      )}
-                    </Link>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <Link href={`/products/${item.product.handle}`} onClick={closeCartDrawer} className="text-sm font-medium text-gray-900 line-clamp-2 hover:text-primary-600 transition-colors">
-                          {item.product.title}
-                        </Link>
-                        <button onClick={() => removeItem(item)} disabled={updatingId === item.id} className="shrink-0 text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50" aria-label="Remove item">
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{formatPrice(item.unitPrice)} / unit</p>
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => updateQty(item, item.quantity - item.product.moq)}
-                            disabled={updatingId === item.id}
-                            className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-50"
-                          >
-                            <Minus size={12} />
-                          </button>
-                          <span className="w-7 text-center text-sm font-medium tabular-nums">{item.quantity}</span>
-                          <button
-                            onClick={() => updateQty(item, item.quantity + item.product.moq)}
-                            disabled={updatingId === item.id}
-                            className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-50"
-                          >
-                            <Plus size={12} />
-                          </button>
-                        </div>
-                        <span className="text-sm font-semibold text-gray-900">{formatPrice(item.unitPrice * item.quantity)}</span>
-                      </div>
-                    </div>
-                  </div>
+                  <CartDrawerRow
+                    key={item.id}
+                    item={item}
+                    updating={updatingId === item.id}
+                    onCommitQty={(newQty) => updateQty(item, newQty)}
+                    onRemove={() => removeItem(item)}
+                    onNavigate={closeCartDrawer}
+                  />
                 ))}
               </div>
             )}

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentStatus, OrderStatus, UserRole, RefundStatus } from '@prisma/client';
 import { PaymentGatewaysService } from '../payment-gateways/payment-gateways.service';
@@ -9,6 +9,8 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private prisma: PrismaService,
     private gatewaysService: PaymentGatewaysService,
@@ -128,19 +130,33 @@ export class PaymentsService {
       });
     }
 
-    const result = await gatewayProvider.initiatePayment({
-      orderId: order.id,
-      amount: Number(order.totalAmount),
-      currency: order.currency || 'INR',
-      customerInfo: {
-        name: `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim() || 'Customer',
-        email: order.user.email || '',
-        phone: order.user.phone || '',
-      },
-      returnUrl: effectiveReturnUrl,
-      credentials: gatewayConfig.credentials,
-      testMode: gatewayConfig.testMode,
-    });
+    let result;
+    try {
+      result = await gatewayProvider.initiatePayment({
+        orderId: order.id,
+        amount: Number(order.totalAmount),
+        currency: order.currency || 'INR',
+        customerInfo: {
+          name: `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim() || 'Customer',
+          email: order.user.email || '',
+          phone: order.user.phone || '',
+        },
+        returnUrl: effectiveReturnUrl,
+        credentials: gatewayConfig.credentials,
+        testMode: gatewayConfig.testMode,
+      });
+    } catch (err) {
+      // Log the full error server-side (stack, provider, order) for debugging — the
+      // client only ever sees the short, safe message below.
+      this.logger.error(
+        `Payment initiation failed for order ${orderId} via ${provider}: ${err.message}`,
+        err.stack,
+      );
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(
+        `Could not initiate payment with ${provider}. Please try another payment method or contact support.`,
+      );
+    }
 
     // Persist the gateway-side order/session ref immediately so the verify/webhook
     // handlers can resolve this payment by looking up providerRef (e.g. Razorpay's order_id).

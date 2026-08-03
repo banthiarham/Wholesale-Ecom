@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { FileText, Send, Search } from "lucide-react"
 import { SkeletonList } from "@/components/admin/Skeleton"
+import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
 interface Rfq {
   id: string
@@ -14,15 +15,15 @@ interface Rfq {
   _count?: { quotes: number }
 }
 
-const statusColor = (status: string) => {
-  const map: Record<string, string> = {
-    SUBMITTED: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    UNDER_REVIEW: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    QUOTED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    ACCEPTED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-    CANCELLED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+function rfqStatusBadgeProps(status: string): { variant?: AdminBadgeVariant; colorClassName?: string } {
+  switch (status) {
+    case "SUBMITTED": return { variant: "warning" }
+    case "UNDER_REVIEW": return { variant: "primary" }
+    case "QUOTED": return { variant: "success" }
+    case "ACCEPTED": return { colorClassName: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" }
+    case "CANCELLED": return { variant: "danger" }
+    default: return { variant: "neutral" }
   }
-  return map[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
 }
 
 export default function AdminRfqsPage() {
@@ -150,14 +151,12 @@ export default function AdminRfqsPage() {
       ) : (
         <div className="space-y-4">
           {filtered.map((rfq) => (
-            <div key={rfq.id} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+            <div key={rfq.id} className="admin-card-static p-5">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-gray-900 dark:text-gray-100">{rfq.title}</p>
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor(rfq.status)}`}>
-                      {rfq.status}
-                    </span>
+                    <AdminStatusBadge status={rfq.status} {...rfqStatusBadgeProps(rfq.status)} />
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {rfq.buyer?.firstName} {rfq.buyer?.lastName} &bull; {rfq.buyer?.email}

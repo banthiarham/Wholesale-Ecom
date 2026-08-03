@@ -233,10 +233,8 @@ export default function CartSummary({
         </div>
         <Link
           href="/checkout"
-          className={`mt-5 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold transition-all duration-200 ${
-            isCheckoutBlocked
-              ? "bg-gray-200 text-gray-400 cursor-not-allowed pointer-events-none"
-              : "bg-primary-600 text-white hover:bg-primary-700"
+          className={`mt-5 w-full ${
+            isCheckoutBlocked ? "flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold bg-gray-200 text-gray-400 cursor-not-allowed pointer-events-none" : "btn-primary"
           }`}
         >
           Proceed to Checkout <ArrowRight size={18} />

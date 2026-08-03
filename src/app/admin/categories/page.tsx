@@ -163,7 +163,7 @@ export default function AdminCategoriesPage() {
       </div>
 
       {showForm && (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingCategory ? "Edit Category" : "New Category"}</h3>
             <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"><X size={18} /></button>
@@ -189,7 +189,7 @@ export default function AdminCategoriesPage() {
       {loading ? (
         <SkeletonTable />
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm">
+        <div className="admin-card-static">
           {categories.length === 0 ? (
             <p className="p-6 text-sm text-gray-500 dark:text-gray-400">No categories yet.</p>
           ) : (

@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
+import { useCategories } from "@/lib/categories/CategoriesProvider"
 import { getCartSessionId } from "@/lib/utils"
 import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount } from "@/lib/pricing"
 import { useAuth } from "@/lib/auth"
@@ -48,14 +49,6 @@ interface Product {
   inventoryQuantity: number
   tierPrices: TierPrice[]
   categoryId?: string
-}
-
-interface Category {
-  id: string
-  name: string
-  handle: string
-  _count?: { products: number }
-  children?: Category[]
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -162,7 +155,7 @@ export default function Home() {
   const siteName = useSetting("siteName", "WholesaleX Pro")
 
   const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
+  const { categories } = useCategories()
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [homeSections, setHomeSections] = useState<HomeSection[]>([])
   const [sectionsLoaded, setSectionsLoaded] = useState(false)
@@ -199,14 +192,11 @@ export default function Home() {
   useEffect(() => {
     Promise.all([
       fetch("/api/products?limit=12").then((r) => r.json()),
-      fetch("/api/categories").then((r) => r.json()),
       fetchSeasonalDiscounts(),
       fetch("/api/home-sections").then((r) => r.json()).catch(() => []),
-    ]).then(([pData, cData, activeDiscounts, sectionsData]) => {
+    ]).then(([pData, activeDiscounts, sectionsData]) => {
       setProducts(pData.products || [])
       setDiscounts(activeDiscounts)
-      const cats: Category[] = cData.categories || []
-      setCategories(cats)
       const sectionList = Array.isArray(sectionsData)
         ? sectionsData
         : sectionsData?.sections || sectionsData?.data || []

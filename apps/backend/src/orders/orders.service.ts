@@ -6,7 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
 import { CartItemContext } from '../rules/rules-engine.service';
-import { OrderStatus, PaymentStatus, DeliveryStatus } from '@prisma/client';
+import { OrderStatus, PaymentStatus, DeliveryStatus, RefundStatus } from '@prisma/client';
 
 const ORDER_STATUS_MESSAGES: Partial<Record<OrderStatus, { title: string; message: (orderNumber: string) => string }>> = {
   CONFIRMED: { title: 'Order confirmed', message: (n) => `Your order #${n} has been confirmed and is being prepared.` },
@@ -308,7 +308,7 @@ export class OrdersService {
       where,
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true } } } },
-        payment: true,
+        payment: { include: { refunds: { orderBy: { createdAt: 'desc' } } } },
         deliveryPartner: true,
         deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
         user: { select: { id: true, firstName: true, lastName: true, email: true } },
@@ -322,7 +322,7 @@ export class OrdersService {
       where: { id },
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true, sku: true } } } },
-        payment: true,
+        payment: { include: { refunds: { orderBy: { createdAt: 'desc' } } } },
         user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
         deliveryPartner: true,
         deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
@@ -444,7 +444,86 @@ export class OrdersService {
       }
     }
 
-    return updated;
+    // A paid order that gets cancelled owes the buyer money back. Track that as a
+    // Refund record (existing model, tied to Payment) starting at PENDING so an
+    // admin can work it through the Approve -> Mark as Refunded flow below.
+    // Razorpay itself is NOT called here - this is manual/internal tracking only.
+    if (updated.payment && updated.payment.status === PaymentStatus.CAPTURED) {
+      await this.prisma.refund.create({
+        data: {
+          paymentId: updated.payment.id,
+          amount: updated.payment.amount,
+          reason: 'Order cancelled',
+          status: RefundStatus.PENDING,
+          initiatedBy: userId ?? null,
+        },
+      });
+      await this.prisma.payment.update({
+        where: { id: updated.payment.id },
+        data: { status: PaymentStatus.REFUND_PENDING },
+      });
+    }
+
+    return this.findById(id);
+  }
+
+  private async getPaymentWithLatestRefund(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { payment: { include: { refunds: { orderBy: { createdAt: 'desc' }, take: 1 } } } },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (!order.payment) throw new BadRequestException('This order has no payment to refund');
+    const refund = order.payment.refunds[0];
+    if (!refund) throw new BadRequestException('No refund has been requested for this order');
+    return { order, payment: order.payment, refund };
+  }
+
+  /** Refund Pending -> Approved. Money hasn't moved yet - this just acknowledges the request. */
+  async approveRefund(orderId: string) {
+    const { refund } = await this.getPaymentWithLatestRefund(orderId);
+    if (refund.status !== RefundStatus.PENDING) {
+      throw new BadRequestException(`Only a pending refund can be approved (current status: ${refund.status})`);
+    }
+    await this.prisma.refund.update({ where: { id: refund.id }, data: { status: RefundStatus.APPROVED } });
+    return this.findById(orderId);
+  }
+
+  /** Refund Pending -> Rejected. Payment reverts to CAPTURED since the money stays with the merchant. */
+  async rejectRefund(orderId: string, reason?: string) {
+    const { payment, refund } = await this.getPaymentWithLatestRefund(orderId);
+    if (refund.status !== RefundStatus.PENDING) {
+      throw new BadRequestException(`Only a pending refund can be rejected (current status: ${refund.status})`);
+    }
+    await this.prisma.refund.update({
+      where: { id: refund.id },
+      data: { status: RefundStatus.REJECTED, reason: reason || refund.reason },
+    });
+    await this.prisma.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.CAPTURED } });
+    return this.findById(orderId);
+  }
+
+  /**
+   * Approved -> Refunded. Marks the money as actually returned. The Razorpay refund
+   * itself is performed manually by the admin outside this app for now - this only
+   * records that it happened.
+   */
+  async markRefunded(orderId: string) {
+    const { order, payment, refund } = await this.getPaymentWithLatestRefund(orderId);
+    if (refund.status !== RefundStatus.APPROVED) {
+      throw new BadRequestException(`Only an approved refund can be marked as refunded (current status: ${refund.status})`);
+    }
+    await this.prisma.refund.update({ where: { id: refund.id }, data: { status: RefundStatus.PROCESSED } });
+    await this.prisma.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.REFUNDED } });
+
+    // A refund tied to a cancelled order should stay Cancelled - REFUNDED is only for
+    // orders that weren't already cancelled (e.g. a refund issued on a delivered order).
+    const finalOrderStatus = order.status === OrderStatus.CANCELLED ? OrderStatus.CANCELLED : OrderStatus.REFUNDED;
+    if (finalOrderStatus !== order.status) {
+      await this.prisma.order.update({ where: { id: orderId }, data: { status: finalOrderStatus } });
+    }
+    await this.notifyOrderStatus(order.userId, order.id, order.orderNumber, finalOrderStatus);
+    return this.findById(orderId);
   }
 
   async getDeliveryTracking(orderId: string) {

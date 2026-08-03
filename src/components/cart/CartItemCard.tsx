@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
 import { Minus, Plus, Trash2, Link as LinkIcon, Tag, Gift, Layers, AlertTriangle, Loader2 } from "lucide-react"
 import Link from "next/link"
-import { formatPrice, getContrastTextColor } from "@/lib/utils"
-
-interface TierPrice { minQty: number; maxQty: number | null; price: string }
+import Image from "next/image"
+import { formatPrice } from "@/lib/utils"
+import { TierPrice, findApplicableTier, findNextTier, calcLineTotal } from "@/lib/pricing"
+import { useQuantityStepper } from "@/lib/pricing/useQuantityStepper"
 
 interface CartItem {
   id: string; quantity: number; unitPrice: number
@@ -28,23 +28,13 @@ interface Props {
   maxQtyRule?: { maxQty: number; ruleName: string } | null
 }
 
-function findTierForQty(tierPrices: TierPrice[], qty: number): TierPrice | null {
-  if (!tierPrices || tierPrices.length === 0) return null
-  const sorted = [...tierPrices].sort((a, b) => a.minQty - b.minQty)
-  return sorted.find((tp) => qty >= tp.minQty && (!tp.maxQty || qty <= tp.maxQty)) || null
-}
-
-function findNextTier(tierPrices: TierPrice[], qty: number): TierPrice | null {
-  if (!tierPrices || tierPrices.length === 0) return null
-  const sorted = [...tierPrices].sort((a, b) => a.minQty - b.minQty)
-  return sorted.find((tp) => tp.minQty > qty) || null
-}
-
 export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleProductDiscount, bogoOffers, quantityDiscount, minQtyRule, maxQtyRule }: Props) {
-  const [qty, setQty] = useState(item.quantity)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => { setQty(item.quantity) }, [item.quantity])
+  // Shared stepper: reseeds from the server-confirmed item.quantity whenever it changes,
+  // steps by exactly 1 via functional state updates, and debounces the commit to onUpdate.
+  const { qty, increment, decrement, setTyped, flush, atMin } = useQuantityStepper(
+    item.quantity, item.quantity, item.product.moq, item.product.inventoryQuantity,
+    (newQty) => onUpdate(item.id, newQty)
+  )
 
   const listPrice = Number(item.product.unitPrice)
   const effectivePrice = Number(item.unitPrice)
@@ -55,39 +45,46 @@ export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleP
   const hasDiscount = savingsPerUnit > 0
 
   const pricingMetadata = (item as any).metadata?.pricing
+  const appliedRule = pricingMetadata?.appliedRule as string | undefined
   const rolePrice = pricingMetadata?.rolePrice
   const appliedRoleName = pricingMetadata?.appliedRoleName
-  const hasRolePrice = rolePrice && rolePrice < listPrice
+  const hasRolePrice = appliedRule === "role" || appliedRule === "contract"
   const tierPrice = pricingMetadata?.tierPrice
-  const hasTierPrice = tierPrice && tierPrice < listPrice && !hasRolePrice && !(pricingMetadata?.contractPrice && pricingMetadata.contractPrice < tierPrice)
+  const hasTierPrice = appliedRule === "tier"
+
+  console.log("[PricingEngine:CartItemCard]", {
+    productId: item.product.id,
+    loggedInRole: appliedRoleName,
+    basePrice: listPrice,
+    rolePrice,
+    tierPrice,
+    finalPrice: effectivePrice,
+    appliedRule,
+  })
 
   const sortedTierPrices = item.product.tierPrices?.length
     ? [...item.product.tierPrices].sort((a, b) => a.minQty - b.minQty)
     : []
-  const currentTier = findTierForQty(sortedTierPrices, qty)
+  const currentTier = findApplicableTier(sortedTierPrices, qty)
   const nextTier = findNextTier(sortedTierPrices, qty)
 
-  const optimisticTierPrice = currentTier ? Number(currentTier.price) : null
+  // Optimistic (client-computed) tier price is only meaningful while no role/contract
+  // custom price is active — a custom price doesn't follow the tier ladder, so a raw
+  // tier lookup would silently override the correct role price with the wrong number.
+  const optimisticTierPrice = !hasRolePrice && currentTier ? Number(currentTier.price) : null
   const showOptimisticPrice = optimisticTierPrice !== null && Math.abs(optimisticTierPrice - effectivePrice) > 0.01
   const displayPrice = showOptimisticPrice ? optimisticTierPrice : finalPrice
-  const displayTotal = displayPrice * qty
+  const displayTotal = calcLineTotal(displayPrice, qty)
   const displaySavings = (listPrice - displayPrice) * qty
 
-  const handleQtyChange = (newQty: number) => {
-    const clampedQty = Math.max(item.product.moq, Math.min(item.product.inventoryQuantity, newQty))
-    setQty(clampedQty)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => { if (clampedQty !== item.quantity) onUpdate(item.id, clampedQty) }, 400)
-  }
-
   return (
-    <div className="card-base overflow-hidden">
+    <div className="card-interactive">
       <div className="flex gap-4 p-5">
         {/* Thumbnail */}
         <Link href={`/products/${item.product.handle}`} className="shrink-0">
           <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gray-50 rounded-xl overflow-hidden">
             {item.product.thumbnail ? (
-              <img src={item.product.thumbnail} alt={item.product.title} className="w-full h-full object-cover" />
+              <Image src={item.product.thumbnail} alt={item.product.title} width={112} height={112} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
                 <span className="text-2xl font-bold text-gray-200">{item.product.title[0]}</span>
@@ -129,7 +126,7 @@ export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleP
               )}
               {hasRolePrice && !ruleProductDiscount && (
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="badge" style={{ backgroundColor: "#7c3aed", color: getContrastTextColor("#7c3aed") }}>{appliedRoleName} Price</span>
+                  <span className="badge bg-primary-600 text-white">{appliedRoleName} Price</span>
                 </div>
               )}
               {hasDiscount && !ruleProductDiscount && !hasTierPrice && (
@@ -177,23 +174,31 @@ export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleP
 
           {/* Quantity controls */}
           <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => handleQtyChange(qty - 1)} disabled={updating} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition disabled:opacity-50"><Minus size={14} /></button>
-              <input
-                type="number" min={item.product.moq} max={item.product.inventoryQuantity} value={qty}
-                onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setQty(v) }}
-                onBlur={() => { const clampedQty = Math.max(item.product.moq, Math.min(item.product.inventoryQuantity, qty)); setQty(clampedQty); if (clampedQty !== item.quantity) onUpdate(item.id, clampedQty) }}
-                onKeyDown={(e) => { if (e.key === "Enter") { const clampedQty = Math.max(item.product.moq, Math.min(item.product.inventoryQuantity, qty)); setQty(clampedQty); if (clampedQty !== item.quantity) onUpdate(item.id, clampedQty) } }}
-                className="w-16 h-8 text-center border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <button onClick={() => handleQtyChange(qty + 1)} disabled={updating} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition disabled:opacity-50"><Plus size={14} /></button>
-              <span className="text-xs text-gray-400 ml-2">{item.product.inventoryQuantity} available</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={decrement}
+                  disabled={updating || atMin}
+                  title={atMin ? `Minimum order quantity is ${item.product.moq}` : undefined}
+                  className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                ><Minus size={14} /></button>
+                <input
+                  type="number" min={item.product.moq} max={item.product.inventoryQuantity} value={qty}
+                  onChange={(e) => setTyped(Number(e.target.value))}
+                  onBlur={flush}
+                  onKeyDown={(e) => { if (e.key === "Enter") flush() }}
+                  className="w-14 h-8 text-center border-x border-gray-200 text-sm font-medium focus:outline-none focus:bg-gray-50"
+                />
+                <button onClick={increment} disabled={updating} className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-50"><Plus size={14} /></button>
+              </div>
+              <span className="text-xs text-gray-400">{item.product.inventoryQuantity} available</span>
             </div>
           </div>
 
           {/* Min/Max qty warnings */}
-          {(minQtyRule || maxQtyRule) && (
+          {(qty < item.product.moq || minQtyRule || maxQtyRule) && (
             <div className="mt-1.5 space-y-0.5">
+              {qty < item.product.moq && <p className="text-xs text-amber-600 flex items-center gap-1"><AlertTriangle size={12} /> Minimum order quantity is {item.product.moq} units</p>}
               {minQtyRule && qty < minQtyRule.minQty && <p className="text-xs text-amber-600 flex items-center gap-1"><AlertTriangle size={12} /> Min. {minQtyRule.minQty} units</p>}
               {maxQtyRule && qty > maxQtyRule.maxQty && <p className="text-xs text-red-600 flex items-center gap-1"><AlertTriangle size={12} /> Max. {maxQtyRule.maxQty} units</p>}
             </div>

@@ -385,7 +385,7 @@ function AdminProductsContent() {
 
       {/* Create Category Form */}
       {showCatForm && (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">Create New Category</h3>
             <button onClick={() => setShowCatForm(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
@@ -405,7 +405,7 @@ function AdminProductsContent() {
 
       {/* Product Form */}
       {showForm && (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingProduct ? "Edit Product" : "New Product"}</h3>
             <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
@@ -492,7 +492,7 @@ function AdminProductsContent() {
           <button onClick={openAdd} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">Add Product</button>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">

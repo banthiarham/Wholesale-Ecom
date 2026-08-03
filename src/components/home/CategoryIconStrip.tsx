@@ -1,22 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useMemo, useRef } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   Monitor, Laptop, Smartphone, Wind, Refrigerator, WashingMachine,
   CookingPot, Speaker, Watch, Camera, Droplets, Printer, Gamepad2, Sparkles,
   ChevronLeft, ChevronRight,
   type LucideIcon,
 } from "lucide-react"
-
-interface Category {
-  id: string
-  name: string
-  handle: string
-  image: string | null
-  _count?: { products: number }
-  children?: Category[]
-}
+import { useCategories, flattenCategories } from "@/lib/categories/CategoriesProvider"
 
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
   electronics: Monitor, "mobile-phones": Smartphone, televisions: Monitor,
@@ -45,20 +38,9 @@ const COLORS = [
 ]
 
 export default function CategoryIconStrip() {
-  const [categories, setCategories] = useState<Category[]>([])
+  const { categories: categoryTree } = useCategories()
+  const categories = useMemo(() => flattenCategories(categoryTree).slice(0, 14), [categoryTree])
   const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    fetch("/api/categories")
-      .then((res) => res.json())
-      .then((data) => {
-        const cats: Category[] = []
-        const walk = (arr: Category[]) => { for (const c of arr || []) { cats.push(c); walk(c.children || []) } }
-        walk(data.categories || [])
-        setCategories(cats.slice(0, 14))
-      })
-      .catch((err) => { console.error("Failed to fetch categories:", err) })
-  }, [])
 
   if (categories.length === 0) return null
 
@@ -101,7 +83,7 @@ export default function CategoryIconStrip() {
                   className={`w-16 h-16 sm:w-[76px] sm:h-[76px] rounded-2xl flex items-center justify-center shadow-sm group-hover:shadow-lg transition-all duration-300 group-hover:-translate-y-1 ${colorClass}`}
                 >
                   {cat.image ? (
-                    <img src={cat.image} alt={cat.name} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
+                    <Image src={cat.image} alt={cat.name} width={40} height={40} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
                   ) : (
                     <Icon size={28} />
                   )}

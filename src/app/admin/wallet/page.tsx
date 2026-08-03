@@ -243,19 +243,19 @@ export default function AdminWalletPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+        <div className="admin-card-static p-5">
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Balance</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">₹{totalBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+        <div className="admin-card-static p-5">
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Active Wallets</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{wallets.length}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+        <div className="admin-card-static p-5">
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Credit Limit</p>
           <p className="text-2xl font-bold text-blue-700">₹{totalCreditLimit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-5">
+        <div className="admin-card-static p-5">
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Outstanding</p>
           <p className={`text-2xl font-bold ${totalOutstanding > 0 ? "text-red-700" : "text-gray-900 dark:text-gray-100"}`}>₹{totalOutstanding.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
         </div>
@@ -269,7 +269,7 @@ export default function AdminWalletPage() {
 
       {/* Top Up / Deduct Form */}
       {(showTopup || showDeduct) && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{showTopup ? "Top Up Wallet" : "Deduct from Wallet"}</h2>
             <button onClick={resetForm} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"><X size={20} /></button>
@@ -350,7 +350,7 @@ export default function AdminWalletPage() {
           <p className="text-gray-600 dark:text-gray-400">No wallets found. Top up a wallet to get started.</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto">
+        <div className="admin-card-static overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
               <tr>

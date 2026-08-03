@@ -100,7 +100,7 @@ export default function AdminCouponsPage() {
       <div className="relative"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" /><input type="text" placeholder="Search coupons..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-800 dark:text-gray-100" /></div>
 
       {showForm && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editing ? "Edit Coupon" : "Create Coupon"}</h2><button onClick={resetForm} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"><X size={20} /></button></div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <input required placeholder="Coupon Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-800 dark:text-gray-100" />
@@ -120,7 +120,8 @@ export default function AdminCouponsPage() {
       {filtered.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-12 text-center"><p className="text-gray-600 dark:text-gray-400">No coupons found.</p></div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="admin-card-static overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800"><tr><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Code</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Type</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Value</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Min Order</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Uses</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Dates</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th><th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th></tr></thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -138,6 +139,7 @@ export default function AdminCouponsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

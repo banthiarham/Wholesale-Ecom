@@ -166,45 +166,34 @@ export default function RoleRequestPage() {
   const statusBadge = (status: string) => {
     switch (status) {
       case "PENDING":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-            <Clock size={12} /> Pending
-          </span>
-        )
+        return <span className="badge-warning inline-flex items-center gap-1"><Clock size={12} /> Pending</span>
       case "APPROVED":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            <Check size={12} /> Approved
-          </span>
-        )
+        return <span className="badge-success inline-flex items-center gap-1"><Check size={12} /> Approved</span>
       case "REJECTED":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            <X size={12} /> Rejected
-          </span>
-        )
+        return <span className="badge-danger inline-flex items-center gap-1"><X size={12} /> Rejected</span>
       default:
         return <span className="text-gray-500">{status}</span>
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50/50">
+      <div className="section-container max-w-3xl py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Role Change Request</h1>
-            <p className="text-sm text-gray-500 mt-1">Request a different role to access different pricing and features</p>
+            <span className="eyebrow">Account</span>
+            <h1 className="heading-xl">Role Change Request</h1>
+            <p className="body-sm mt-1">Request a different role to access different pricing and features</p>
           </div>
         </div>
 
         {/* Current Role */}
         <div className="card-base-static p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Current Role</h2>
+          <h2 className="heading-sm mb-3">Current Role</h2>
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm"
@@ -225,7 +214,7 @@ export default function RoleRequestPage() {
 
         {/* Request Form */}
         <div className="card-base-static p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Request a New Role</h2>
+          <h2 className="heading-sm mb-4">Request a New Role</h2>
 
           {message && (
             <div
@@ -267,7 +256,7 @@ export default function RoleRequestPage() {
             </div>
 
             {selectedRoleId && (
-              <div className="bg-gray-50 rounded-lg p-4">
+              <div className="bg-primary-50/40 border border-primary-100 rounded-xl p-4">
                 {(() => {
                   const selectedRole = availableRoles.find((r) => r.id === selectedRoleId)
                   if (!selectedRole) return null
@@ -275,13 +264,13 @@ export default function RoleRequestPage() {
                     <div>
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                          className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                           style={{ backgroundColor: selectedRole.color || "#6B7280", color: getContrastTextColor(selectedRole.color || "#6B7280") }}
                         >
                           <Shield size={16} />
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{selectedRole.label}</p>
+                          <p className="font-bold text-gray-900">{selectedRole.label}</p>
                           {selectedRole.description && (
                             <p className="text-sm text-gray-500">{selectedRole.description}</p>
                           )}
@@ -295,10 +284,10 @@ export default function RoleRequestPage() {
                         </div>
                       ) : selectedRolePermissions.length > 0 ? (
                         <div className="mt-3">
-                          <p className="text-sm font-medium text-gray-700 mb-2">This role grants access to:</p>
+                          <p className="text-sm font-semibold text-gray-700 mb-2">This role grants access to:</p>
                           <div className="flex flex-wrap gap-1.5">
                             {selectedRolePermissions.map((p) => (
-                              <span key={`${p.action}-${p.resource}`} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full font-medium">
+                              <span key={`${p.action}-${p.resource}`} className="badge-primary">
                                 {p.action}:{p.resource}
                               </span>
                             ))}
@@ -338,22 +327,22 @@ export default function RoleRequestPage() {
 
         {/* Past Requests */}
         <div className="card-base-static p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Requests</h2>
+          <h2 className="heading-sm mb-4">Your Requests</h2>
           {myRequests.length === 0 ? (
             <p className="text-gray-500 text-sm py-4 text-center">No role change requests yet.</p>
           ) : (
             <div className="space-y-3">
               {myRequests.map((req) => (
-                <div key={req.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div key={req.id} className="card-interactive flex items-center justify-between p-4">
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                       style={{ backgroundColor: req.role?.color || "#6B7280", color: getContrastTextColor(req.role?.color || "#6B7280") }}
                     >
                       <Shield size={16} />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">{req.role?.label || "Unknown Role"}</p>
+                      <p className="font-semibold text-gray-900">{req.role?.label || "Unknown Role"}</p>
                       <p className="text-xs text-gray-500">
                         {new Date(req.createdAt).toLocaleDateString("en-IN", {
                           day: "numeric",

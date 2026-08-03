@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { DashboardSkeleton } from "@/components/admin/Skeleton"
+import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
 interface DashboardStats {
   totalUsers: number
@@ -71,16 +72,16 @@ interface OrdersByStatus {
   [key: string]: number
 }
 
-const statusColor = (status: string) => {
-  const map: Record<string, string> = {
-    PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    CONFIRMED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    PROCESSING: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    SHIPPED: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
-    DELIVERED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    CANCELLED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+function orderStatusBadgeProps(status: string): { variant?: AdminBadgeVariant; colorClassName?: string } {
+  switch (status) {
+    case "PENDING": return { variant: "warning" }
+    case "CONFIRMED": return { variant: "primary" }
+    case "PROCESSING": return { colorClassName: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" }
+    case "SHIPPED": return { colorClassName: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" }
+    case "DELIVERED": return { variant: "success" }
+    case "CANCELLED": return { variant: "danger" }
+    default: return { variant: "neutral" }
   }
-  return map[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
 }
 
 /** Mini sparkline SVG from revenue data */
@@ -196,7 +197,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+      <div className="admin-card-static p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Quick Actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           {[
@@ -220,7 +221,7 @@ export default function AdminDashboardPage() {
       {/* Main content grid: Recent Orders + Pending RFQs */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Orders */}
-        <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
+        <div className="lg:col-span-2 admin-card-static">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">Recent Orders</h2>
             <Link href="/admin/orders" className="text-sm text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1">
@@ -242,9 +243,7 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-medium text-gray-900 dark:text-gray-100">#{order.orderNumber?.slice(0, 8) || order.id.slice(0, 8)}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor(order.status)}`}>
-                        {order.status}
-                      </span>
+                      <AdminStatusBadge status={order.status} {...orderStatusBadgeProps(order.status)} />
                     </div>
                     <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{formatPrice(order.totalAmount)}</span>
                   </div>
@@ -259,7 +258,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Pending RFQs */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
+        <div className="admin-card-static">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">Pending RFQs</h2>
             <Link href="/admin/rfqs" className="text-sm text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1">
@@ -298,7 +297,7 @@ export default function AdminDashboardPage() {
       {/* Revenue Chart + Top Products */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Revenue chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
+        <div className="lg:col-span-2 admin-card-static">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
             <div>
               <h2 className="font-semibold text-gray-900 dark:text-gray-100">Revenue (Last 30 Days)</h2>
@@ -339,7 +338,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Top Products */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
+        <div className="admin-card-static">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">Top Products</h2>
             <Link href="/admin/products" className="text-sm text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1">
@@ -377,7 +376,7 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Orders by Status */}
         {ordersByStatus && Object.keys(ordersByStatus).length > 0 && (
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+          <div className="admin-card-static p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-900 dark:text-gray-100">Orders by Status</h2>
               <Link href="/admin/orders" className="text-sm text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1">
@@ -388,9 +387,7 @@ export default function AdminDashboardPage() {
               {Object.entries(ordersByStatus).map(([status, count]) => (
                 <div key={status} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor(status)}`}>
-                      {status}
-                    </span>
+                    <AdminStatusBadge status={status} {...orderStatusBadgeProps(status)} />
                   </div>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{count as number}</span>
                 </div>
@@ -400,7 +397,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* Recent Activity */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+        <div className="admin-card-static p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Recent Activity</h2>
           {stats?.recentActivity && stats.recentActivity.length > 0 ? (
             <div className="space-y-3">
@@ -426,7 +423,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Low Stock Alerts */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm">
+        <div className="admin-card-static">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">Low Stock Alerts</h2>
             <Link href="/admin/inventory" className="text-sm text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1">
