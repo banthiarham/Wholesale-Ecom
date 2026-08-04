@@ -159,7 +159,7 @@ export class ProductsService {
     });
   }
 
-  private async downloadImageToDisk(url: string): Promise<string | null> {
+  private async downloadImageToDisk(url: string, redirectsLeft = 5): Promise<string | null> {
     return new Promise((resolve) => {
       const client = url.startsWith('https') ? https : http;
       const timeout = 10000;
@@ -167,18 +167,42 @@ export class ProductsService {
       let totalSize = 0;
       const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
-      const req = client.get(url, { timeout }, (res) => {
-        // Follow redirects
+      // Many image hosts/CDNs reject requests with no User-Agent (or Node's
+      // default one) with a 403, which otherwise silently drops the image.
+      const headers = {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'image/*,*/*;q=0.8',
+      };
+
+      const req = client.get(url, { timeout, headers }, (res) => {
+        // Follow redirects (resolving relative Location headers against the current URL)
         if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307 || res.statusCode === 308) {
-          const redirectUrl = res.headers.location;
-          if (redirectUrl) {
-            this.downloadImageToDisk(redirectUrl).then(resolve);
+          const location = res.headers.location;
+          res.resume();
+          if (location && redirectsLeft > 0) {
+            try {
+              const redirectUrl = new URL(location, url).toString();
+              this.downloadImageToDisk(redirectUrl, redirectsLeft - 1).then(resolve);
+            } catch {
+              resolve(null);
+            }
             return;
           }
+          resolve(null);
+          return;
         }
-        if (res.statusCode !== 200) { resolve(null); return; }
+        if (res.statusCode !== 200) { res.resume(); resolve(null); return; }
+        // Some CDNs/file hosts omit or mis-set content-type (e.g. application/octet-stream)
+        // even for genuine images — fall back to sniffing the URL's file extension
+        // instead of dropping the image outright.
         const contentType = res.headers['content-type'] || '';
-        if (!contentType.startsWith('image/')) { resolve(null); return; }
+        const looksLikeImageExt = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?|#|$)/i.test(url);
+        if (!contentType.startsWith('image/') && !(looksLikeImageExt && (contentType === '' || contentType.startsWith('application/octet-stream') || contentType.startsWith('binary/octet-stream')))) {
+          res.resume();
+          resolve(null);
+          return;
+        }
 
         res.on('data', (chunk: Buffer) => {
           totalSize += chunk.length;
@@ -208,6 +232,40 @@ export class ProductsService {
     });
   }
 
+  /**
+   * Resolves a category by name (case-insensitive, trimmed), creating it if it
+   * doesn't exist yet. `cache` and `createdNames` are shared across rows in a
+   * single import so the same new category name is only created once.
+   */
+  private async resolveCategoryIdByName(
+    rawName: string,
+    cache: Map<string, string>,
+    createdNames: string[],
+  ): Promise<string> {
+    const name = rawName.trim();
+    const key = name.toLowerCase();
+    const cached = cache.get(key);
+    if (cached) return cached;
+
+    let category = await this.prisma.category.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+    });
+
+    if (!category) {
+      const baseHandle = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'category';
+      let handle = baseHandle;
+      let suffix = 1;
+      while (await this.prisma.category.findUnique({ where: { handle } })) {
+        handle = `${baseHandle}-${suffix++}`;
+      }
+      category = await this.prisma.category.create({ data: { name, handle } });
+      createdNames.push(category.name);
+    }
+
+    cache.set(key, category.id);
+    return category.id;
+  }
+
   async bulkUploadFromExcel(
     buffer: Buffer,
     imageFiles: Express.Multer.File[] = [],
@@ -223,10 +281,30 @@ export class ProductsService {
       throw new BadRequestException('Excel file is empty or has no data rows');
     }
 
-    const results = { created: 0, updated: 0, errors: [] as string[], imageErrors: [] as string[], imagesDownloaded: 0, imagesUploaded: 0 };
+    const results = {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      categoriesCreated: [] as string[],
+      errors: [] as string[],
+      imageErrors: [] as string[],
+      imagesDownloaded: 0,
+      imagesUploaded: 0,
+    };
+    const categoryCache = new Map<string, string>(); // lowercase, trimmed name -> category id
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
+
+      // Ignore completely empty rows instead of reporting them as failures
+      const isEmptyRow = Object.values(row).every(
+        (v) => v === undefined || v === null || String(v).trim() === '',
+      );
+      if (isEmptyRow) {
+        results.skipped++;
+        continue;
+      }
+
       try {
         const sku = (row.sku || row.SKU || '').toString().trim();
         const title = (row.title || row.Title || row.name || row.Name || '').toString().trim();
@@ -236,7 +314,9 @@ export class ProductsService {
         const description = (row.description || row.Description || '').toString().trim();
         const status = (row.status || row.Status || 'PUBLISHED').toString().trim().toUpperCase();
         const vendorName = (row.vendorName || row.VendorName || '').toString().trim();
-        const categoryId = (row.categoryId || row.CategoryId || '').toString().trim();
+        const categoryName = (
+          row.category || row.Category || row.categoryName || row.CategoryName || row['Category Name'] || row['category name'] || ''
+        ).toString().trim();
         const tagsStr = (row.tags || row.Tags || '').toString().trim();
         const tags = tagsStr ? tagsStr.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
         const compareAtPrice = parseFloat(row.compareAtPrice || row.CompareAtPrice || '0') || null;
@@ -247,6 +327,10 @@ export class ProductsService {
           results.errors.push(`Row ${i + 2}: Missing required fields (sku, title, unitPrice)`);
           continue;
         }
+
+        const categoryId = categoryName
+          ? await this.resolveCategoryIdByName(categoryName, categoryCache, results.categoriesCreated)
+          : '';
 
         // Check if product with this SKU already exists
         const existing = await this.prisma.product.findUnique({ where: { sku } });

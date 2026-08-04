@@ -9,6 +9,8 @@ import { saveAs } from "file-saver"
 interface BulkResult {
   created: number
   updated: number
+  skipped: number
+  categoriesCreated: string[]
   errors: string[]
   imageErrors: string[]
   imagesDownloaded: number
@@ -33,8 +35,8 @@ export default function AdminBulkProductUploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const downloadTemplate = () => {
-    const headers = ["sku", "title", "unitPrice", "moq", "inventoryQuantity", "description", "status", "compareAtPrice", "vendorName", "categoryId", "tags", "images"]
-    const exampleRow = ["WEP-NEW001", "New Product Name", "999", "5", "200", "Product description here", "PUBLISHED", "1299", "Vendor Name", "", "tag1, tag2", "https://example.com/img1.jpg, https://example.com/img2.jpg"]
+    const headers = ["sku", "title", "unitPrice", "moq", "inventoryQuantity", "description", "status", "compareAtPrice", "vendorName", "Category Name", "tags", "images"]
+    const exampleRow = ["WEP-NEW001", "New Product Name", "999", "5", "200", "Product description here", "PUBLISHED", "1299", "Vendor Name", "Electronics", "tag1, tag2", "https://example.com/img1.jpg, https://example.com/img2.jpg"]
     const ws = XLSX.utils.aoa_to_sheet([headers, exampleRow])
     ws["!cols"] = [
       { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 8 }, { wch: 18 },
@@ -152,16 +154,18 @@ export default function AdminBulkProductUploadPage() {
         setResult({
           created: data.created || 0,
           updated: data.updated || 0,
+          skipped: data.skipped || 0,
+          categoriesCreated: data.categoriesCreated || [],
           errors: data.errors || [],
           imageErrors: data.imageErrors || [],
           imagesDownloaded: data.imagesDownloaded || 0,
           imagesUploaded: data.imagesUploaded || 0,
         })
       } else {
-        setResult({ created: 0, updated: 0, errors: [data.message || "Upload failed"], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
+        setResult({ created: 0, updated: 0, skipped: 0, categoriesCreated: [], errors: [data.message || "Upload failed"], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
       }
     } catch (e) {
-      setResult({ created: 0, updated: 0, errors: ["Network error. Please try again."], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
+      setResult({ created: 0, updated: 0, skipped: 0, categoriesCreated: [], errors: ["Network error. Please try again."], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
     }
     setUploading(false)
   }
@@ -238,7 +242,7 @@ export default function AdminBulkProductUploadPage() {
                 { col: "status", req: "No", desc: "DRAFT, PUBLISHED, or ARCHIVED (default: PUBLISHED)", ex: "PUBLISHED" },
                 { col: "compareAtPrice", req: "No", desc: "Original/compare price", ex: "1299" },
                 { col: "vendorName", req: "No", desc: "Vendor/supplier name", ex: "ABC Supplies" },
-                { col: "categoryId", req: "No", desc: "Category UUID", ex: "" },
+                { col: "Category Name", req: "No", desc: "Category name — matched case-insensitively; created automatically if it doesn't exist yet", ex: "Electronics" },
                 { col: "tags", req: "No", desc: "Comma-separated tags", ex: "electronics, battery" },
                 { col: "images", req: "No", desc: "Comma-separated image URLs — downloaded and stored automatically", ex: "https://img.host/a.jpg, https://img.host/b.jpg" },
               ].map((r) => (
@@ -350,25 +354,30 @@ export default function AdminBulkProductUploadPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
             <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center">
               <CheckCircle size={20} className="text-green-500 dark:text-green-400 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-green-700 dark:text-green-400">{result.created}</p>
-              <p className="text-xs text-green-600 dark:text-green-400">Created</p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-400">{result.created + result.updated}</p>
+              <p className="text-xs text-green-600 dark:text-green-400">Imported ({result.created} new, {result.updated} updated)</p>
             </div>
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center">
-              <FileSpreadsheet size={20} className="text-blue-500 dark:text-blue-400 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{result.updated}</p>
-              <p className="text-xs text-blue-600 dark:text-blue-400">Updated</p>
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 text-center">
+              <Package size={20} className="text-purple-500 dark:text-purple-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">{result.categoriesCreated.length}</p>
+              <p className="text-xs text-purple-600 dark:text-purple-400">Categories Created</p>
+            </div>
+            <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 text-center">
+              <FileSpreadsheet size={20} className="text-gray-500 dark:text-gray-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">{result.skipped}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Skipped (empty rows)</p>
             </div>
             <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 text-center">
               <XCircle size={20} className="text-red-500 dark:text-red-400 mx-auto mb-1" />
               <p className="text-2xl font-bold text-red-700 dark:text-red-400">{result.errors.length}</p>
-              <p className="text-xs text-red-600 dark:text-red-400">Errors</p>
+              <p className="text-xs text-red-600 dark:text-red-400">Failed Rows</p>
             </div>
             {(result.imagesDownloaded > 0 || result.imagesUploaded > 0) && (
               <>
-                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 text-center">
-                  <ImagePlus size={20} className="text-purple-500 dark:text-purple-400 mx-auto mb-1" />
-                  <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">{result.imagesDownloaded}</p>
-                  <p className="text-xs text-purple-600 dark:text-purple-400">URLs Downloaded</p>
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 text-center">
+                  <ImagePlus size={20} className="text-indigo-500 dark:text-indigo-400 mx-auto mb-1" />
+                  <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">{result.imagesDownloaded}</p>
+                  <p className="text-xs text-indigo-600 dark:text-indigo-400">URLs Downloaded</p>
                 </div>
                 <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 text-center">
                   <ImageIcon size={20} className="text-amber-500 dark:text-amber-400 mx-auto mb-1" />
@@ -379,11 +388,21 @@ export default function AdminBulkProductUploadPage() {
             )}
           </div>
 
+          {result.categoriesCreated.length > 0 && (
+            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-lg p-4 mb-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Package size={16} className="text-purple-500 dark:text-purple-400" />
+                <p className="text-sm font-medium text-purple-800 dark:text-purple-400">Categories Created ({result.categoriesCreated.length})</p>
+              </div>
+              <p className="text-sm text-purple-700 dark:text-purple-400">{result.categoriesCreated.join(", ")}</p>
+            </div>
+          )}
+
           {result.errors.length > 0 && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg p-4 mb-3">
               <div className="flex items-center gap-2 mb-2">
                 <XCircle size={16} className="text-red-500 dark:text-red-400" />
-                <p className="text-sm font-medium text-red-800 dark:text-red-400">Row Errors ({result.errors.length})</p>
+                <p className="text-sm font-medium text-red-800 dark:text-red-400">Failed Rows ({result.errors.length})</p>
               </div>
               <ul className="text-sm text-red-700 dark:text-red-400 list-disc list-inside max-h-40 overflow-y-auto">
                 {result.errors.map((e, i) => <li key={i}>{e}</li>)}
