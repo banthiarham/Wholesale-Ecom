@@ -80,6 +80,7 @@ export class SettingsService {
       announcementBarBgColor: '#ef4444',
       heroCarouselSpeed: '5000',
       heroCarouselAutoplay: 'true',
+      roundOffEnabled: 'false',
     };
   }
 
@@ -110,6 +111,7 @@ export class SettingsService {
       { key: 'announcementBarBgColor', value: '#ef4444', label: 'Announcement Background Color', type: 'color', group: 'homepage' },
       { key: 'heroCarouselSpeed', value: '5000', label: 'Carousel Speed (ms)', type: 'number', group: 'homepage' },
       { key: 'heroCarouselAutoplay', value: 'true', label: 'Auto-rotate Carousel', type: 'text', group: 'homepage' },
+      { key: 'roundOffEnabled', value: 'false', label: 'Round Off Order Totals', type: 'boolean', group: 'commerce' },
     ];
   }
 

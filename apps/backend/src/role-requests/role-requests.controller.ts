@@ -81,4 +81,15 @@ export class RoleRequestsController {
     const request = await this.service.reject(id, req.user.id);
     return { request };
   }
+
+  @Patch(':id/change-role')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resolve a pending request by manually granting any role (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Role changed, user role updated' })
+  async changeRole(@Param('id') id: string, @Body() body: { roleId: string }, @Request() req: any) {
+    const request = await this.service.changeRole(id, body.roleId, req.user.id);
+    return { request };
+  }
 }

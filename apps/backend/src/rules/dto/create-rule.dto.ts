@@ -44,4 +44,14 @@ export class CreateRuleDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+
+  @ApiPropertyOptional({ example: 'Festival Offer', description: 'Badge text shown on the product card when this rule applies' })
+  @IsOptional()
+  @IsString()
+  badgeLabel?: string;
+
+  @ApiPropertyOptional({ example: '#16a34a', description: 'Badge background color (hex)' })
+  @IsOptional()
+  @IsString()
+  badgeColor?: string;
 }

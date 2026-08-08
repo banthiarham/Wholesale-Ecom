@@ -1,12 +1,11 @@
 "use client"
 
-import { useMemo, useRef } from "react"
+import { useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
   Monitor, Laptop, Smartphone, Wind, Refrigerator, WashingMachine,
   CookingPot, Speaker, Watch, Camera, Droplets, Printer, Gamepad2, Sparkles,
-  ChevronLeft, ChevronRight,
   type LucideIcon,
 } from "lucide-react"
 import { useCategories, flattenCategories } from "@/lib/categories/CategoriesProvider"
@@ -20,75 +19,34 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   "personal-care": Sparkles, fashion: Sparkles, industrial: Monitor,
 }
 
-const COLORS = [
-  "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
-  "bg-violet-50 text-violet-600 group-hover:bg-violet-100",
-  "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100",
-  "bg-orange-50 text-orange-600 group-hover:bg-orange-100",
-  "bg-cyan-50 text-cyan-600 group-hover:bg-cyan-100",
-  "bg-rose-50 text-rose-600 group-hover:bg-rose-100",
-  "bg-amber-50 text-amber-600 group-hover:bg-amber-100",
-  "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
-  "bg-teal-50 text-teal-600 group-hover:bg-teal-100",
-  "bg-sky-50 text-sky-600 group-hover:bg-sky-100",
-  "bg-fuchsia-50 text-fuchsia-600 group-hover:bg-fuchsia-100",
-  "bg-lime-50 text-lime-600 group-hover:bg-lime-100",
-  "bg-pink-50 text-pink-600 group-hover:bg-pink-100",
-  "bg-green-50 text-green-600 group-hover:bg-green-100",
-]
-
 export default function CategoryIconStrip() {
   const { categories: categoryTree } = useCategories()
   const categories = useMemo(() => flattenCategories(categoryTree).slice(0, 14), [categoryTree])
-  const scrollRef = useRef<HTMLDivElement>(null)
 
   if (categories.length === 0) return null
 
-  const scroll = (dir: number) => {
-    scrollRef.current?.scrollBy({ left: dir * 200, behavior: "smooth" })
-  }
-
   return (
-    <section className="py-7 lg:py-9 border-b border-gray-100">
+    <section className="py-4 lg:py-5 bg-white border-b border-gray-100">
       <div className="section-container">
-        <div className="flex items-end justify-between mb-6">
-          <div>
-            <span className="eyebrow">Explore</span>
-            <h2 className="heading-md">Browse Categories</h2>
-          </div>
-          <div className="hidden sm:flex gap-2">
-            <button onClick={() => scroll(-1)} className="w-9 h-9 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-300 hover:shadow-md transition-all duration-200" aria-label="Scroll left">
-              <ChevronLeft size={16} />
-            </button>
-            <button onClick={() => scroll(1)} className="w-9 h-9 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-primary-600 hover:border-primary-300 hover:shadow-md transition-all duration-200" aria-label="Scroll right">
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
         <div
-          ref={scrollRef}
-          className="flex gap-6 overflow-x-auto pb-2 scrollbar-hide scroll-smooth"
-          style={{ WebkitMaskImage: "linear-gradient(to right, transparent 0, black 24px, black calc(100% - 24px), transparent 100%)", maskImage: "linear-gradient(to right, transparent 0, black 24px, black calc(100% - 24px), transparent 100%)" }}
+          className="flex items-start gap-5 sm:gap-7 lg:gap-0 lg:justify-between overflow-x-auto pb-1 scrollbar-hide scroll-smooth"
         >
-          {categories.map((cat, i) => {
+          {categories.map((cat) => {
             const Icon = CATEGORY_ICONS[cat.handle] || CATEGORY_ICONS[cat.name.toLowerCase()] || Monitor
-            const colorClass = COLORS[i % COLORS.length]
             return (
               <Link
                 key={cat.id}
                 href={`/categories/${cat.handle}`}
-                className="flex flex-col items-center gap-3 min-w-[88px] group"
+                className="flex flex-col items-center gap-2 min-w-[76px] group shrink-0"
               >
-                <div
-                  className={`w-16 h-16 sm:w-[76px] sm:h-[76px] rounded-2xl flex items-center justify-center shadow-sm group-hover:shadow-lg transition-all duration-300 group-hover:-translate-y-1 ${colorClass}`}
-                >
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white border border-gray-100 flex items-center justify-center overflow-hidden group-hover:border-primary-300 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-200">
                   {cat.image ? (
-                    <Image src={cat.image} alt={cat.name} width={40} height={40} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
+                    <Image src={cat.image} alt={cat.name} width={36} height={36} className="w-8 h-8 sm:w-9 sm:h-9 object-contain" />
                   ) : (
-                    <Icon size={28} />
+                    <Icon size={24} className="text-gray-500 group-hover:text-primary-600 transition-colors" />
                   )}
                 </div>
-                <span className="text-xs sm:text-sm font-medium text-gray-600 group-hover:text-primary-600 transition-colors text-center leading-tight max-w-[88px]">
+                <span className="text-[11px] sm:text-xs font-medium text-gray-700 group-hover:text-primary-600 transition-colors text-center leading-tight max-w-[80px] line-clamp-2">
                   {cat.name}
                 </span>
               </Link>

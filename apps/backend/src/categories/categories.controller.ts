@@ -12,6 +12,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody } 
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { AdjustCategoryPriceDto } from './dto/adjust-category-price.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -64,6 +65,19 @@ export class CategoriesController {
   async update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
     const category = await this.categoriesService.update(id, dto);
     return { category };
+  }
+
+  @Post(':id/adjust-price')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk-adjust the price of every product in a category by a percentage (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Product prices adjusted' })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  @ApiParam({ name: 'id', description: 'Category UUID' })
+  @ApiBody({ type: AdjustCategoryPriceDto })
+  async adjustPrice(@Param('id') id: string, @Body() dto: AdjustCategoryPriceDto) {
+    return this.categoriesService.adjustProductPrices(id, dto.percentage);
   }
 
   @Delete(':id')

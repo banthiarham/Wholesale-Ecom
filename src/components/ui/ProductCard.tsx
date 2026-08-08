@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { Heart, Star, Package, ShoppingCart } from "lucide-react"
+import { Heart, Star, Package, ShoppingCart, Sparkles } from "lucide-react"
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 import { SeasonalDiscount, PaymentOffer, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
+import { getContrastTextColor } from "@/lib/utils"
 import { ProductPriceDisplay, RolePricingInfo, RuleDiscountInfo } from "./ProductPriceDisplay"
 
 export interface ProductCardProduct {
@@ -38,6 +39,13 @@ interface QuantityDiscountInfo {
   ruleName: string
 }
 
+export interface CustomBadgeInfo {
+  productId: string
+  badgeLabel: string
+  badgeColor: string | null
+  ruleName: string
+}
+
 export interface ProductCardProps {
   product: ProductCardProduct
   view?: "grid" | "list"
@@ -48,6 +56,7 @@ export interface ProductCardProps {
   ruleDiscount?: RuleDiscountInfo | null
   bogo?: BogoInfo[]
   quantityDiscount?: QuantityDiscountInfo | null
+  customBadges?: CustomBadgeInfo[]
   seasonalDiscount?: SeasonalDiscount | null
   paymentOffers?: PaymentOffer[]
   isWishlisted?: boolean
@@ -69,6 +78,7 @@ export function ProductCard({
   ruleDiscount,
   bogo,
   quantityDiscount,
+  customBadges,
   seasonalDiscount,
   paymentOffers,
   isWishlisted,
@@ -80,6 +90,10 @@ export function ProductCard({
   addingLabel = "Adding...",
 }: ProductCardProps) {
   const isOutOfStock = (product.inventoryQuantity ?? Infinity) <= 0
+  const compareAtNum = product.compareAtPrice != null ? Number(product.compareAtPrice) : null
+  const discountPct = compareAtNum && compareAtNum > Number(product.unitPrice)
+    ? Math.round(((compareAtNum - Number(product.unitPrice)) / compareAtNum) * 100)
+    : null
   const matchedPaymentOffer = paymentOffers?.find(
     (o) =>
       o.productId === product.id ||
@@ -102,6 +116,26 @@ export function ProductCard({
       size={size}
     />
   )
+
+  // Admin-configured Dynamic Rule badge (any rule type with a badgeLabel set), shown as an
+  // overlay on the product image rather than in ProductRuleBadge's below-image row, per the
+  // top-left-of-image placement requirement. When multiple rules apply to this product, the
+  // first entry wins — the backend already returns customBadges ordered by rule priority
+  // (existing DynamicRule.priority, lower = higher precedence), so no new ordering logic here.
+  // Rendered as the first child of the existing top-left badge stack (not independently
+  // absolute-positioned) so it sits at the true top-left corner and other badges (seasonal
+  // discount, Bulk, Best Seller) stack beneath it rather than overlapping it.
+  const topRuleBadge = customBadges?.find((b) => b.productId === product.id)
+  const dynamicRuleBadge = topRuleBadge ? (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md shadow-sm max-w-[8.5rem] truncate self-start"
+      style={{ backgroundColor: topRuleBadge.badgeColor || "#7c3aed", color: getContrastTextColor(topRuleBadge.badgeColor || "#7c3aed") }}
+      title={topRuleBadge.badgeLabel}
+    >
+      <Sparkles size={10} className="shrink-0" />
+      <span className="truncate">{topRuleBadge.badgeLabel}</span>
+    </span>
+  ) : null
 
   const priceDisplay = (size: "sm" | "md") => (
     <ProductPriceDisplay
@@ -151,15 +185,13 @@ export function ProductCard({
     </button>
   ) : null
 
-  const ratingRow = (starSize: number, textClass: string) =>
+  const ratingRow = (size: "sm" | "md", textClass: string) =>
     (product.rating ?? 0) > 0 && (
       <>
-        <div className="flex">
-          {[1, 2, 3, 4, 5].map((s) => (
-            <Star key={s} size={starSize} className={s <= Math.round(product.rating!) ? "text-amber-400 fill-amber-400" : "text-gray-200"} />
-          ))}
-        </div>
-        <span className={textClass}>({product.reviewCount ?? product.rating})</span>
+        <span className={`inline-flex items-center gap-0.5 font-bold text-white bg-green-600 rounded ${size === "sm" ? "text-[10px] px-1 py-0.5" : "text-xs px-1.5 py-0.5"}`}>
+          {product.rating!.toFixed(1)} <Star size={size === "sm" ? 8 : 9} className="fill-white" />
+        </span>
+        <span className={textClass}>({product.reviewCount ?? 0})</span>
       </>
     )
 
@@ -180,7 +212,11 @@ export function ProductCard({
                 <Package size={32} className="text-gray-200" />
               </div>
             )}
-            {seasonalDiscount && <span className="absolute top-2.5 left-2.5 chip-sale">{discountBadge(seasonalDiscount)}</span>}
+            <div className="absolute top-2.5 left-2.5 flex flex-col items-start gap-1">
+              {dynamicRuleBadge}
+              {discountPct !== null && <span className="chip-sale">{discountPct}% OFF</span>}
+              {seasonalDiscount && <span className="chip-sale">{discountBadge(seasonalDiscount)}</span>}
+            </div>
             {product.tierPrices && product.tierPrices.length > 0 && <span className="absolute top-2.5 right-2.5 chip-bulk">Bulk</span>}
             {onToggleWishlist && (
               <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -192,7 +228,7 @@ export function ProductCard({
         <div className="flex-1 p-5 sm:p-6 flex flex-col">
           <h3 className="font-bold text-gray-900 tracking-tight group-hover:text-primary-600 transition-colors line-clamp-2">{product.title}</h3>
           <div className="flex items-center gap-2 mt-2">
-            {ratingRow(12, "text-xs text-gray-400")}
+            {ratingRow("md", "text-xs text-gray-400")}
             {product.sku && <span className="text-xs text-gray-400">SKU: {product.sku}</span>}
           </div>
           <div className="flex items-end justify-between gap-3 mt-2.5 flex-wrap">
@@ -232,13 +268,14 @@ export function ProductCard({
         )}
         {/* Subtle top scrim keeps badges legible over busy photography */}
         <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/[0.08] to-transparent pointer-events-none" />
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
+        <div className="absolute top-2.5 left-2.5 flex flex-col items-start gap-1 max-w-[calc(100%-1.25rem)]">
+          {dynamicRuleBadge}
           {seasonalDiscount && <span className="chip-sale">{discountBadge(seasonalDiscount)}</span>}
           {product.tierPrices && product.tierPrices.length > 0 && <span className="chip-bulk">Bulk</span>}
           {product.tags?.includes("best-seller") && <span className="chip-bestseller">Best Seller</span>}
         </div>
-        {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.unitPrice) && (
-          <span className="absolute bottom-2.5 left-2.5 chip-sale">Sale</span>
+        {discountPct !== null && (
+          <span className="absolute bottom-2.5 left-2.5 chip-sale">{discountPct}% OFF</span>
         )}
         {onToggleWishlist && (
           <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -253,7 +290,7 @@ export function ProductCard({
       </div>
       <div className="p-3.5 flex-1 flex flex-col">
         <h3 className="font-semibold text-gray-900 text-sm line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug min-h-[2.5rem]">{product.title}</h3>
-        <div className="flex items-center gap-1.5 mt-1.5">{ratingRow(11, "text-[11px] text-gray-400")}
+        <div className="flex items-center gap-1.5 mt-1.5">{ratingRow("sm", "text-[11px] text-gray-400")}
           {product.sku && <span className="text-[11px] text-gray-400">· {product.sku}</span>}
         </div>
         <div className="flex items-end justify-between gap-2 mt-2">

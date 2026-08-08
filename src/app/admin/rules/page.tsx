@@ -16,6 +16,8 @@ interface DynamicRule {
   actions: Record<string, any>
   startDate: string | null
   endDate: string | null
+  badgeLabel: string | null
+  badgeColor: string | null
   createdAt: string
 }
 
@@ -80,6 +82,8 @@ type RuleForm = {
   actions: Record<string, any>
   startDate: string
   endDate: string
+  badgeLabel: string
+  badgeColor: string
 }
 
 // Several action selects (discountType, shippingType, chargeType) show a visual
@@ -168,6 +172,8 @@ const emptyForm = (): RuleForm => ({
   ...defaultsForType("PRODUCT_DISCOUNT"),
   startDate: "",
   endDate: "",
+  badgeLabel: "",
+  badgeColor: "#7c3aed",
 })
 
 function ConditionsActionsFields({ form, setForm, products, categories, roles }: { form: RuleForm; setForm: React.Dispatch<React.SetStateAction<RuleForm>>; products: Product[]; categories: Category[]; roles: { id: string; name: string; label: string; color: string | null }[] }) {
@@ -687,6 +693,8 @@ export default function AdminRulesPage() {
       actions: r.actions as Record<string, any>,
       startDate: r.startDate ? new Date(r.startDate).toISOString().slice(0, 10) : "",
       endDate: r.endDate ? new Date(r.endDate).toISOString().slice(0, 10) : "",
+      badgeLabel: r.badgeLabel || "",
+      badgeColor: r.badgeColor || "#7c3aed",
     })
     setShowForm(true)
   }
@@ -718,6 +726,8 @@ export default function AdminRulesPage() {
       actions: form.actions,
       startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
       endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
+      badgeLabel: form.badgeLabel.trim() || null,
+      badgeColor: form.badgeLabel.trim() ? form.badgeColor : null,
     }
     try {
       const res = await authFetch(editing ? `/api/rules/${editing.id}` : "/api/rules", {
@@ -804,6 +814,18 @@ export default function AdminRulesPage() {
             <input type="number" placeholder="Priority (lower = higher)" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Product Badge (optional)</label>
+              <input placeholder="e.g. Festival Offer" value={form.badgeLabel} onChange={(e) => setForm({ ...form, badgeLabel: e.target.value })} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Badge Color</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={form.badgeColor} onChange={(e) => setForm({ ...form, badgeColor: e.target.value })} disabled={!form.badgeLabel.trim()} className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer disabled:opacity-50" />
+                <span className="text-xs text-gray-400 dark:text-gray-500">Shown on the product card wherever this rule applies</span>
+              </div>
+            </div>
 
             <div className="col-span-full border-t border-gray-100 dark:border-gray-800 pt-4 mt-2">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Conditions & Actions for: {getTypeLabel(form.type)}</h3>

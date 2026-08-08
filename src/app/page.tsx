@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Zap, Clock } from "lucide-react"
 
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { useCategories } from "@/lib/categories/CategoriesProvider"
@@ -14,12 +14,12 @@ import { useRolePricing } from "@/lib/pricing/useRolePricing"
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
 import { ProductCard } from "@/components/ui/ProductCard"
+import { ProductCarousel } from "@/components/ui/ProductCarousel"
 import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 
 // Home section components
 import AnnouncementBar from "@/components/home/AnnouncementBar"
 import HeroBannerCarousel from "@/components/home/HeroBannerCarousel"
-import CategoryIconStrip from "@/components/home/CategoryIconStrip"
 import TopSellingSection from "@/components/home/TopSellingSection"
 import TrustBadgesSection from "@/components/home/TrustBadgesSection"
 import MidPromotionalBanner from "@/components/home/MidPromotionalBanner"
@@ -102,7 +102,7 @@ function renderSection(section: HomeSection) {
       return <HeroBannerCarousel key={section.id} />
 
     case "category_icons":
-      return <CategoryIconStrip key={section.id} />
+      return null
 
     case "top_selling":
       return (
@@ -166,7 +166,7 @@ export default function Home() {
 
   // Dynamic rules
   const rulesProducts = useMemo(() => products.map((p) => ({ id: p.id, categoryId: p.categoryId, unitPrice: Number(p.unitPrice) })), [products])
-  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts } = useStorefrontRules(rulesProducts)
+  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts, customBadges } = useStorefrontRules(rulesProducts)
 
   const ruleDiscountMap = useMemo(() => {
     const m = new Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>()
@@ -280,13 +280,28 @@ export default function Home() {
                 bogoMap={bogoMap}
                 qtyDiscountMap={qtyDiscountMap}
                 rolePricingMap={rolePricingMap}
+                customBadges={customBadges}
                 addingId={addingId}
                 handleAddToCart={handleAddToCart}
               />
             )}
 
-            {/* ── Category Icons Strip ── */}
-            <CategoryIconStrip />
+            {/* ── Deals of the Day ── */}
+            {sectionsLoaded && (
+              <DealsOfTheDaySection
+                products={visibleProducts}
+                discounts={discounts}
+                hiddenPriceProductIds={hiddenPriceProductIds}
+                nonPurchasableProducts={nonPurchasableProducts}
+                ruleDiscountMap={ruleDiscountMap}
+                bogoMap={bogoMap}
+                qtyDiscountMap={qtyDiscountMap}
+                rolePricingMap={rolePricingMap}
+                customBadges={customBadges}
+                addingId={addingId}
+                handleAddToCart={handleAddToCart}
+              />
+            )}
 
             {/* ── Top Selling per category ── */}
             {categories.map((cat) => (
@@ -330,6 +345,7 @@ function DefaultHeroFallback({
   bogoMap,
   qtyDiscountMap,
   rolePricingMap,
+  customBadges,
   addingId,
   handleAddToCart,
 }: {
@@ -342,6 +358,7 @@ function DefaultHeroFallback({
   bogoMap: Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>
   qtyDiscountMap: Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>
   rolePricingMap: Record<string, { rolePrice: number; appliedRoleName: string | null; savings: number; savingsPercent: number; finalPrice: number }>
+  customBadges: { productId: string; badgeLabel: string; badgeColor: string | null; ruleName: string }[]
   addingId: string | null
   handleAddToCart: (id: string, qty: number) => void
 }) {
@@ -380,6 +397,7 @@ function DefaultHeroFallback({
               ruleDiscount={ruleDiscountMap.get(product.id)}
               bogo={bogoMap.get(product.id)}
               quantityDiscount={qtyDiscountMap.get(product.id)}
+              customBadges={customBadges}
               seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || undefined)}
               isAdding={addingId === product.id}
               onAddToCart={handleAddToCart}
@@ -390,6 +408,110 @@ function DefaultHeroFallback({
         <Link href="/products" className="sm:hidden flex items-center justify-center gap-1.5 text-primary-600 font-semibold mt-5 text-sm">
           View All Products <ArrowRight size={16} />
         </Link>
+      </div>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Deals of the Day                                                   */
+/*  Top-discounted products with a live countdown, Flipkart-style      */
+/* ------------------------------------------------------------------ */
+
+function DealsOfTheDaySection({
+  products,
+  discounts,
+  hiddenPriceProductIds,
+  nonPurchasableProducts,
+  ruleDiscountMap,
+  bogoMap,
+  qtyDiscountMap,
+  rolePricingMap,
+  customBadges,
+  addingId,
+  handleAddToCart,
+}: {
+  products: Product[]
+  discounts: SeasonalDiscount[]
+  hiddenPriceProductIds: Set<string>
+  nonPurchasableProducts: Map<string, string>
+  ruleDiscountMap: Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>
+  bogoMap: Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>
+  qtyDiscountMap: Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>
+  rolePricingMap: Record<string, { rolePrice: number; appliedRoleName: string | null; savings: number; savingsPercent: number; finalPrice: number }>
+  customBadges: { productId: string; badgeLabel: string; badgeColor: string | null; ruleName: string }[]
+  addingId: string | null
+  handleAddToCart: (id: string, qty: number) => void
+}) {
+  const [timeLeft, setTimeLeft] = useState("")
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date()
+      const midnight = new Date(now)
+      midnight.setHours(24, 0, 0, 0)
+      const diff = midnight.getTime() - now.getTime()
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setTimeLeft(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const dealProducts = useMemo(() => {
+    return products
+      .filter((p) => p.compareAtPrice && Number(p.compareAtPrice) > Number(p.unitPrice))
+      .sort((a, b) => {
+        const da = (Number(a.compareAtPrice) - Number(a.unitPrice)) / Number(a.compareAtPrice)
+        const db = (Number(b.compareAtPrice) - Number(b.unitPrice)) / Number(b.compareAtPrice)
+        return db - da
+      })
+      .slice(0, 10)
+  }, [products])
+
+  if (dealProducts.length === 0) return null
+
+  return (
+    <section className="section-padding-tight bg-gradient-to-b from-amber-50/70 to-transparent">
+      <div className="section-container">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-400 text-amber-900 shadow-sm shrink-0">
+              <Zap size={20} fill="currentColor" />
+            </span>
+            <div>
+              <h2 className="heading-lg">Deals of the Day</h2>
+              <p className="body-sm mt-0.5">Grab these offers before they&apos;re gone</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl font-mono text-sm font-bold tracking-wider shadow-sm">
+            <Clock size={15} className="text-amber-400" />
+            {timeLeft || "--:--:--"} <span className="text-white/60 font-sans font-normal">left</span>
+          </div>
+        </div>
+        <ProductCarousel
+          items={dealProducts.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={{ ...product, thumbnail: product.thumbnail || product.images?.[0] || null }}
+              view="grid"
+              isPriceHidden={hiddenPriceProductIds.has(product.id)}
+              isNonPurchasable={nonPurchasableProducts.has(product.id)}
+              nonPurchasableMsg={nonPurchasableProducts.get(product.id) || ""}
+              rolePricing={rolePricingMap[product.id]}
+              ruleDiscount={ruleDiscountMap.get(product.id)}
+              bogo={bogoMap.get(product.id)}
+              quantityDiscount={qtyDiscountMap.get(product.id)}
+              customBadges={customBadges}
+              seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || undefined)}
+              isAdding={addingId === product.id}
+              onAddToCart={handleAddToCart}
+            />
+          ))}
+        />
       </div>
     </section>
   )

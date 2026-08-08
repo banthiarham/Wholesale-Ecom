@@ -97,6 +97,16 @@ export class BulkOrdersController {
     return { bulkOrders };
   }
 
+  @Get('mine')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List the current user\'s own bulk order requests' })
+  @ApiResponse({ status: 200, description: 'Bulk order requests retrieved' })
+  async findMine(@CurrentUser() user: any) {
+    const bulkOrders = await this.bulkOrdersService.findMineByUser(user.id);
+    return { bulkOrders };
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
@@ -117,8 +127,20 @@ export class BulkOrdersController {
   @ApiOperation({ summary: 'Update bulk order request status (Admin)' })
   @ApiParam({ name: 'id', description: 'Bulk order request UUID' })
   @ApiResponse({ status: 200, description: 'Status updated' })
-  async updateStatus(@Param('id') id: string, @Body() body: UpdateBulkOrderStatusDto) {
-    const bulkOrder = await this.bulkOrdersService.updateStatus(id, body.status);
+  async updateStatus(@Param('id') id: string, @Body() body: UpdateBulkOrderStatusDto, @CurrentUser() user: any) {
+    const bulkOrder = await this.bulkOrdersService.updateStatus(id, body.status, body.comment, user?.id);
     return { bulkOrder };
+  }
+
+  @Get(':id/history')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get status change history for a bulk order request (Admin)' })
+  @ApiParam({ name: 'id', description: 'Bulk order request UUID' })
+  @ApiResponse({ status: 200, description: 'History retrieved' })
+  async getHistory(@Param('id') id: string) {
+    const history = await this.bulkOrdersService.getHistory(id);
+    return { history };
   }
 }

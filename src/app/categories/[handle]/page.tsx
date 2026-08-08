@@ -105,7 +105,7 @@ export default function CategoryPage() {
 
   // Evaluate dynamic rules
   const rulesProducts = useMemo(() => products.map((p) => ({ id: p.id, categoryId: p.categoryId || p.category?.id, unitPrice: p.unitPrice })), [products])
-  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts } = useStorefrontRules(rulesProducts)
+  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts, customBadges } = useStorefrontRules(rulesProducts)
 
   const ruleDiscountMap = useMemo(() => {
     const m = new Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>()
@@ -372,6 +372,7 @@ export default function CategoryPage() {
                           ruleDiscount={ruleDiscountMap.get(product.id)}
                           bogo={bogoMap.get(product.id)}
                           quantityDiscount={qtyDiscountMap.get(product.id)}
+                          customBadges={customBadges}
                           seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)}
                           paymentOffers={paymentOffers}
                           isWishlisted={wishlistIds.has(product.id)}

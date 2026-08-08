@@ -13,6 +13,11 @@ interface InvoiceOrder {
   orderNumber: string
   status: string
   totalAmount: number
+  subtotal?: number | null
+  taxAmount?: number | null
+  shippingAmount?: number | null
+  discountAmount?: number | null
+  roundOffAmount?: number | null
   currency: string
   createdAt: string
   shippingAddress: any
@@ -56,9 +61,15 @@ export default function InvoicePage() {
     </>
   ) : <p>—</p>
 
-  const subtotal = order.items.reduce((sum, item) => sum + Number(item.totalPrice), 0)
-  const shippingFee = 0
-  const taxAmount = Math.max(0, Number(order.totalAmount) - subtotal - shippingFee)
+  const hasPersistedBreakdown = order.subtotal != null
+  const derivedSubtotal = order.items.reduce((sum, item) => sum + Number(item.totalPrice), 0)
+  const subtotal = hasPersistedBreakdown ? Number(order.subtotal) : derivedSubtotal
+  const shippingFee = hasPersistedBreakdown ? Number(order.shippingAmount ?? 0) : 0
+  const taxAmount = hasPersistedBreakdown
+    ? Number(order.taxAmount ?? 0)
+    : Math.max(0, Number(order.totalAmount) - derivedSubtotal - shippingFee)
+  const discountAmount = hasPersistedBreakdown ? Number(order.discountAmount ?? 0) : 0
+  const roundOffAmount = hasPersistedBreakdown ? Number(order.roundOffAmount ?? 0) : 0
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 print:bg-white print:py-0">
@@ -131,8 +142,14 @@ export default function InvoicePage() {
         <div className="flex justify-end pb-6 border-b border-gray-200">
           <div className="w-full max-w-xs text-sm text-gray-600 space-y-2">
             <div className="flex justify-between"><span>Subtotal</span><span className="text-gray-900">{formatPrice(subtotal)}</span></div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between"><span>Discount</span><span className="text-gray-900">-{formatPrice(discountAmount)}</span></div>
+            )}
             <div className="flex justify-between"><span>Shipping</span><span className="text-gray-900">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span></div>
             <div className="flex justify-between"><span>GST / Taxes</span><span className="text-gray-900">{formatPrice(taxAmount)}</span></div>
+            {roundOffAmount !== 0 && (
+              <div className="flex justify-between"><span>Round off</span><span className="text-gray-900">{roundOffAmount > 0 ? "+" : "-"}{formatPrice(Math.abs(roundOffAmount))}</span></div>
+            )}
             <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200"><span className="text-gray-900">Grand Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
           </div>
         </div>

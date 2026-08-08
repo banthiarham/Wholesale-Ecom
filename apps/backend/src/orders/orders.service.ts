@@ -5,7 +5,8 @@ import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
-import { CartItemContext } from '../rules/rules-engine.service';
+import { CartItemContext, RuleEvaluationResult } from '../rules/rules-engine.service';
+import { SettingsService } from '../settings/settings.service';
 import { OrderStatus, PaymentStatus, DeliveryStatus, RefundStatus } from '@prisma/client';
 
 const ORDER_STATUS_MESSAGES: Partial<Record<OrderStatus, { title: string; message: (orderNumber: string) => string }>> = {
@@ -36,7 +37,37 @@ export class OrdersService {
     private notificationsService: NotificationsService,
     private loyaltyEarningService: LoyaltyEarningService,
     private rulesEnforcement: RulesEnforcementService,
+    private settingsService: SettingsService,
   ) {}
+
+  /**
+   * Turns a rule-engine evaluation + pre-computed discounts into the persisted amount
+   * breakdown. `subtotal` must be the raw pre-discount item sum (matches the checkout
+   * page's own `ruleTaxTotal`/`finalTotal` math so what buyers see pre-payment is what
+   * gets charged). Rule-based product/cart/quantity discounts, extra charges, and
+   * wallet/loyalty redemption are intentionally NOT folded in here — they stay
+   * checkout-preview-only, unchanged from current behavior.
+   */
+  private async computeAmountBreakdown(subtotal: number, discountAmount: number, ruleResult: RuleEvaluationResult) {
+    const taxAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.taxRate) / 100, 0);
+    const shippingAmount = ruleResult.shipping?.cost ?? 0;
+
+    const rawTotal = Math.max(0, subtotal - discountAmount) + taxAmount + shippingAmount;
+
+    const settings = await this.settingsService.findAll();
+    const roundOffEnabled = settings.roundOffEnabled === 'true';
+    const roundedTotal = roundOffEnabled ? Math.round(rawTotal) : rawTotal;
+    const roundOffAmount = roundedTotal - rawTotal;
+
+    return {
+      subtotal,
+      taxAmount,
+      shippingAmount,
+      discountAmount,
+      roundOffAmount,
+      totalAmount: roundedTotal,
+    };
+  }
 
   private async notifyOrderStatus(userId: string, orderId: string, orderNumber: string, status: OrderStatus) {
     const copy = ORDER_STATUS_MESSAGES[status];
@@ -92,6 +123,7 @@ export class OrdersService {
         metadata: item.metadata, // Preserve package composition and pricing data
       };
     });
+    const subtotal = totalAmount;
 
     // Enforce dynamic rules before creating the order
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -102,11 +134,12 @@ export class OrdersService {
       unitPrice: Number(item.unitPrice),
     }));
 
-    await this.rulesEnforcement.enforceOrderRules({
+    const ruleResult = await this.rulesEnforcement.enforceOrderRules({
       userId,
       userRole: (user as any)?.effectiveRole || (user as any)?.roleRel?.name || user?.role || undefined,
       cartItems: cartItemsContext,
       subtotal: totalAmount,
+      shippingRegion: data.shippingAddress?.state || undefined,
     });
 
     // Apply coupon discount if provided
@@ -171,10 +204,17 @@ export class OrdersService {
       ? [data.notes, `Bank offer applied: ${appliedBankOffer.name} (-₹${bankOfferDiscount.toFixed(2)})`].filter(Boolean).join(' | ')
       : data.notes;
 
+    const breakdown = await this.computeAmountBreakdown(subtotal, couponDiscount + bankOfferDiscount, ruleResult);
+
     const order = await this.prisma.order.create({
       data: {
         userId,
-        totalAmount,
+        totalAmount: breakdown.totalAmount,
+        subtotal: breakdown.subtotal,
+        taxAmount: breakdown.taxAmount,
+        shippingAmount: breakdown.shippingAmount,
+        discountAmount: breakdown.discountAmount,
+        roundOffAmount: breakdown.roundOffAmount,
         currency: 'INR',
         shippingAddress: data.shippingAddress,
         billingAddress: data.billingAddress || data.shippingAddress,
@@ -258,17 +298,25 @@ export class OrdersService {
       unitPrice: item.unitPrice,
     }));
 
-    await this.rulesEnforcement.enforceOrderRules({
+    const ruleResult = await this.rulesEnforcement.enforceOrderRules({
       userId,
       userRole: (user as any)?.effectiveRole || (user as any)?.roleRel?.name || user?.role || undefined,
       cartItems: bulkCartItems,
       subtotal: totalAmount,
+      shippingRegion: data.shippingAddress?.state || undefined,
     });
+
+    const breakdown = await this.computeAmountBreakdown(totalAmount, 0, ruleResult);
 
     const order = await this.prisma.order.create({
       data: {
         userId,
-        totalAmount,
+        totalAmount: breakdown.totalAmount,
+        subtotal: breakdown.subtotal,
+        taxAmount: breakdown.taxAmount,
+        shippingAmount: breakdown.shippingAmount,
+        discountAmount: breakdown.discountAmount,
+        roundOffAmount: breakdown.roundOffAmount,
         currency: 'INR',
         shippingAddress: data.shippingAddress || null,
         notes: data.notes || (errors.length > 0 ? `Bulk order. Skipped items: ${errors.join('; ')}` : 'Bulk order'),

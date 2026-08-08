@@ -12,7 +12,7 @@ interface ReturnItem {
   orderItemId: string
   quantity: number
   reason: string | null
-  orderItem: { product: { title: string; thumbnail: string | null } }
+  orderItem: { product: { title: string; thumbnail: string | null } } | null
 }
 
 interface ReturnRequest {
@@ -20,8 +20,10 @@ interface ReturnRequest {
   orderId: string
   order: { orderNumber: string }
   status: string
+  type: string
   reason: string
   notes: string | null
+  adminRemarks: string | null
   refundAmount: number | null
   createdAt: string
   updatedAt: string
@@ -89,7 +91,9 @@ export default function ReturnsPage() {
               <div key={ret.id} className="card-base-static p-5">
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <div>
-                    <p className="text-sm text-gray-500">Return for Order #{ret.order.orderNumber.slice(0, 8)}</p>
+                    <p className="text-sm text-gray-500">
+                      {ret.type === "REPLACEMENT" ? "Replacement" : "Return"} for Order #{ret.order.orderNumber.slice(0, 8)}
+                    </p>
                     <p className="text-xs text-gray-400">{new Date(ret.createdAt).toLocaleDateString()}</p>
                   </div>
                   <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${badge.bg}`}>
@@ -98,20 +102,26 @@ export default function ReturnsPage() {
                 </div>
                 <p className="text-sm text-gray-700 mb-3"><span className="font-medium">Reason:</span> {ret.reason}</p>
                 {ret.notes && <p className="text-xs text-gray-500 mb-3">{ret.notes}</p>}
+                {ret.adminRemarks && (
+                  <div className="mb-3 px-3 py-2 bg-blue-50 rounded-lg">
+                    <p className="text-xs font-medium text-blue-700 mb-0.5">Note from our team:</p>
+                    <p className="text-sm text-blue-800">{ret.adminRemarks}</p>
+                  </div>
+                )}
                 <div className="border-t border-gray-100 pt-3">
                   <p className="text-xs text-gray-500 mb-2">Items:</p>
                   <div className="space-y-2">
                     {ret.items.map((item) => (
                       <div key={item.id} className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center overflow-hidden shrink-0">
-                          {item.orderItem.product.thumbnail ? (
+                          {item.orderItem?.product.thumbnail ? (
                             <img src={item.orderItem.product.thumbnail} alt="" className="w-full h-full object-cover" />
                           ) : (
                             <Package size={16} className="text-gray-400" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-900 truncate">{item.orderItem.product.title}</p>
+                          <p className="text-sm text-gray-900 truncate">{item.orderItem?.product.title || "Item no longer available"}</p>
                           <p className="text-xs text-gray-500">Qty: {item.quantity}{item.reason ? ` - ${item.reason}` : ""}</p>
                         </div>
                       </div>

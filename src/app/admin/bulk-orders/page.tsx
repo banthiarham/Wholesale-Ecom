@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Search, PackageOpen, X, Building2, Mail, Phone, MapPin, FileBadge, Package, Layers, Wallet, CalendarDays, MessageSquare, Paperclip, Loader2 } from "lucide-react"
+import { Search, PackageOpen, X, Building2, Mail, Phone, MapPin, Package, Layers, Wallet, CalendarDays, MessageSquare, Paperclip, Loader2, Check, Ban, History as HistoryIcon } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface BulkOrderRequest {
@@ -20,29 +20,32 @@ interface BulkOrderRequest {
   expectedDeliveryDate: string
   message: string
   attachmentUrl: string | null
+  adminComment: string | null
   createdAt: string
   user: { id: string; firstName: string; lastName: string; email: string; companyName: string | null } | null
   product: { id: string; title: string; handle: string; thumbnail: string | null; sku: string | null } | null
 }
 
-const STATUS_OPTIONS = ["NEW", "CONTACTED", "QUOTATION_SENT", "NEGOTIATION", "CONFIRMED", "CANCELLED"] as const
+interface StatusHistoryEntry {
+  id: string
+  status: string
+  comment: string | null
+  changedBy: string | null
+  createdAt: string
+}
+
+const STATUS_OPTIONS = ["PENDING", "ACCEPTED", "REJECTED"] as const
 
 const STATUS_LABELS: Record<string, string> = {
-  NEW: "New",
-  CONTACTED: "Contacted",
-  QUOTATION_SENT: "Quotation Sent",
-  NEGOTIATION: "Negotiation",
-  CONFIRMED: "Confirmed",
-  CANCELLED: "Cancelled",
+  PENDING: "Pending",
+  ACCEPTED: "Accepted",
+  REJECTED: "Rejected",
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  NEW: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  CONTACTED: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  QUOTATION_SENT: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
-  NEGOTIATION: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-  CONFIRMED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  CANCELLED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  PENDING: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  ACCEPTED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  REJECTED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
 }
 
 export default function AdminBulkOrdersPage() {
@@ -52,6 +55,9 @@ export default function AdminBulkOrdersPage() {
   const [statusFilter, setStatusFilter] = useState("")
   const [selected, setSelected] = useState<BulkOrderRequest | null>(null)
   const [savingStatus, setSavingStatus] = useState(false)
+  const [commentDraft, setCommentDraft] = useState("")
+  const [history, setHistory] = useState<StatusHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
@@ -74,18 +80,20 @@ export default function AdminBulkOrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, statusFilter])
 
-  const updateStatus = async (id: string, status: string) => {
+  const decide = async (id: string, status: "ACCEPTED" | "REJECTED", comment: string) => {
     setSavingStatus(true)
     try {
       const res = await fetch(`/api/bulk-orders/${id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, comment: comment.trim() || undefined }),
       })
       const data = await res.json()
       if (res.ok) {
-        setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
-        setSelected((prev) => (prev && prev.id === id ? { ...prev, status } : prev))
+        const adminComment = comment.trim() || null
+        setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status, adminComment } : r)))
+        setSelected((prev) => (prev && prev.id === id ? { ...prev, status, adminComment } : prev))
+        loadHistory(id)
       } else {
         alert(data.message || "Could not update status")
       }
@@ -95,6 +103,23 @@ export default function AdminBulkOrdersPage() {
     } finally {
       setSavingStatus(false)
     }
+  }
+
+  const loadHistory = (id: string) => {
+    if (!token) return
+    setHistoryLoading(true)
+    fetch(`/api/bulk-orders/${id}/history`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => setHistory(data.history || []))
+      .catch(console.error)
+      .finally(() => setHistoryLoading(false))
+  }
+
+  const openDetail = (r: BulkOrderRequest) => {
+    setSelected(r)
+    setCommentDraft(r.adminComment || "")
+    setHistory([])
+    loadHistory(r.id)
   }
 
   const counts = STATUS_OPTIONS.reduce((acc, s) => {
@@ -175,7 +200,7 @@ export default function AdminBulkOrdersPage() {
                 {requests.map((r) => (
                   <tr
                     key={r.id}
-                    onClick={() => setSelected(r)}
+                    onClick={() => openDetail(r)}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition cursor-pointer"
                   >
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{r.bulkOrderNumber}</td>
@@ -216,18 +241,54 @@ export default function AdminBulkOrdersPage() {
               <button onClick={() => setSelected(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={20} /></button>
             </div>
 
-            {/* Status updater */}
-            <div className="flex items-center gap-3 mb-6 p-3.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</span>
-              <select
-                value={selected.status}
-                disabled={savingStatus}
-                onChange={(e) => updateStatus(selected.id, e.target.value)}
-                className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold border-0 focus:outline-none focus:ring-2 focus:ring-primary-500 ${STATUS_COLORS[selected.status] || "bg-gray-100 text-gray-700"}`}
-              >
-                {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-              </select>
-              {savingStatus && <Loader2 size={16} className="animate-spin text-gray-400" />}
+            {/* Decision */}
+            <div className="mb-6 p-3.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</span>
+                <span className={`ml-auto px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_COLORS[selected.status] || "bg-gray-100 text-gray-700"}`}>
+                  {STATUS_LABELS[selected.status] || selected.status}
+                </span>
+                {savingStatus && <Loader2 size={16} className="animate-spin text-gray-400" />}
+              </div>
+
+              {selected.status === "PENDING" ? (
+                <>
+                  <textarea
+                    value={commentDraft}
+                    onChange={(e) => setCommentDraft(e.target.value)}
+                    disabled={savingStatus}
+                    placeholder="Add a comment for the buyer (optional)..."
+                    rows={2}
+                    maxLength={1000}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-900 dark:text-gray-100"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => decide(selected.id, "ACCEPTED", commentDraft)}
+                      disabled={savingStatus}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                    >
+                      <Check size={15} /> Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => decide(selected.id, "REJECTED", commentDraft)}
+                      disabled={savingStatus}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                    >
+                      <Ban size={15} /> Reject
+                    </button>
+                  </div>
+                </>
+              ) : (
+                selected.adminComment && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Your comment: </span>
+                    {selected.adminComment}
+                  </p>
+                )
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
@@ -275,6 +336,31 @@ export default function AdminBulkOrdersPage() {
                 Submitted by registered user: {selected.user.firstName} {selected.user.lastName} ({selected.user.email})
               </p>
             )}
+
+            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                <HistoryIcon size={12} /> Status History
+              </p>
+              {historyLoading ? (
+                <p className="text-xs text-gray-400 dark:text-gray-500">Loading...</p>
+              ) : history.length === 0 ? (
+                <p className="text-xs text-gray-400 dark:text-gray-500">No status changes yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {history.map((h) => (
+                    <li key={h.id} className="text-xs flex items-start gap-2">
+                      <span className={`mt-0.5 px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap ${STATUS_COLORS[h.status] || "bg-gray-100 text-gray-700"}`}>
+                        {STATUS_LABELS[h.status] || h.status}
+                      </span>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {new Date(h.createdAt).toLocaleString("en-IN")}
+                        {h.comment && <span className="block text-gray-700 dark:text-gray-300 mt-0.5">{h.comment}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}

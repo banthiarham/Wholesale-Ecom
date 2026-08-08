@@ -50,7 +50,7 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
   const { openCartDrawer } = useCartDrawer()
 
   const rulesProducts = useMemo(() => products.map((p) => ({ id: p.id, categoryId: p.categoryId || p.category?.id, unitPrice: Number(p.unitPrice) })), [products])
-  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts } = useStorefrontRules(rulesProducts)
+  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts, customBadges } = useStorefrontRules(rulesProducts)
   const rolePricingProducts = useMemo(() => products.map((p) => ({ id: p.id, unitPrice: Number(p.unitPrice) })), [products])
   const { pricing: rolePricingMap } = useRolePricing(rolePricingProducts)
 
@@ -143,6 +143,7 @@ export default function TopSellingSection({ sectionId, title, categoryId, catego
                 ruleDiscount={ruleDiscountMap.get(product.id)}
                 bogo={bogoMap.get(product.id)}
                 quantityDiscount={qtyDiscountMap.get(product.id)}
+                customBadges={customBadges}
                 seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)}
                 isAdding={addingId === product.id}
                 onAddToCart={handleAddToCart}

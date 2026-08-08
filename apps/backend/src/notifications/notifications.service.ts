@@ -30,7 +30,7 @@ export class NotificationsService {
     });
 
     // Send email notification for important types
-    if (type === 'ORDER' || type === 'PAYMENT' || type === 'RFQ' || type === 'QUOTE') {
+    if (type === 'ORDER' || type === 'PAYMENT' || type === 'RFQ' || type === 'QUOTE' || type === 'RETURN') {
       const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
       if (user?.email) {
         try {

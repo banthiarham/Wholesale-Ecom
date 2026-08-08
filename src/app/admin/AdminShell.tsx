@@ -45,6 +45,7 @@ import {
   Moon,
   Sun,
   Layers,
+  Receipt,
 } from "lucide-react"
 import { useAuth, usePermissions } from "@/lib/auth"
 
@@ -103,6 +104,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Role Pricing", href: "/admin/role-prices", icon: DollarSign },
       { label: "Contract Prices", href: "/admin/contract-prices", icon: Scale },
+      { label: "Tax Management", href: "/admin/tax", icon: Receipt },
     ],
   },
   {

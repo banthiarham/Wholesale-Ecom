@@ -19,6 +19,11 @@ interface OrderDetail {
   orderNumber: string
   status: string
   totalAmount: number
+  subtotal?: number | null
+  taxAmount?: number | null
+  shippingAmount?: number | null
+  discountAmount?: number | null
+  roundOffAmount?: number | null
   currency: string
   createdAt: string
   updatedAt: string
@@ -266,11 +271,16 @@ export default function OrderDetailPage() {
 
     setSubmittingReturn(true)
     try {
-      const reasonPrefix = returnMode === "REPLACE" ? "[Replacement requested] " : ""
       const res = await fetch("/api/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ orderId: order.id, reason: `${reasonPrefix}${returnReason}`, notes: returnNotes, items: selectedItems }),
+        body: JSON.stringify({
+          orderId: order.id,
+          type: returnMode === "REPLACE" ? "REPLACEMENT" : "RETURN",
+          reason: returnReason,
+          notes: returnNotes,
+          items: selectedItems,
+        }),
       })
       if (res.ok) { setShowReturnForm(false); showToast("success", returnMode === "REPLACE" ? "Replacement request submitted!" : "Return request submitted!") }
       else { const data = await res.json(); showToast("error", data.message || "Failed to submit request") }
@@ -302,12 +312,18 @@ export default function OrderDetailPage() {
   const isCancelled = ["CANCELLED", "REFUNDED"].includes(order.status)
   const timelineIdx = getTimelineStepIndex(order)
 
-  // Presentation-only breakdown derived from stored item totals — the DB stores a
-  // single settled totalAmount (no separate tax/shipping columns), so tax is shown
-  // as the balancing figure between subtotal+shipping and the actual amount charged.
-  const subtotal = order.items.reduce((sum, item) => sum + Number(item.totalPrice), 0)
-  const shippingFee = 0
-  const taxAmount = Math.max(0, Number(order.totalAmount) - subtotal - shippingFee)
+  // Prefer the persisted breakdown columns (real tax/shipping/round-off actually
+  // charged); older orders placed before these columns existed fall back to a
+  // derived balancing figure so they still render sensibly.
+  const hasPersistedBreakdown = order.subtotal != null
+  const derivedSubtotal = order.items.reduce((sum, item) => sum + Number(item.totalPrice), 0)
+  const subtotal = hasPersistedBreakdown ? Number(order.subtotal) : derivedSubtotal
+  const shippingFee = hasPersistedBreakdown ? Number(order.shippingAmount ?? 0) : 0
+  const taxAmount = hasPersistedBreakdown
+    ? Number(order.taxAmount ?? 0)
+    : Math.max(0, Number(order.totalAmount) - derivedSubtotal - shippingFee)
+  const discountAmount = hasPersistedBreakdown ? Number(order.discountAmount ?? 0) : 0
+  const roundOffAmount = hasPersistedBreakdown ? Number(order.roundOffAmount ?? 0) : 0
 
   return (
     <div className="min-h-screen bg-gray-50/60">
@@ -549,8 +565,14 @@ export default function OrderDetailPage() {
             <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><ReceiptText size={16} className="text-primary-600" /> Order Summary</h2>
             <div className="text-sm text-gray-600 space-y-2 max-w-xs ml-auto">
               <div className="flex justify-between"><span>Subtotal</span><span className="text-gray-900">{formatPrice(subtotal)}</span></div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between"><span>Discount</span><span className="text-green-600 font-medium">-{formatPrice(discountAmount)}</span></div>
+              )}
               <div className="flex justify-between"><span>Shipping</span><span className="text-green-600 font-medium">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span></div>
               <div className="flex justify-between"><span>GST / Taxes</span><span className="text-gray-900">{formatPrice(taxAmount)}</span></div>
+              {roundOffAmount !== 0 && (
+                <div className="flex justify-between"><span>Round off</span><span className="text-gray-900">{roundOffAmount > 0 ? "+" : "-"}{formatPrice(Math.abs(roundOffAmount))}</span></div>
+              )}
               <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span className="text-gray-900">Grand Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
             </div>
           </div>

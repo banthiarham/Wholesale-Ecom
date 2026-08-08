@@ -75,4 +75,18 @@ export class CategoriesService {
   async remove(id: string) {
     return this.prisma.category.delete({ where: { id } });
   }
+
+  async adjustProductPrices(id: string, percentage: number) {
+    const category = await this.prisma.category.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Category not found');
+
+    const factor = 1 + percentage / 100;
+    const updatedCount = await this.prisma.$executeRaw`
+      UPDATE "Product"
+      SET "unitPrice" = ROUND(("unitPrice" * ${factor})::numeric, 2)
+      WHERE "categoryId" = ${id}
+    `;
+
+    return { updatedCount };
+  }
 }

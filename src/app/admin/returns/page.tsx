@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Search, RotateCcw, X } from "lucide-react"
+import { Search, RotateCcw, X, History as HistoryIcon } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
 
@@ -17,13 +17,23 @@ interface ReturnRequest {
   orderId: string
   userId: string
   status: string
+  type: string
   reason: string
   notes: string | null
+  adminRemarks: string | null
   refundAmount: number | null
   createdAt: string
   user?: { firstName: string; lastName: string; email: string }
   order?: { orderNumber: string }
   items?: ReturnItem[]
+}
+
+interface ReturnStatusHistoryEntry {
+  id: string
+  status: string
+  remarks: string | null
+  changedBy: string | null
+  createdAt: string
 }
 
 function returnStatusBadgeProps(status: string): { variant?: AdminBadgeVariant; colorClassName?: string } {
@@ -37,16 +47,26 @@ function returnStatusBadgeProps(status: string): { variant?: AdminBadgeVariant; 
   }
 }
 
+function returnTypeBadgeProps(type: string): { variant?: AdminBadgeVariant; colorClassName?: string } {
+  return type === "REPLACEMENT"
+    ? { colorClassName: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" }
+    : { variant: "neutral" }
+}
+
 export default function AdminReturnsPage() {
   const [returns, setReturns] = useState<ReturnRequest[]>([])
   const [filtered, setFiltered] = useState<ReturnRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const [typeFilter, setTypeFilter] = useState("")
   const [selected, setSelected] = useState<ReturnRequest | null>(null)
   const [actionStatus, setActionStatus] = useState("")
   const [refundAmount, setRefundAmount] = useState("")
+  const [remarksDraft, setRemarksDraft] = useState("")
   const [processing, setProcessing] = useState(false)
+  const [history, setHistory] = useState<ReturnStatusHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
@@ -55,8 +75,9 @@ export default function AdminReturnsPage() {
     let result = returns
     if (search) { const q = search.toLowerCase(); result = result.filter((r) => r.orderId?.toLowerCase().includes(q) || r.reason?.toLowerCase().includes(q) || r.user?.firstName?.toLowerCase().includes(q)) }
     if (statusFilter) result = result.filter((r) => r.status === statusFilter)
+    if (typeFilter) result = result.filter((r) => r.type === typeFilter)
     setFiltered(result)
-  }, [returns, search, statusFilter])
+  }, [returns, search, statusFilter, typeFilter])
 
   const loadReturns = async () => {
     setLoading(true)
@@ -67,12 +88,32 @@ export default function AdminReturnsPage() {
     if (!selected || !actionStatus) return
     setProcessing(true)
     const t = localStorage.getItem("token")!
-    const body: any = { status: actionStatus }
+    const body: any = { status: actionStatus, remarks: remarksDraft.trim() || undefined }
     if (refundAmount && (actionStatus === "APPROVED" || actionStatus === "COMPLETED")) body.refundAmount = Number(refundAmount)
     try {
       const res = await fetch(`/api/returns/${selected.id}/status`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(body) })
-      if (res.ok) { setSelected(null); setActionStatus(""); setRefundAmount(""); loadReturns() } else { alert("Failed to update status") }
+      if (res.ok) { setSelected(null); setActionStatus(""); setRefundAmount(""); setRemarksDraft(""); loadReturns() } else { alert("Failed to update status") }
     } catch (e) { console.error(e); alert("Failed to update status") } finally { setProcessing(false) }
+  }
+
+  const loadHistory = (id: string) => {
+    const t = typeof window !== "undefined" ? localStorage.getItem("token") : ""
+    if (!t) return
+    setHistoryLoading(true)
+    fetch(`/api/returns/${id}/history`, { headers: { Authorization: `Bearer ${t}` } })
+      .then((r) => r.json())
+      .then((data) => setHistory(data.history || []))
+      .catch(console.error)
+      .finally(() => setHistoryLoading(false))
+  }
+
+  const openReview = (r: ReturnRequest) => {
+    setSelected(r)
+    setActionStatus("")
+    setRefundAmount("")
+    setRemarksDraft(r.adminRemarks || "")
+    setHistory([])
+    loadHistory(r.id)
   }
 
   if (loading) return <SkeletonTable rows={6} cols={6} />
@@ -82,6 +123,7 @@ export default function AdminReturnsPage() {
       <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Returns</h1>
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" /><input type="text" placeholder="Search returns..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-4 py-2.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="">All Types</option><option value="RETURN">Return</option><option value="REPLACEMENT">Replacement</option></select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-2.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="">All Statuses</option><option value="REQUESTED">Requested</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="PROCESSING">Processing</option><option value="COMPLETED">Completed</option></select>
       </div>
 
@@ -91,16 +133,17 @@ export default function AdminReturnsPage() {
         <div className="admin-card-static overflow-hidden">
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800"><tr><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Order</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Buyer</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Reason</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Date</th><th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th></tr></thead>
+            <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800"><tr><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Order</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Buyer</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Type</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Reason</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th><th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Date</th><th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Actions</th></tr></thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
               {filtered.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{r.order?.orderNumber || r.orderId?.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.user?.firstName} {r.user?.lastName}</td>
+                  <td className="px-4 py-3"><AdminStatusBadge status={r.type === "REPLACEMENT" ? "Replacement" : "Return"} {...returnTypeBadgeProps(r.type)} /></td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400 max-w-xs truncate">{r.reason}</td>
                   <td className="px-4 py-3"><AdminStatusBadge status={r.status} {...returnStatusBadgeProps(r.status)} /></td>
                   <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{new Date(r.createdAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-right"><button onClick={() => { setSelected(r); setActionStatus(""); setRefundAmount("") }} className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition dark:text-gray-300">Review</button></td>
+                  <td className="px-4 py-3 text-right"><button onClick={() => openReview(r)} className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition dark:text-gray-300">Review</button></td>
                 </tr>
               ))}
             </tbody>
@@ -112,15 +155,17 @@ export default function AdminReturnsPage() {
       {selected && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Return Request</h3><button onClick={() => setSelected(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={20} /></button></div>
+            <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{selected.type === "REPLACEMENT" ? "Replacement Request" : "Return Request"}</h3><button onClick={() => setSelected(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={20} /></button></div>
             <div className="space-y-3">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1">
                 <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Order:</span><span className="font-medium dark:text-gray-100">{selected.order?.orderNumber || selected.orderId?.slice(0, 8)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Buyer:</span><span className="dark:text-gray-200">{selected.user?.firstName} {selected.user?.lastName}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Type:</span><AdminStatusBadge status={selected.type === "REPLACEMENT" ? "Replacement" : "Return"} {...returnTypeBadgeProps(selected.type)} /></div>
                 <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Status:</span><AdminStatusBadge status={selected.status} {...returnStatusBadgeProps(selected.status)} /></div>
                 <div><span className="text-gray-600 dark:text-gray-400">Reason:</span> <span className="dark:text-gray-200">{selected.reason}</span></div>
                 {selected.notes && <div><span className="text-gray-600 dark:text-gray-400">Notes:</span> <span className="dark:text-gray-200">{selected.notes}</span></div>}
-                {selected.refundAmount && <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Refund Amount:</span><span className="font-medium dark:text-gray-100">₹{selected.refundAmount.toLocaleString("en-IN")}</span></div>}
+                {selected.adminRemarks && <div><span className="text-gray-600 dark:text-gray-400">Admin remarks:</span> <span className="dark:text-gray-200">{selected.adminRemarks}</span></div>}
+                {selected.type !== "REPLACEMENT" && selected.refundAmount && <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Refund Amount:</span><span className="font-medium dark:text-gray-100">₹{selected.refundAmount.toLocaleString("en-IN")}</span></div>}
               </div>
               {selected.items && selected.items.length > 0 && (
                 <div>
@@ -134,19 +179,46 @@ export default function AdminReturnsPage() {
                   <option value="">Select status...</option>
                   <option value="APPROVED">Approve</option>
                   <option value="REJECTED">Reject</option>
-                  <option value="PROCESSING">Mark Processing</option>
-                  <option value="COMPLETED">Mark Completed</option>
+                  <option value="PROCESSING">{selected.type === "REPLACEMENT" ? "Mark Replacement Shipped" : "Mark Processing"}</option>
+                  <option value="COMPLETED">{selected.type === "REPLACEMENT" ? "Mark Replacement Delivered" : "Mark Completed"}</option>
                 </select>
               </div>
-              {(actionStatus === "APPROVED" || actionStatus === "COMPLETED") && (
+              {selected.type !== "REPLACEMENT" && (actionStatus === "APPROVED" || actionStatus === "COMPLETED") && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Refund Amount (₹)</label>
                   <input type="number" step="0.01" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} placeholder="Enter refund amount" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
                 </div>
               )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Remarks (visible to buyer)</label>
+                <textarea value={remarksDraft} onChange={(e) => setRemarksDraft(e.target.value)} rows={2} maxLength={1000} placeholder="Add a note explaining the decision (optional)..." className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setSelected(null)} className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 dark:text-gray-200">Cancel</button>
                 <button onClick={updateStatus} disabled={!actionStatus || processing} className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50">{processing ? "Updating..." : "Update"}</button>
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                  <HistoryIcon size={12} /> Status History
+                </p>
+                {historyLoading ? (
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Loading...</p>
+                ) : history.length === 0 ? (
+                  <p className="text-xs text-gray-400 dark:text-gray-500">No status changes yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {history.map((h) => (
+                      <li key={h.id} className="text-xs flex items-start gap-2">
+                        <AdminStatusBadge status={h.status} {...returnStatusBadgeProps(h.status)} />
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {new Date(h.createdAt).toLocaleString("en-IN")}
+                          {h.remarks && <span className="block text-gray-700 dark:text-gray-300 mt-0.5">{h.remarks}</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           </div>

@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText, X, Store } from "lucide-react"
+import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText, X, Store, Sparkles } from "lucide-react"
 import { formatPrice, getCartSessionId, getContrastTextColor } from "@/lib/utils"
 import { PricingBreakdown, SeasonalDiscount, PaymentOffer, TierPrice, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, findApplicableTier, getEffectiveUnitPrice, sortTierPrices } from "@/lib/pricing"
 import { useQuantityStepper } from "@/lib/pricing/useQuantityStepper"
@@ -89,11 +89,12 @@ export default function ProductDetailPage() {
     () => product ? [{ id: product.id, categoryId: product.categoryId || product.category?.id, unitPrice: product.unitPrice }] : [],
     [product?.id, product?.categoryId, product?.category?.id, product?.unitPrice]
   )
-  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts, extraCharges, shipping, taxes, minimumOrderQuantities, maximumOrderQuantities } = useStorefrontRules(rulesProducts, quantity)
+  const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts, extraCharges, shipping, taxes, minimumOrderQuantities, maximumOrderQuantities, customBadges } = useStorefrontRules(rulesProducts, quantity)
 
   const ruleDiscount = productDiscounts?.find((d) => d.productId === product?.id) ?? null
   const productBogo = bogo.filter((b) => b.buyProductId === product?.id)
   const productQtyDiscount = quantityDiscounts.find((qd) => qd.productId === product?.id)
+  const productCustomBadges = customBadges.filter((b) => b.productId === product?.id)
   const productExtraCharges = extraCharges
   const productShipping = shipping
   const productTaxes = taxes
@@ -351,7 +352,24 @@ export default function ProductDetailPage() {
             {/* Left: Images — 3 cols on lg */}
             <div className="lg:col-span-3 space-y-4">
               {/* Main image — hover to zoom, click to open lightbox */}
-              <div className="card-base-static overflow-hidden">
+              <div className="card-base-static overflow-hidden relative">
+                {/* Dynamic Rule badge — top-left of the image, fetched on initial load
+                    (same /rules/evaluate response already used for pricing/discount
+                    badges below), independent of quantity or any other interaction.
+                    Highest-priority matching rule wins when more than one applies. */}
+                {productCustomBadges[0] && (
+                  <span
+                    className="absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-md shadow-sm max-w-[calc(100%-1.25rem)] truncate"
+                    style={{
+                      backgroundColor: productCustomBadges[0].badgeColor || "#7c3aed",
+                      color: getContrastTextColor(productCustomBadges[0].badgeColor || "#7c3aed"),
+                    }}
+                    title={productCustomBadges[0].badgeLabel}
+                  >
+                    <Sparkles size={12} className="shrink-0" />
+                    <span className="truncate">{productCustomBadges[0].badgeLabel}</span>
+                  </span>
+                )}
                 {mainImage ? (
                   <div
                     className="relative w-full aspect-square overflow-hidden cursor-zoom-in"
@@ -796,7 +814,7 @@ export default function ProductDetailPage() {
                     href={`/bulk-orders?productId=${product.id}`}
                     className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-primary-300 text-primary-700 bg-primary-50/50 hover:bg-primary-50 hover:border-primary-400 transition-all duration-200 text-sm font-semibold"
                   >
-                    <FileText size={16} /> Request Bulk Quote
+                    <FileText size={16} /> Order in Bulk
                   </Link>
 
                   {product.tags.length > 0 && (

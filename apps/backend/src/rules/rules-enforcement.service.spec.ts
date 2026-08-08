@@ -24,6 +24,7 @@ function emptyResult(): RuleEvaluationResult {
     hiddenProducts: [],
     hiddenPrices: [],
     nonPurchasable: [],
+    customBadges: [],
   };
 }
 

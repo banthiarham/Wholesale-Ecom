@@ -103,6 +103,7 @@ export function useStorefrontRules(
           checkoutRestrictions: r.checkoutRestrictions || [],
           quantityDiscounts: r.quantityDiscounts || [],
           extraCharges: r.extraCharges || [],
+          customBadges: r.customBadges || [],
           loading: false,
         })
       })

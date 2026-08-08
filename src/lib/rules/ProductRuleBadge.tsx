@@ -1,6 +1,6 @@
 "use client"
 
-import { Lock, EyeOff, ShieldCheck, Gift, Layers, PlusCircle, Truck, Percent } from "lucide-react"
+import { Lock, EyeOff, ShieldCheck, Gift, Layers, PlusCircle, Truck, Percent, Sparkles } from "lucide-react"
 import { getContrastTextColor } from "@/lib/utils"
 
 interface ProductRuleBadgeProps {
@@ -30,6 +30,8 @@ interface ProductRuleBadgeProps {
   discountLabel?: string
   /** Discount percent for badge */
   discountPercent?: number
+  /** Admin-configured custom badges from any dynamic rule applied to this product */
+  customBadges?: { badgeLabel: string; badgeColor: string | null; ruleName: string }[]
 }
 
 /**
@@ -53,30 +55,49 @@ export default function ProductRuleBadge({
   shippingLabel,
   discountLabel,
   discountPercent,
+  customBadges,
 }: ProductRuleBadgeProps) {
   const sizeClasses = size === "sm" ? "text-[10px] px-1.5 py-0.5" : "text-xs px-2 py-1"
   const iconSize = size === "sm" ? 10 : 12
 
+  const customBadgeNodes = (customBadges || []).map((b, i) => (
+    <span
+      key={`${b.ruleName}-${i}`}
+      className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full font-medium`}
+      style={{ backgroundColor: b.badgeColor || "#7c3aed", color: getContrastTextColor(b.badgeColor || "#7c3aed") }}
+    >
+      <Sparkles size={iconSize} />
+      {b.badgeLabel}
+    </span>
+  ))
+
   if (priceHidden) {
     return (
-      <span className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full bg-gray-100 text-gray-600 font-medium`}>
-        <EyeOff size={iconSize} />
-        Login for pricing
-      </span>
+      <div className="flex flex-wrap items-center gap-1">
+        <span className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full bg-gray-100 text-gray-600 font-medium`}>
+          <EyeOff size={iconSize} />
+          Login for pricing
+        </span>
+        {customBadgeNodes}
+      </div>
     )
   }
 
   if (nonPurchasable) {
     return (
-      <span className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full bg-red-50 text-red-600 font-medium`}>
-        <Lock size={iconSize} />
-        {nonPurchasableMessage || "Unavailable for purchase"}
-      </span>
+      <div className="flex flex-wrap items-center gap-1">
+        <span className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full bg-red-50 text-red-600 font-medium`}>
+          <Lock size={iconSize} />
+          {nonPurchasableMessage || "Unavailable for purchase"}
+        </span>
+        {customBadgeNodes}
+      </div>
     )
   }
 
   return (
     <div className="flex flex-wrap items-center gap-1">
+      {customBadgeNodes}
       {hasRolePrice && roleLabel && (
         <span
           className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full font-medium`}

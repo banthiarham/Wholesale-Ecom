@@ -27,6 +27,7 @@ import {
   Layers,
   PackageOpen,
   Wallet,
+  BookOpen,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "@/lib/i18n/LanguageProvider"
@@ -39,10 +40,8 @@ export default function Header() {
   const { user, role, loading: authLoading, logout: authLogout } = useAuth()
   const { can } = usePermissions()
   const [mobileMenu, setMobileMenu] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [cartCount, setCartCount] = useState(0)
-  const [scrolled, setScrolled] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const userMenuRef = useRef<HTMLDivElement>(null)
   const { locale, setLocale, t } = useTranslation()
@@ -72,14 +71,7 @@ export default function Header() {
   }, [])
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 10)
-    window.addEventListener("scroll", onScroll, { passive: true })
-    return () => window.removeEventListener("scroll", onScroll)
-  }, [])
-
-  useEffect(() => {
     setMobileMenu(false)
-    setSearchOpen(false)
     setUserMenuOpen(false)
   }, [pathname])
 
@@ -151,12 +143,21 @@ export default function Header() {
     { href: "/bulk-orders", label: "Bulk Orders", icon: PackageOpen },
   ]
 
+  // The account's underlying legacy role enum (always BUYER/VENDOR/DISTRIBUTOR/ADMIN,
+  // regardless of which custom dynamic role/tier — e.g. "Wholesaler", "Premium Buyer" —
+  // is layered on top via roleRel). Used below so the Buyer Account "My Orders" link is
+  // guaranteed to show for every buyer even if the role-permissions fetch (read:orders)
+  // hasn't resolved yet, or the account's custom role has no permissions assigned — the
+  // link itself always points at the existing, unchanged /orders page.
+  const isBuyerAccount = user?.role === "BUYER"
+
   const userLinks = user
     ? [
         ...(can("admin", "access")
           ? [{ href: "/admin", label: "Admin", icon: Settings }]
           : []),
         { href: "/orders", label: t("nav.orders"), icon: ShoppingBag, permission: "read:orders" },
+        { href: "/bulk-orders/my-requests", label: "Bulk Quote Requests", icon: PackageOpen },
         { href: "/wishlist", label: "Wishlist", icon: Heart },
         { href: "/account/profile", label: "My Profile", icon: User },
         { href: "/account/role-request", label: "Role & Access", icon: Shield },
@@ -165,9 +166,11 @@ export default function Header() {
         { href: "/account/reviews", label: "My Reviews", icon: Star },
         { href: "/loyalty", label: t("nav.loyalty"), icon: Heart },
         { href: "/wallet", label: "Wallet", icon: Wallet },
+        { href: "/account/ledger", label: "Ledger", icon: BookOpen },
         { href: "/notifications", label: t("nav.notifications"), icon: Bell },
       ].filter((link) => {
         if (!("permission" in link)) return true
+        if (link.href === "/orders" && isBuyerAccount) return true
         const parts = (link as any).permission.split(":")
         return can(parts[0], parts[1])
       })
@@ -176,189 +179,189 @@ export default function Header() {
   if (pathname?.startsWith("/admin")) return null
 
   return (
-    <header
-      className={`sticky top-0 z-50 transition-all duration-300 ${
-        scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-white border-b border-gray-100"
-      }`}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Top bar */}
-        <div className="flex items-center justify-between h-16 lg:h-[72px]">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 shrink-0">
-            {logoUrl ? (
-              <img src={logoUrl} alt={siteName} className="h-8 lg:h-9 w-auto object-contain" />
-            ) : (
-              <>
-                <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center shadow-[0_2px_8px_-2px_rgba(2,84,129,0.4)]">
-                  <Package size={18} className="text-white" />
-                </div>
-                <span className="text-xl font-bold text-gray-900 tracking-tight">
-                  {siteName.replace(/(.)(.*)$/, (_, first, rest) => `${first}${rest.slice(0, -1)}`)}
-                  <span className="text-primary-600">{siteName.slice(-1)}</span>
-                </span>
-              </>
-            )}
-          </Link>
+    <header className="sticky top-0 z-50 shadow-md">
+      {/* Solid brand-color bar — Flipkart's signature always-on-blue header */}
+      <div className="bg-primary-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3 sm:gap-6 h-14 lg:h-16">
+            {/* Logo */}
+            <Link href="/" className="flex items-center gap-2 shrink-0">
+              {logoUrl ? (
+                <img src={logoUrl} alt={siteName} className="h-7 lg:h-8 w-auto object-contain brightness-0 invert" />
+              ) : (
+                <>
+                  <div className="w-8 h-8 lg:w-9 lg:h-9 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                    <Package size={17} className="text-primary-700" />
+                  </div>
+                  <span className="hidden sm:block text-lg lg:text-xl font-bold text-white tracking-tight leading-none">
+                    {siteName.replace(/(.)(.*)$/, (_, first, rest) => `${first}${rest.slice(0, -1)}`)}
+                    <span className="text-amber-300">{siteName.slice(-1)}</span>
+                  </span>
+                </>
+              )}
+            </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden lg:flex items-center gap-0.5">
+            {/* Search — always visible, Flipkart's signature centerpiece */}
+            <form onSubmit={handleSearch} className="flex-1 max-w-2xl relative hidden sm:block">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search for products, categories, vendors..."
+                className="w-full pl-4 pr-11 py-2.5 rounded-md border-0 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-sm"
+              />
+              <button
+                type="submit"
+                aria-label="Search"
+                className="absolute right-0 top-0 h-full px-3.5 flex items-center justify-center text-primary-700 hover:text-primary-800 transition-colors"
+              >
+                <Search size={18} />
+              </button>
+            </form>
+
+            {/* Right actions */}
+            <div className="flex items-center gap-1 sm:gap-2 ml-auto sm:ml-0">
+              {/* Language toggle */}
+              <button
+                onClick={toggleLang}
+                className="hidden md:flex items-center gap-1 px-2.5 py-2 rounded-lg text-sm font-medium text-white/85 hover:text-white hover:bg-white/10 transition-all duration-200"
+              >
+                <Globe size={16} />
+                {locale === "en" ? "HI" : "EN"}
+              </button>
+
+              {/* Cart */}
+              <button
+                onClick={openCartDrawer}
+                className="relative flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-white hover:bg-white/10 transition-all duration-200"
+                aria-label="Open cart"
+              >
+                <ShoppingCart size={19} />
+                <span className="hidden lg:inline text-sm font-semibold">Cart</span>
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-0.5 min-w-[18px] h-[18px] px-1 bg-amber-400 text-primary-900 text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
+                    {cartCount > 99 ? "99+" : cartCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Auth */}
+              {user ? (
+                <div className="relative" ref={userMenuRef}>
+                  <button
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    className="flex items-center gap-1.5 pl-1.5 pr-1 sm:pr-2 py-1 rounded-lg hover:bg-white/10 transition-all duration-200"
+                  >
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 bg-white rounded-full flex items-center justify-center ring-1 ring-white/40">
+                      <span className="text-sm font-semibold text-primary-700">
+                        {user.firstName?.[0]?.toUpperCase() || "U"}
+                      </span>
+                    </div>
+                    <span className="hidden sm:block text-sm font-medium text-white max-w-[100px] truncate">
+                      {user.firstName}
+                    </span>
+                    <ChevronDown size={14} className={`hidden sm:block text-white/70 transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {userMenuOpen && (
+                    <div
+                      className="absolute right-0 top-full mt-2.5 w-60 bg-white rounded-2xl border border-gray-100 py-2 animate-fade-in-up"
+                      style={{ boxShadow: "var(--shadow-elevated)" }}
+                    >
+                      <div className="px-4 py-3 border-b border-gray-100">
+                        <p className="text-sm font-semibold text-gray-900">{user.firstName} {user.lastName}</p>
+                        <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                        <span className="inline-block mt-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-md" style={{ backgroundColor: role?.color || '#6B7280', color: getContrastTextColor(role?.color || '#6B7280') }}>
+                          {role?.label || user.role}
+                        </span>
+                      </div>
+                      {[...userLinks, { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 }].map((link) => (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-primary-600 transition-colors duration-150"
+                        >
+                          <link.icon size={16} className="text-gray-400" />
+                          {link.label}
+                        </Link>
+                      ))}
+                      <div className="border-t border-gray-100 mt-1 pt-1">
+                        <button
+                          onClick={logout}
+                          className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors duration-150"
+                        >
+                          <LogOut size={16} />
+                          {t("nav.signout")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/login"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-sm font-semibold text-primary-700 bg-white rounded-md hover:bg-primary-50 transition-all duration-200"
+                  >
+                    {t("nav.signin")}
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="hidden sm:inline-flex px-4 py-2 text-sm font-semibold text-white border border-white/40 rounded-md hover:bg-white/10 transition-all duration-200"
+                  >
+                    {t("nav.signup")}
+                  </Link>
+                </div>
+              )}
+
+              {/* Mobile menu toggle */}
+              <button
+                onClick={() => setMobileMenu(!mobileMenu)}
+                className="lg:hidden p-2 rounded-lg text-white hover:bg-white/10 transition-all duration-200"
+              >
+                {mobileMenu ? <X size={20} /> : <Menu size={20} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile search — full-width row under the top bar */}
+          <form onSubmit={handleSearch} className="sm:hidden pb-2.5 relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search for products..."
+              className="w-full pl-4 pr-11 py-2.5 rounded-md border-0 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-sm"
+            />
+            <button type="submit" aria-label="Search" className="absolute right-3 top-1/2 -translate-y-1/2 -mt-[5px] text-primary-700">
+              <Search size={18} />
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Category quick-links strip — dense secondary nav row, Flipkart-style */}
+      <div className="hidden lg:block bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex items-center gap-0.5">
             {[...navLinks, ...userLinks.slice(0, 2)].map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`group relative px-3.5 py-2 text-sm font-medium transition-colors duration-200 ${
-                  isActive(link.href) ? "text-primary-600" : "text-gray-600 hover:text-primary-600"
+                className={`group relative px-3.5 py-2.5 text-sm font-medium transition-colors duration-200 ${
+                  isActive(link.href) ? "text-primary-700" : "text-gray-600 hover:text-primary-700"
                 }`}
               >
                 {link.label}
                 <span
-                  className={`absolute left-3.5 right-3.5 -bottom-[1px] h-0.5 rounded-full bg-primary-600 origin-left transition-transform duration-200 ${
+                  className={`absolute left-3.5 right-3.5 -bottom-[1px] h-0.5 rounded-full bg-primary-700 origin-left transition-transform duration-200 ${
                     isActive(link.href) ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
                   }`}
                 />
               </Link>
             ))}
           </nav>
-
-          {/* Right actions */}
-          <div className="flex items-center gap-2">
-            {/* Search toggle */}
-            <button
-              onClick={() => setSearchOpen(!searchOpen)}
-              className={`p-2.5 rounded-xl transition-all duration-200 ${searchOpen ? "text-primary-600 bg-primary-50" : "text-gray-500 hover:text-primary-600 hover:bg-gray-50"}`}
-              aria-label="Search"
-            >
-              <Search size={19} />
-            </button>
-
-            {/* Language toggle */}
-            <button
-              onClick={toggleLang}
-              className="hidden sm:flex items-center gap-1 px-2.5 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition-all duration-200"
-            >
-              <Globe size={16} />
-              {locale === "en" ? "HI" : "EN"}
-            </button>
-
-            {/* Cart */}
-            <button
-              onClick={openCartDrawer}
-              className="relative p-2.5 rounded-xl text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition-all duration-200"
-              aria-label="Open cart"
-            >
-              <ShoppingCart size={19} />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-primary-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
-                  {cartCount > 99 ? "99+" : cartCount}
-                </span>
-              )}
-            </button>
-
-            {/* Auth */}
-            {user ? (
-              <div className="relative" ref={userMenuRef}>
-                <button
-                  onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-xl hover:bg-gray-50 transition-all duration-200"
-                >
-                  <span className="hidden sm:block text-sm font-medium text-gray-700 max-w-[100px] truncate">
-                    {user.firstName}
-                  </span>
-                  <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center ring-2 ring-white">
-                    <span className="text-sm font-semibold text-primary-600">
-                      {user.firstName?.[0]?.toUpperCase() || "U"}
-                    </span>
-                  </div>
-                  <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`} />
-                </button>
-
-                {userMenuOpen && (
-                  <div
-                    className="absolute right-0 top-full mt-2.5 w-60 bg-white rounded-2xl border border-gray-100 py-2 animate-fade-in-up"
-                    style={{ boxShadow: "var(--shadow-elevated)" }}
-                  >
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-semibold text-gray-900">{user.firstName} {user.lastName}</p>
-                      <p className="text-xs text-gray-400 truncate">{user.email}</p>
-                      <span className="inline-block mt-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-md" style={{ backgroundColor: role?.color || '#6B7280', color: getContrastTextColor(role?.color || '#6B7280') }}>
-                        {role?.label || user.role}
-                      </span>
-                    </div>
-                    {[...userLinks, { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 }].map((link) => (
-                      <Link
-                        key={link.href}
-                        href={link.href}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-primary-600 transition-colors duration-150"
-                      >
-                        <link.icon size={16} className="text-gray-400" />
-                        {link.label}
-                      </Link>
-                    ))}
-                    <div className="border-t border-gray-100 mt-1 pt-1">
-                      <button
-                        onClick={logout}
-                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors duration-150"
-                      >
-                        <LogOut size={16} />
-                        {t("nav.signout")}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/login"
-                  className="hidden sm:inline-flex px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-xl transition-all duration-200"
-                >
-                  {t("nav.signin")}
-                </Link>
-                <Link
-                  href="/register"
-                  className="px-4 py-2 text-sm font-semibold bg-primary-600 text-white rounded-xl hover:bg-primary-700 hover:-translate-y-0.5 transition-all duration-200 shadow-[0_1px_2px_rgba(2,84,129,0.06),0_6px_16px_-4px_rgba(2,84,129,0.28)]"
-                >
-                  {t("nav.signup")}
-                </Link>
-              </div>
-            )}
-
-            {/* Mobile menu toggle */}
-            <button
-              onClick={() => setMobileMenu(!mobileMenu)}
-              className="lg:hidden p-2.5 rounded-xl text-gray-500 hover:bg-gray-50 transition-all duration-200"
-            >
-              {mobileMenu ? <X size={22} /> : <Menu size={22} />}
-            </button>
-          </div>
         </div>
-
-        {/* Search bar (expandable) */}
-        {searchOpen && (
-          <div className="pb-4 animate-fade-in-up">
-            <form onSubmit={handleSearch} className="relative">
-              <Search size={19} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products, categories, vendors..."
-                className="w-full pl-11 pr-11 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-md"
-                autoFocus
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </form>
-          </div>
-        )}
       </div>
 
       {/* Mobile menu */}

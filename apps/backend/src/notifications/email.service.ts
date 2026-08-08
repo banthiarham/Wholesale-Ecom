@@ -56,6 +56,21 @@ export class EmailService {
     await this.sendEmail(to, `Order #${orderNumber} Confirmed`, html);
   }
 
+  async sendBulkOrderDecisionEmail(to: string, bulkOrderNumber: string, status: string, comment?: string | null): Promise<void> {
+    const decisionText = status === 'ACCEPTED' ? 'accepted' : 'rejected';
+    const color = status === 'ACCEPTED' ? '#16a34a' : '#dc2626';
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <h2 style="color:${color};">Bulk Order Request ${status === 'ACCEPTED' ? 'Accepted' : 'Rejected'}</h2>
+        <p>Your bulk order request <strong>#${bulkOrderNumber}</strong> has been ${decisionText} by our team.</p>
+        ${comment ? `<p><strong>Admin note:</strong> ${comment}</p>` : ''}
+        <hr/>
+        <p style="font-size:12px;color:#666;">WholesaleX Pro — B2B Wholesale Platform</p>
+      </div>
+    `;
+    await this.sendEmail(to, `Bulk Order #${bulkOrderNumber} ${status === 'ACCEPTED' ? 'Accepted' : 'Rejected'}`, html);
+  }
+
   async sendOtpEmail(to: string, otp: string): Promise<void> {
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">

@@ -96,4 +96,39 @@ export class UpdateSettingsDto {
   @IsString()
   @IsOptional()
   copyrightText?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  announcementBarEnabled?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  announcementBarText?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  announcementBarColor?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  announcementBarBgColor?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  heroCarouselSpeed?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  heroCarouselAutoplay?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  roundOffEnabled?: string;
 }

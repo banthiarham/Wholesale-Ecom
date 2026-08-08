@@ -13,6 +13,7 @@ import {
   CheckCircle,
   X,
   ImageIcon,
+  Calculator,
 } from "lucide-react"
 import { generateShades } from "@/lib/settings/color-utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
@@ -41,6 +42,7 @@ const TABS = [
   { key: "typography", label: "Typography", icon: Type },
   { key: "homepage", label: "Homepage", icon: ImageIcon },
   { key: "header_footer", label: "Header & Footer", icon: Navigation },
+  { key: "commerce", label: "Commerce", icon: Calculator },
 ] as const
 
 type TabKey = (typeof TABS)[number]["key"]
@@ -65,6 +67,7 @@ interface SettingsState {
   contactPhone: string
   socialLinks: { facebook: string; twitter: string; instagram: string; linkedin: string }
   copyrightText: string
+  roundOffEnabled: boolean
 }
 
 const DEFAULT_SETTINGS: SettingsState = {
@@ -87,6 +90,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   contactPhone: "",
   socialLinks: { facebook: "", twitter: "", instagram: "", linkedin: "" },
   copyrightText: "WholesaleX Pro. All rights reserved.",
+  roundOffEnabled: false,
 }
 
 export default function AdminSettingsPage() {
@@ -132,6 +136,7 @@ export default function AdminSettingsPage() {
             contactPhone: s.contactPhone || "",
             socialLinks,
             copyrightText: s.copyrightText || DEFAULT_SETTINGS.copyrightText,
+            roundOffEnabled: s.roundOffEnabled === "true",
           })
         }
       })
@@ -178,6 +183,7 @@ export default function AdminSettingsPage() {
         contactPhone: settings.contactPhone,
         socialLinks: JSON.stringify(settings.socialLinks),
         copyrightText: settings.copyrightText,
+        roundOffEnabled: String(settings.roundOffEnabled),
       }
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -561,6 +567,35 @@ export default function AdminSettingsPage() {
                 onChange={(e) => update("copyrightText", e.target.value)}
                 className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
+            </div>
+          </div>
+        )}
+
+        {activeTab === "commerce" && (
+          <div className="space-y-6">
+            <div className="flex items-start justify-between gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Round Off Order Totals</label>
+                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  When enabled, order totals with decimals (e.g. ₹105.15) are rounded to the nearest whole rupee
+                  at checkout, and the round-off adjustment is shown as a line item in the order summary.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.roundOffEnabled}
+                onClick={() => update("roundOffEnabled", !settings.roundOffEnabled)}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  settings.roundOffEnabled ? "bg-primary-600" : "bg-gray-300 dark:bg-gray-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    settings.roundOffEnabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
             </div>
           </div>
         )}

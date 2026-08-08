@@ -33,6 +33,7 @@ export interface RuleEvaluationResult {
   hiddenProducts: string[];
   hiddenPrices: string[];
   nonPurchasable: { productId: string; message?: string }[];
+  customBadges: { productId: string; badgeLabel: string; badgeColor: string | null; ruleName: string }[];
 }
 
 @Injectable()
@@ -70,11 +71,24 @@ export class RulesEngineService {
       hiddenProducts: [],
       hiddenPrices: [],
       nonPurchasable: [],
+      customBadges: [],
     };
 
     for (const rule of rules) {
       const c = rule.conditions as Record<string, any>;
       const a = rule.actions as Record<string, any>;
+
+      if (rule.badgeLabel) {
+        const matched = this.matchesProducts(c, context);
+        for (const item of matched) {
+          result.customBadges.push({
+            productId: item.productId,
+            badgeLabel: rule.badgeLabel,
+            badgeColor: rule.badgeColor,
+            ruleName: rule.name,
+          });
+        }
+      }
 
       switch (rule.type) {
         case 'PRODUCT_DISCOUNT':

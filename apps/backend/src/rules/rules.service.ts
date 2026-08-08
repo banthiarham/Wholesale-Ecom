@@ -50,6 +50,8 @@ export class RulesService {
       actions: dto.actions,
       startDate: dto.startDate ? new Date(dto.startDate) : null,
       endDate: dto.endDate ? new Date(dto.endDate) : null,
+      badgeLabel: dto.badgeLabel || null,
+      badgeColor: dto.badgeColor || null,
       createdBy: userId || null,
     };
     const rule = await this.prisma.dynamicRule.create({ data });
@@ -95,6 +97,8 @@ export class RulesService {
     if (dto.actions !== undefined) data.actions = dto.actions;
     if (dto.startDate !== undefined) data.startDate = dto.startDate ? new Date(dto.startDate) : null;
     if (dto.endDate !== undefined) data.endDate = dto.endDate ? new Date(dto.endDate) : null;
+    if (dto.badgeLabel !== undefined) data.badgeLabel = dto.badgeLabel || null;
+    if (dto.badgeColor !== undefined) data.badgeColor = dto.badgeColor || null;
 
     const rule = await this.prisma.dynamicRule.update({ where: { id }, data });
 

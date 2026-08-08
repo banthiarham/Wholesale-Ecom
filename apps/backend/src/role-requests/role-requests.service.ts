@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoleRequestDto } from './dto/create-role-request.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class RoleRequestsService {
@@ -10,6 +11,7 @@ export class RoleRequestsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private usersService: UsersService,
   ) {}
 
   async create(userId: string, dto: CreateRoleRequestDto) {
@@ -166,6 +168,49 @@ export class RoleRequestsService {
         { requestId: request.id, roleId: request.roleId },
       )
       .catch((err) => this.logger.error(`Failed to notify user ${request.userId} of rejection: ${err.message}`));
+
+    return this.findById(id);
+  }
+
+  /**
+   * Admin resolves a pending request by granting a role other than the one requested
+   * (e.g. requested Vendor, admin grants Distributor instead). Reuses UsersService.assignRole
+   * so the same dual-write (roleId + legacy role enum) and permission-resolution logic that
+   * powers Admin > Users role changes applies here too — no separate role-assignment path.
+   */
+  async changeRole(id: string, roleId: string, reviewedBy: string) {
+    const request = await this.prisma.roleChangeRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException(`Role change request "${id}" not found`);
+    if (request.status !== 'PENDING') {
+      throw new BadRequestException('Only pending requests can be resolved');
+    }
+
+    const newRole = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!newRole) throw new NotFoundException(`Role "${roleId}" not found`);
+
+    // Grants the chosen role immediately (dual-write handled inside assignRole).
+    await this.usersService.assignRole(request.userId, roleId);
+
+    // Record which role was actually granted, in case it differs from what was requested.
+    await this.prisma.roleChangeRequest.update({
+      where: { id },
+      data: {
+        roleId,
+        status: 'APPROVED',
+        reviewedBy,
+        reviewedAt: new Date(),
+      },
+    });
+
+    await this.notificationsService
+      .createNotification(
+        request.userId,
+        'SYSTEM',
+        'Your role has been updated',
+        `An admin has changed your account role to "${newRole.label}".`,
+        { requestId: request.id, roleId },
+      )
+      .catch((err) => this.logger.error(`Failed to notify user ${request.userId} of role change: ${err.message}`));
 
     return this.findById(id);
   }

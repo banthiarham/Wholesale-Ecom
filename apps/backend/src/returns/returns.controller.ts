@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { UserRole, ReturnStatus } from '@prisma/client';
+import { UserRole, ReturnStatus, ReturnType } from '@prisma/client';
 
 @ApiTags('Returns')
 @Controller('returns')
@@ -18,7 +18,7 @@ export class ReturnsController {
   @ApiOperation({ summary: 'Create a return request' })
   async create(
     @CurrentUser() user: any,
-    @Body() body: { orderId: string; reason: string; notes?: string; items: { orderItemId: string; quantity: number; reason?: string }[] },
+    @Body() body: { orderId: string; reason: string; notes?: string; type?: ReturnType; items: { orderItemId: string; quantity: number; reason?: string }[] },
   ) {
     const ret = await this.returnsService.create(user.id, body);
     return { return: ret };
@@ -49,9 +49,19 @@ export class ReturnsController {
   @ApiOperation({ summary: 'Update return status (Admin/Vendor)' })
   async updateStatus(
     @Param('id') id: string,
-    @Body() body: { status: ReturnStatus; refundAmount?: number },
+    @Body() body: { status: ReturnStatus; refundAmount?: number; remarks?: string },
+    @CurrentUser() user: any,
   ) {
-    const ret = await this.returnsService.updateStatus(id, body.status, body.refundAmount);
+    const ret = await this.returnsService.updateStatus(id, body.status, body.refundAmount, body.remarks, user?.id);
     return { return: ret };
+  }
+
+  @Get(':id/history')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get status change history for a return request' })
+  async getHistory(@Param('id') id: string, @CurrentUser() user: any) {
+    const history = await this.returnsService.getHistory(id, user.id, user.role);
+    return { history };
   }
 }

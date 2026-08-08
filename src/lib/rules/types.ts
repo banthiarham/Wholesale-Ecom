@@ -31,6 +31,8 @@ export interface StorefrontRulesResult {
   quantityDiscounts: { productId?: string; tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }[]
   /** Extra charges / surcharges from rules */
   extraCharges: { chargeAmount: number; chargeLabel: string; ruleName: string }[]
+  /** Custom badges from any rule type that has an admin-configured badgeLabel */
+  customBadges: { productId: string; badgeLabel: string; badgeColor: string | null; ruleName: string }[]
   /** Whether the rules are still loading */
   loading: boolean
 }
@@ -52,6 +54,7 @@ export function emptyStorefrontRules(): StorefrontRulesResult {
     checkoutRestrictions: [],
     quantityDiscounts: [],
     extraCharges: [],
+    customBadges: [],
     loading: false,
   }
 }

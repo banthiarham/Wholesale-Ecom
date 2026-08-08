@@ -7,6 +7,7 @@ import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, 
 import { formatPrice, getCartSessionId, COUNTRIES } from "@/lib/utils"
 import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
 import { useStorefrontRules } from "@/lib/rules"
+import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { useToast } from "@/components/ui/Toast"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { PaymentOffer, fetchPaymentOffers, checkOfferEligibility, calcOfferDiscount, calcLineTotal } from "@/lib/pricing"
@@ -85,6 +86,7 @@ function StepBadge({ n }: { n: number }) {
 
 export default function CheckoutPage() {
   const router = useRouter()
+  const roundOffEnabled = useSetting("roundOffEnabled", "false") === "true"
   const [cart, setCart] = useState<CartData | null>(null)
   const [loading, setLoading] = useState(true)
   const [placing, setPlacing] = useState(false)
@@ -133,6 +135,7 @@ export default function CheckoutPage() {
     availablePaymentMethods,
   } = useStorefrontRules(cartItemsForRules, undefined, {
     paymentMethod: paymentMethod === "COD" ? "COD" : selectedProvider || undefined,
+    shippingRegion: address.state || undefined,
   })
 
   // Build lookup maps
@@ -488,7 +491,9 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentMethod])
 
-  const finalTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount - bankOfferDiscount - walletDeduction - pointsValue + extraChargesTotal + ruleTaxTotal + effectiveShipping)
+  const preRoundTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount - bankOfferDiscount - walletDeduction - pointsValue + extraChargesTotal + ruleTaxTotal + effectiveShipping)
+  const roundOffAmount = roundOffEnabled ? Math.round(preRoundTotal) - preRoundTotal : 0
+  const finalTotal = preRoundTotal + roundOffAmount
 
   // Payment method filtering based on rules
   const totalCartQty = cart?.cart.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0
@@ -1030,6 +1035,12 @@ export default function CheckoutPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Shipping</span>
                     <span className="font-medium text-green-600">Free</span>
+                  </div>
+                )}
+                {roundOffAmount !== 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Round off</span>
+                    <span className="font-medium">{roundOffAmount > 0 ? "+" : "-"}{formatPrice(Math.abs(roundOffAmount))}</span>
                   </div>
                 )}
               </div>

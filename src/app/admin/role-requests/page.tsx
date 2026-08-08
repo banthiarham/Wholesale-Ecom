@@ -32,6 +32,12 @@ interface RoleChangeRequest {
   }
 }
 
+interface RoleOption {
+  id: string
+  name: string
+  label: string
+}
+
 const statusConfig: Record<RequestStatus, { label: string; variant: AdminBadgeVariant; icon: React.ReactNode }> = {
   PENDING: { label: "Pending", variant: "warning", icon: <Clock size={12} /> },
   APPROVED: { label: "Approved", variant: "success", icon: <CheckCircle2 size={12} /> },
@@ -63,11 +69,27 @@ export default function AdminRoleRequestsPage() {
   const [detailRequest, setDetailRequest] = useState<RoleChangeRequest | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null)
+  const [roles, setRoles] = useState<RoleOption[]>([])
+  const [changeRoleId, setChangeRoleId] = useState<string>("")
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   useEffect(() => {
     loadRequests()
+    loadRoles()
   }, [token])
+
+  const loadRoles = async () => {
+    try {
+      const res = await fetch("/api/roles", {
+        credentials: "include",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setRoles(data.roles || [])
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   useEffect(() => {
     if (token) {
@@ -136,6 +158,39 @@ export default function AdminRoleRequestsPage() {
     } finally {
       setActionLoading(null)
     }
+  }
+
+  const handleChangeRole = async (id: string, roleId: string) => {
+    if (!roleId) return
+    setActionLoading(id)
+    try {
+      const res = await fetch(`/api/role-requests/${id}/change-role`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ roleId }),
+      })
+      if (res.ok) {
+        setToast({ type: "success", message: "Role changed successfully" })
+        setDetailRequest(null)
+        await loadRequests()
+      } else {
+        setToast({ type: "error", message: "Failed to change role" })
+      }
+    } catch (err) {
+      console.error(err)
+      setToast({ type: "error", message: "Something went wrong" })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const openDetail = (req: RoleChangeRequest) => {
+    setDetailRequest(req)
+    setChangeRoleId(req.roleId)
   }
 
   // Auto-dismiss toast
@@ -230,7 +285,7 @@ export default function AdminRoleRequestsPage() {
                   <tr
                     key={req.id}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition cursor-pointer"
-                    onClick={() => setDetailRequest(req)}
+                    onClick={() => openDetail(req)}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -276,6 +331,14 @@ export default function AdminRoleRequestsPage() {
                           >
                             <XCircle size={14} />
                             {actionLoading === req.id ? "..." : "Reject"}
+                          </button>
+                          <button
+                            onClick={() => openDetail(req)}
+                            disabled={actionLoading === req.id}
+                            className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800/50 transition disabled:opacity-50 flex items-center gap-1"
+                          >
+                            <ShieldAlert size={14} />
+                            Change Role
                           </button>
                         </div>
                       ) : (
@@ -379,6 +442,35 @@ export default function AdminRoleRequestsPage() {
               </div>
             </div>
 
+            {/* Change Role — grant a role other than the one requested */}
+            {detailRequest.status === "PENDING" && (
+              <div className="px-5 pb-2">
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Change Role</h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  Grant a different role than requested, if needed. This updates the user&apos;s actual role immediately.
+                </p>
+                <div className="flex gap-2">
+                  <select
+                    value={changeRoleId}
+                    onChange={(e) => setChangeRoleId(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>{r.label || r.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => handleChangeRole(detailRequest.id, changeRoleId)}
+                    disabled={actionLoading === detailRequest.id || !changeRoleId}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                  >
+                    <ShieldAlert size={16} />
+                    Change Role
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Modal Actions */}
             {detailRequest.status === "PENDING" && (
               <div className="flex gap-3 p-5 border-t border-gray-100 dark:border-gray-800">
@@ -391,7 +483,7 @@ export default function AdminRoleRequestsPage() {
                   className="flex-1 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle2 size={16} />
-                  Approve
+                  Approve Request
                 </button>
                 <button
                   onClick={() => {

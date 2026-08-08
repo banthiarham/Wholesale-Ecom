@@ -9,9 +9,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { DeliveryPartnersModule } from '../delivery-partners/delivery-partners.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { RulesModule } from '../rules/rules.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [InventoryModule, PricingModule, NotificationsModule, DeliveryPartnersModule, LoyaltyModule, RulesModule],
+  imports: [InventoryModule, PricingModule, NotificationsModule, DeliveryPartnersModule, LoyaltyModule, RulesModule, SettingsModule],
   controllers: [OrdersController],
   providers: [OrdersService, CsvOrderParserService, ExcelOrderParserService],
   exports: [OrdersService],
