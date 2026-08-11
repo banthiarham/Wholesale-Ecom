@@ -143,7 +143,14 @@ export default function AdminBulkProductUploadPage() {
     }
 
     try {
-      const res = await fetch("/api/products/bulk-upload-excel", {
+      // Bulk imports of many rows (each downloading/converting its own image URL)
+      // can legitimately run well past the Next.js dev-server rewrite proxy's own
+      // request timeout (~30s), which then kills the connection and returns a
+      // non-JSON error page — surfacing here as a misleading "Network error" once
+      // `res.json()` fails to parse it. Calling the backend directly sidesteps
+      // that proxy hop so genuinely slow (but successful) imports aren't cut off.
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+      const res = await fetch(`${apiBase}/api/v1/products/bulk-upload-excel`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,

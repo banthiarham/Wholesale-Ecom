@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ProductStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
 import * as http from 'http';
+import sharp from 'sharp';
 
 @Injectable()
 export class ProductsService {
@@ -193,12 +195,16 @@ export class ProductsService {
           return;
         }
         if (res.statusCode !== 200) { res.resume(); resolve(null); return; }
-        // Some CDNs/file hosts omit or mis-set content-type (e.g. application/octet-stream)
-        // even for genuine images — fall back to sniffing the URL's file extension
-        // instead of dropping the image outright.
-        const contentType = res.headers['content-type'] || '';
+        // Many real-world hosts mis-set or omit Content-Type for image files (most
+        // commonly newer formats like .avif on servers whose MIME map predates them —
+        // e.g. serving genuine image bytes as "text/plain"). Content-Type alone is
+        // therefore not trustworthy; we only use it here to reject the one case it's
+        // reliable for — an actual HTML page (a soft-404/error page, or a redirect
+        // target that isn't really an image). Everything else is let through to the
+        // byte-signature check below, which verifies the real file content.
+        const contentType = (res.headers['content-type'] || '').toLowerCase();
         const looksLikeImageExt = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?|#|$)/i.test(url);
-        if (!contentType.startsWith('image/') && !(looksLikeImageExt && (contentType === '' || contentType.startsWith('application/octet-stream') || contentType.startsWith('binary/octet-stream')))) {
+        if (contentType.startsWith('text/html') || (!contentType.startsWith('image/') && !looksLikeImageExt)) {
           res.resume();
           resolve(null);
           return;
@@ -210,20 +216,36 @@ export class ProductsService {
           chunks.push(chunk);
         });
         res.on('end', async () => {
+          const buffer = Buffer.concat(chunks);
+          // Authoritative check: does the downloaded content actually start with a
+          // known image file signature? This catches soft-404 pages and other
+          // non-image responses that slipped past the Content-Type check above.
+          if (!this.looksLikeImageBytes(buffer)) { resolve(null); return; }
+          const dir = path.join(process.cwd(), 'uploads', 'products');
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          const base = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
           try {
-            const buffer = Buffer.concat(chunks);
-            const dir = path.join(process.cwd(), 'uploads', 'products');
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
-            const filePath = path.join(dir, filename);
+            const filename = `${base}.webp`;
             // Resize and convert to WebP
-            const sharp = (await import('sharp')).default;
             await sharp(buffer)
               .resize(1200, null, { withoutEnlargement: true, fit: 'inside' })
               .webp({ quality: 80 })
-              .toFile(filePath);
+              .toFile(path.join(dir, filename));
             resolve(`/uploads/products/${filename}`);
-          } catch { resolve(null); }
+          } catch {
+            // Fallback: if sharp can't process this image, save the downloaded bytes
+            // as-is instead of dropping the image — mirrors the fallback already used
+            // for locally-uploaded bulk-import files and the manual single-upload path.
+            try {
+              const extMatch = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(?:\?|#|$)/i.exec(url);
+              const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+              const filename = `${base}.${ext}`;
+              fs.writeFileSync(path.join(dir, filename), buffer);
+              resolve(`/uploads/products/${filename}`);
+            } catch {
+              resolve(null);
+            }
+          }
         });
         res.on('error', () => resolve(null));
       });
@@ -266,6 +288,69 @@ export class ProductsService {
     return category.id;
   }
 
+  // Collapses a header string down to just its letters/digits (lowercased) so that
+  // casing, spacing, underscores, hyphens, and other punctuation differences between
+  // a user's own Excel export and our expected column names ("Unit Price" vs
+  // "unitPrice" vs "unit_price" vs " UNITPRICE ") all resolve to the same key.
+  private normalizeHeaderKey(key: string): string {
+    return key.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  // Re-keys a parsed Excel row by normalized header name, so callers can look a
+  // value up by any casing/spacing variant of a column name without needing an
+  // ever-growing list of exact `row.foo || row.Foo || row['Foo Bar']` fallbacks.
+  private normalizeRowKeys(row: Record<string, any>): Record<string, any> {
+    const normalized: Record<string, any> = {};
+    for (const [key, value] of Object.entries(row)) {
+      normalized[this.normalizeHeaderKey(key)] = value;
+    }
+    return normalized;
+  }
+
+  // Looks up the first non-empty value among candidate column names (any of which
+  // may use different casing/spacing) in an already-normalized row.
+  private getField(normalizedRow: Record<string, any>, ...candidates: string[]): string {
+    for (const candidate of candidates) {
+      const value = normalizedRow[this.normalizeHeaderKey(candidate)];
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        return String(value).trim();
+      }
+    }
+    return '';
+  }
+
+  // Real-world Excel exports often store prices/quantities as text with currency
+  // symbols and thousands separators ("₹1,299.00", "Rs. 499") rather than plain
+  // numbers. `parseFloat` gives up at the first non-numeric character, so "₹499"
+  // becomes NaN (wrongly read as "missing") and "1,299" becomes 1 (silently
+  // wrong). Rather than stripping non-numeric characters (which would misread the
+  // "." in an abbreviation like "Rs." as a decimal point — "Rs. 899" -> "0.899"),
+  // this extracts the first proper number-shaped substring after removing
+  // thousands-separator commas, so stray currency text around it is ignored.
+  private parseNumericField(raw: string): number {
+    if (!raw) return NaN;
+    const match = raw.replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+    return match ? parseFloat(match[0]) : NaN;
+  }
+
+  // Sniffs the actual downloaded bytes for a known image file signature, rather
+  // than trusting the HTTP Content-Type header (which real-world hosts frequently
+  // get wrong — e.g. serving genuine .avif files as "text/plain" when the server's
+  // MIME map doesn't know that extension). This is the authoritative check for
+  // "is this actually image data", independent of what the server claimed.
+  private looksLikeImageBytes(buffer: Buffer): boolean {
+    if (buffer.length < 12) return false;
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return true; // JPEG
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return true; // PNG
+    if (buffer.subarray(0, 3).toString('ascii') === 'GIF') return true; // GIF
+    if (buffer[0] === 0x42 && buffer[1] === 0x4d) return true; // BMP
+    if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return true; // WEBP
+    if (buffer.subarray(4, 8).toString('ascii') === 'ftyp') return true; // AVIF/HEIC/ISO-BMFF family
+    const head = buffer.subarray(0, 256).toString('utf8').trimStart().toLowerCase();
+    if (head.startsWith('<svg') || head.startsWith('<?xml')) return true; // SVG
+    return false;
+  }
+
   async bulkUploadFromExcel(
     buffer: Buffer,
     imageFiles: Express.Multer.File[] = [],
@@ -306,25 +391,29 @@ export class ProductsService {
       }
 
       try {
-        const sku = (row.sku || row.SKU || '').toString().trim();
-        const title = (row.title || row.Title || row.name || row.Name || '').toString().trim();
-        const unitPrice = parseFloat(row.unitPrice || row.UnitPrice || row.price || row.Price || '0');
-        const moq = parseInt(row.moq || row.MOQ || row.minQty || row.MinQty || '1', 10);
-        const inventoryQuantity = parseInt(row.inventoryQuantity || row.InventoryQuantity || row.stock || row.Stock || row.qty || '0', 10);
-        const description = (row.description || row.Description || '').toString().trim();
-        const status = (row.status || row.Status || 'PUBLISHED').toString().trim().toUpperCase();
-        const vendorName = (row.vendorName || row.VendorName || '').toString().trim();
-        const categoryName = (
-          row.category || row.Category || row.categoryName || row.CategoryName || row['Category Name'] || row['category name'] || ''
-        ).toString().trim();
-        const tagsStr = (row.tags || row.Tags || '').toString().trim();
+        const r = this.normalizeRowKeys(row);
+        const sku = this.getField(r, 'sku', 'skuCode', 'itemCode', 'productCode');
+        const title = this.getField(r, 'title', 'name', 'productTitle', 'productName', 'itemName');
+        const unitPriceStr = this.getField(r, 'unitPrice', 'price', 'sellingPrice', 'unitCost');
+        const unitPrice = unitPriceStr ? this.parseNumericField(unitPriceStr) : 0;
+        const moqStr = this.getField(r, 'moq', 'minQty', 'minimumOrderQuantity');
+        const moq = moqStr ? Math.round(this.parseNumericField(moqStr)) : 1;
+        const inventoryQuantityStr = this.getField(r, 'inventoryQuantity', 'stock', 'qty', 'quantity');
+        const inventoryQuantity = inventoryQuantityStr ? Math.round(this.parseNumericField(inventoryQuantityStr)) : 0;
+        const description = this.getField(r, 'description');
+        const status = (this.getField(r, 'status') || 'PUBLISHED').toUpperCase();
+        const vendorName = this.getField(r, 'vendorName');
+        const categoryName = this.getField(r, 'category', 'categoryName');
+        const tagsStr = this.getField(r, 'tags');
         const tags = tagsStr ? tagsStr.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
-        const compareAtPrice = parseFloat(row.compareAtPrice || row.CompareAtPrice || '0') || null;
-        const imagesStr = (row.images || row.Images || row.imageUrls || row.ImageUrls || '').toString().trim();
+        const compareAtPriceStr = this.getField(r, 'compareAtPrice');
+        const compareAtPrice = compareAtPriceStr ? this.parseNumericField(compareAtPriceStr) || null : null;
+        const imagesStr = this.getField(r, 'images', 'imageUrls', 'imageUrl', 'image', 'imageLink', 'imageLinks', 'productImage', 'productImages');
         const imageUrlList = imagesStr ? imagesStr.split(',').map((u: string) => u.trim()).filter(Boolean) : [];
 
         if (!sku || !title || !unitPrice) {
-          results.errors.push(`Row ${i + 2}: Missing required fields (sku, title, unitPrice)`);
+          const missing = [!sku && 'sku', !title && 'title', !unitPrice && 'unitPrice'].filter(Boolean).join(', ');
+          results.errors.push(`Row ${i + 2}: Missing required fields (${missing})`);
           continue;
         }
 
@@ -371,7 +460,7 @@ export class ProductsService {
               moq: moq > 0 ? moq : 1,
               inventoryQuantity: inventoryQuantity || 0,
               description: description || null,
-              status: ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status) ? status : 'PUBLISHED',
+              status: (['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status) ? status : 'PUBLISHED') as ProductStatus,
               vendorName: vendorName || null,
               categoryId: categoryId || null,
               tags,
@@ -392,7 +481,12 @@ export class ProductsService {
               localImageUrls.push(localUrl);
               results.imagesDownloaded++;
             } else {
-              results.imageErrors.push(`Row ${i + 2}: Failed to download image: ${url}`);
+              // Re-hosting locally isn't required for the product to have an image —
+              // fall back to the original URL so the product still displays something
+              // instead of silently ending up with none, while still surfacing the
+              // warning so the download failure isn't hidden.
+              localImageUrls.push(url);
+              results.imageErrors.push(`Row ${i + 2}: Could not download/re-host image (used original URL instead): ${url}`);
             }
           } else if (url.startsWith('/uploads/')) {
             localImageUrls.push(url);
@@ -409,7 +503,6 @@ export class ProductsService {
           const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
           const filePath = path.join(dir, filename);
           try {
-            const sharp = (await import('sharp')).default;
             await sharp(f.buffer)
               .resize(1200, null, { withoutEnlargement: true, fit: 'inside' })
               .webp({ quality: 80 })

@@ -14,6 +14,7 @@ import * as crypto from 'crypto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { EmailService } from '../notifications/email.service';
@@ -32,6 +33,8 @@ export interface AuthResponse {
 
 @Injectable()
 export class AuthService {
+  private static readonly RESEND_OTP_COOLDOWN_SECONDS = 60;
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -249,6 +252,38 @@ export class AuthService {
     return { message: 'Email verified successfully' };
   }
 
+  async resendOtp(resendOtpDto: ResendOtpDto): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: resendOtpDto.email },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.emailVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    // Rate-limit resends so a user can't spam themselves (or someone else's inbox)
+    // with requests — only the most recent OTP for this purpose matters here.
+    const lastOtp = await this.prisma.oTP.findFirst({
+      where: { userId: user.id, purpose: 'EMAIL_VERIFICATION' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (lastOtp) {
+      const secondsSinceLast = (Date.now() - lastOtp.createdAt.getTime()) / 1000;
+      if (secondsSinceLast < AuthService.RESEND_OTP_COOLDOWN_SECONDS) {
+        const waitSeconds = Math.ceil(AuthService.RESEND_OTP_COOLDOWN_SECONDS - secondsSinceLast);
+        throw new BadRequestException(`Please wait ${waitSeconds}s before requesting another OTP`);
+      }
+    }
+
+    await this.generateAndSaveOtp(user.id, 'EMAIL_VERIFICATION');
+
+    return { message: 'A new OTP has been sent to your email' };
+  }
+
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
       where: { email: forgotPasswordDto.email },
@@ -387,11 +422,15 @@ export class AuthService {
 
     // Send OTP via email if configured
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-    if (user?.email && this.emailService.isConfigured()) {
-      try {
-        await this.emailService.sendOtpEmail(user.email, code);
-      } catch (err) {
-        console.error('Failed to send OTP email:', err.message);
+    if (user?.email) {
+      if (this.emailService.isConfigured()) {
+        try {
+          await this.emailService.sendOtpEmail(user.email, code);
+        } catch (err) {
+          console.error('Failed to send OTP email:', err.message);
+        }
+      } else {
+        console.warn(`SMTP not configured — OTP for ${user.email} was not emailed.`);
       }
     }
 

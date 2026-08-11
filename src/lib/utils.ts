@@ -5,6 +5,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// Product images are almost always our own re-hosted local files (`/uploads/...`).
+// Bulk import falls back to storing the original Excel URL as-is when a product
+// image can't be downloaded/re-hosted, which can point at any external host the
+// admin's spreadsheet happened to reference. next/image validates absolute src
+// hostnames against next.config.mjs's `images.remotePatterns` and throws for any
+// host not on that list — so an arbitrary external fallback URL would error in
+// production. Passing `unoptimized` for these specific images skips that
+// validation (and the optimizer proxy) without needing to allowlist every
+// possible vendor domain up front.
+export function isExternalImageUrl(src: string | null | undefined): boolean {
+  return !!src && /^https?:\/\//i.test(src)
+}
+
 export function getCartSessionId(): string {
   if (typeof window === "undefined") return ""
   let id = localStorage.getItem("cart_session")

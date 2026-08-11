@@ -7,6 +7,7 @@ import { AuthService, AuthResponse } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -76,6 +77,15 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Email verified successfully' })
   verifyOtp(@Body() verifyOtpDto: VerifyOtpDto): Promise<{ message: string }> {
     return this.authService.verifyOtp(verifyOtpDto);
+  }
+
+  @Post('resend-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend email verification OTP' })
+  @ApiResponse({ status: 200, description: 'OTP resent' })
+  @ApiResponse({ status: 400, description: 'Already verified or cooldown still active' })
+  resendOtp(@Body() resendOtpDto: ResendOtpDto): Promise<{ message: string }> {
+    return this.authService.resendOtp(resendOtpDto);
   }
 
   @Post('forgot-password')

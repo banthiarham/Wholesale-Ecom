@@ -7,7 +7,20 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/uploads',
+    // Express's static file serving (the `send` package) ships an old MIME
+    // database that predates `.avif` — a format we save when a bulk-imported
+    // product image URL is already AVIF — so it's served as
+    // application/octet-stream instead of image/avif otherwise. Left uncorrected,
+    // strict consumers (e.g. Next.js Image Optimization in production) can fail
+    // to treat these as images even though the bytes on disk are fine.
+    setHeaders: (res, filePath) => {
+      if (filePath.toLowerCase().endsWith('.avif')) {
+        res.setHeader('Content-Type', 'image/avif');
+      }
+    },
+  });
 
   app.setGlobalPrefix('api/v1');
   app.enableCors({

@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Heart, Package } from "lucide-react"
 import { getCartSessionId } from "@/lib/utils"
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
+import { useStorefrontRules } from "@/lib/rules"
 import { ProductCard } from "@/components/ui/ProductCard"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
@@ -22,6 +23,7 @@ interface WishlistProduct {
   compareAtPrice: string | null
   moq: number
   inventoryQuantity: number
+  categoryId?: string | null
   tierPrices: TierPrice[]
 }
 
@@ -40,6 +42,14 @@ export default function WishlistPage() {
   const [error, setError] = useState("")
   const { showToast } = useToast()
   const { openCartDrawer } = useCartDrawer()
+
+  // Evaluate dynamic rules so the top-left image badge shows immediately on
+  // load, same as the main product listing — independent of quantity/cart.
+  const rulesProducts = useMemo(
+    () => items.map((item) => ({ id: item.product.id, categoryId: item.product.categoryId || undefined, unitPrice: Number(item.product.unitPrice) })),
+    [items]
+  )
+  const { customBadges } = useStorefrontRules(rulesProducts)
 
   useEffect(() => {
     const token = localStorage.getItem("token")
@@ -159,6 +169,7 @@ export default function WishlistPage() {
               product={item.product}
               view="grid"
               isWishlisted
+              customBadges={customBadges}
               onToggleWishlist={(e, productId) => { e.preventDefault(); e.stopPropagation(); handleRemove(productId) }}
               isAdding={addingId === item.product.id}
               onAddToCart={handleAddToCart}

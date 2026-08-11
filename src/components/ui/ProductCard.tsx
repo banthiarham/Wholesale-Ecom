@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Heart, Star, Package, ShoppingCart, Sparkles } from "lucide-react"
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 import { SeasonalDiscount, PaymentOffer, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
-import { getContrastTextColor } from "@/lib/utils"
+import { getContrastTextColor, isExternalImageUrl } from "@/lib/utils"
 import { ProductPriceDisplay, RolePricingInfo, RuleDiscountInfo } from "./ProductPriceDisplay"
 
 export interface ProductCardProduct {
@@ -206,7 +206,7 @@ export function ProductCard({
         <div className="relative w-44 sm:w-52 flex-shrink-0 bg-gray-50 overflow-hidden">
           <div className="relative w-full h-full min-h-[160px]">
             {product.thumbnail ? (
-              <Image src={product.thumbnail} alt={product.title} fill className="img-zoom object-cover" sizes="208px" />
+              <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-cover" sizes="208px" />
             ) : (
               <div className="w-full h-full min-h-[160px] flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
                 <Package size={32} className="text-gray-200" />
@@ -260,7 +260,7 @@ export function ProductCard({
     <Link href={`/products/${product.handle}`} className="card-interactive group flex flex-col h-full">
       <div className="relative aspect-square bg-gray-50 overflow-hidden">
         {product.thumbnail ? (
-          <Image src={product.thumbnail} alt={product.title} fill className="img-zoom object-cover" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
+          <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-cover" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
             <Package size={40} className="text-gray-200" />

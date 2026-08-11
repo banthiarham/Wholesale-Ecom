@@ -652,7 +652,11 @@ export default function AdminRulesPage() {
 
   const loadProducts = async () => {
     try {
-      const res = await fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED", { headers: getAuthHeaders() })
+      // Rule conditions can target any product in the catalog, so this picker needs
+      // the full list — the default (unspecified) limit on this endpoint is capped
+      // much lower for storefront browsing, which silently hid products beyond the
+      // first page from the "Products" selector below.
+      const res = await fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED&limit=2000", { headers: getAuthHeaders() })
       const data = await res.json()
       setProducts(data.products ?? [])
     } catch (e) { console.error(e) }

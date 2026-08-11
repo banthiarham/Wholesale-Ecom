@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Store, Package } from "lucide-react"
 import { getCartSessionId } from "@/lib/utils"
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
+import { useStorefrontRules } from "@/lib/rules"
 import { ProductCard } from "@/components/ui/ProductCard"
 import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 import { EmptyState } from "@/components/ui/EmptyState"
@@ -23,6 +24,8 @@ interface Product {
   rating: number
   vendorName: string | null
   tags: string[]
+  categoryId?: string
+  category?: { id: string }
   tierPrices: { minQty: number; maxQty: number | null; price: number }[]
 }
 
@@ -40,6 +43,14 @@ export default function VendorProductListingPage() {
   const [addingId, setAddingId] = useState<string | null>(null)
   const { showToast } = useToast()
   const { openCartDrawer } = useCartDrawer()
+
+  // Evaluate dynamic rules so the top-left image badge shows immediately on
+  // load, same as the main product listing — independent of quantity/cart.
+  const rulesProducts = useMemo(
+    () => products.map((p) => ({ id: p.id, categoryId: p.categoryId || p.category?.id, unitPrice: p.unitPrice })),
+    [products]
+  )
+  const { customBadges } = useStorefrontRules(rulesProducts)
 
   useEffect(() => {
     if (!vendorId) return
@@ -108,6 +119,7 @@ export default function VendorProductListingPage() {
                 key={product.id}
                 product={product}
                 view="grid"
+                customBadges={customBadges}
                 isAdding={addingId === product.id}
                 onAddToCart={handleAddToCart}
               />

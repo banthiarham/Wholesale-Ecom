@@ -78,12 +78,13 @@ export class RulesEngineService {
       const c = rule.conditions as Record<string, any>;
       const a = rule.actions as Record<string, any>;
 
-      if (rule.badgeLabel) {
-        const matched = this.matchesProducts(c, context);
+      const effectiveBadgeLabel = rule.badgeLabel || this.defaultBadgeLabelFor(rule.type, c, a);
+      if (effectiveBadgeLabel) {
+        const matched = this.matchesProductsForBadge(rule.type, c, context);
         for (const item of matched) {
           result.customBadges.push({
             productId: item.productId,
-            badgeLabel: rule.badgeLabel,
+            badgeLabel: effectiveBadgeLabel,
             badgeColor: rule.badgeColor,
             ruleName: rule.name,
           });
@@ -143,6 +144,63 @@ export class RulesEngineService {
     }
 
     return result;
+  }
+
+  // Rule types whose conditions carry productIds/categoryIds (via ProductCategoryConditionsDto)
+  // and where an empty selection deliberately means "applies to every product" — matches
+  // matchesProducts()'s existing fallback.
+  private static readonly PRODUCT_CATEGORY_SCOPED_TYPES = new Set([
+    'PRODUCT_DISCOUNT',
+    'MINIMUM_ORDER_QUANTITY',
+    'MAXIMUM_ORDER_QUANTITY',
+    'TAX_RULE',
+    'CHECKOUT_RESTRICTION',
+    'QUANTITY_BASED_DISCOUNT',
+    'EXTRA_CHARGE',
+    'RESTRICT_PRODUCT_VISIBILITY',
+    'HIDDEN_PRICE',
+    'NON_PURCHASABLE',
+  ]);
+
+  // Resolves which cart items a rule's admin-configured badge should attach to. Badges are only
+  // meaningful on a specific product's image, so this only matches types that actually name a
+  // product: PRODUCT_DISCOUNT-family rules scope via conditions.productIds/categoryIds (falling
+  // through to matchesProducts, where an empty selection means "every product" by design), and
+  // BOGO/BUY_X_AND_Y_FREE scope via conditions.buyProductId (a field matchesProducts never reads,
+  // so without this it fell through to "no productIds/categoryIds" and wrongly matched every
+  // product in the request). Cart/payment/shipping/loyalty rule types have no product to anchor a
+  // badge to, so they never emit one — showing no badge is correct there, not a hidden rule.
+  private matchesProductsForBadge(
+    type: string, c: Record<string, any>, context: RuleContext,
+  ): CartItemContext[] {
+    if (type === 'BOGO' || type === 'BUY_X_AND_Y_FREE') {
+      if (!context.cartItems || !c.buyProductId) return [];
+      return context.cartItems.filter((item) => item.productId === c.buyProductId);
+    }
+    if (RulesEngineService.PRODUCT_CATEGORY_SCOPED_TYPES.has(type)) {
+      return this.matchesProducts(c, context);
+    }
+    return [];
+  }
+
+  // Promotional rule types shouldn't need the admin to separately remember to
+  // fill in the optional "Product Badge" text field just to be visible at all —
+  // the whole point of applying one of these rules is to advertise it on the
+  // product. Every label here is derived purely from the rule's own
+  // conditions/actions (never hardcoded), and an admin-typed badgeLabel, if
+  // set, always takes precedence (see the caller in evaluateRules).
+  private defaultBadgeLabelFor(type: string, c: Record<string, any>, a: Record<string, any>): string | null {
+    if ((type === 'BOGO' || type === 'BUY_X_AND_Y_FREE') && c.buyQuantity) {
+      return `Buy ${c.buyQuantity} Get ${a.freeQuantity || 1} Free`;
+    }
+    if (type === 'PRODUCT_DISCOUNT' && a.discountValue) {
+      return a.discountType === 'FLAT' ? `₹${a.discountValue} OFF` : `${a.discountValue}% OFF`;
+    }
+    if (type === 'QUANTITY_BASED_DISCOUNT' && Array.isArray(a.tiers) && a.tiers.length > 0) {
+      const best = a.tiers.reduce((max: any, t: any) => (t.discountValue > (max?.discountValue ?? -Infinity) ? t : max), null);
+      if (best) return best.discountType === 'FLAT' ? `Bulk: ₹${best.discountValue} OFF` : `Bulk: ${best.discountValue}% OFF`;
+    }
+    return null;
   }
 
   private matchesProducts(c: Record<string, any>, context: RuleContext): CartItemContext[] {

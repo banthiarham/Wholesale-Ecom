@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText, X, Store, Sparkles } from "lucide-react"
-import { formatPrice, getCartSessionId, getContrastTextColor } from "@/lib/utils"
+import { formatPrice, getCartSessionId, getContrastTextColor, isExternalImageUrl } from "@/lib/utils"
 import { PricingBreakdown, SeasonalDiscount, PaymentOffer, TierPrice, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, findApplicableTier, getEffectiveUnitPrice, sortTierPrices } from "@/lib/pricing"
 import { useQuantityStepper } from "@/lib/pricing/useQuantityStepper"
 import { useAuth } from "@/lib/auth"
@@ -387,6 +387,7 @@ export default function ProductDetailPage() {
                       src={mainImage}
                       alt={product.title}
                       fill
+                      unoptimized={isExternalImageUrl(mainImage)}
                       className={`object-cover transition-transform duration-200 ease-out ${isZooming ? "scale-[1.8]" : "scale-100"}`}
                       style={{ transformOrigin: zoomOrigin }}
                       sizes="(max-width: 1024px) 100vw, 60vw"
@@ -404,7 +405,7 @@ export default function ProductDetailPage() {
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {product.images.map((img, idx) => (
                     <button key={idx} onClick={() => setMainImage(img)} className={`flex-shrink-0 w-20 h-20 rounded-xl border-2 overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
-                      <Image src={img} alt={`${product.title} ${idx + 1}`} width={80} height={80} className="w-full h-full object-cover" />
+                      <Image src={img} alt={`${product.title} ${idx + 1}`} width={80} height={80} unoptimized={isExternalImageUrl(img)} className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>
@@ -874,7 +875,7 @@ export default function ProductDetailPage() {
             <X size={20} />
           </button>
           <div className="relative w-full h-full max-w-4xl max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-            <Image src={mainImage} alt={product.title} fill className="object-contain" sizes="90vw" />
+            <Image src={mainImage} alt={product.title} fill unoptimized={isExternalImageUrl(mainImage)} className="object-contain" sizes="90vw" />
           </div>
         </div>
       )}
