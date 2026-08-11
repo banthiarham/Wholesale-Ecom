@@ -46,6 +46,7 @@ import {
   Sun,
   Layers,
   Receipt,
+  Mail,
 } from "lucide-react"
 import { useAuth, usePermissions } from "@/lib/auth"
 
@@ -122,6 +123,7 @@ const navGroups: NavGroup[] = [
       { label: "Payment Gateways", href: "/admin/payment-gateways", icon: Server },
       { label: "Wallet", href: "/admin/wallet", icon: Wallet },
       { label: "Site Settings", href: "/admin/settings", icon: Settings },
+      { label: "Email / SMTP Settings", href: "/admin/smtp-settings", icon: Mail },
     ],
   },
 ]

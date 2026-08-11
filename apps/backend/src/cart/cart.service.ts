@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
 import { RulesEngineService, CartItemContext } from '../rules/rules-engine.service';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class CartService {
@@ -11,6 +12,7 @@ export class CartService {
     private pricingService: PricingService,
     private rulesEnforcement: RulesEnforcementService,
     private rulesEngine: RulesEngineService,
+    private settingsService: SettingsService,
   ) {}
 
   async getOrCreateCart(userId?: string, sessionId?: string) {
@@ -552,7 +554,19 @@ export class CartService {
     return this.getOrCreateCart(userId, undefined);
   }
 
-  calculateTotals(cart: any, couponCode?: string) {
+  /**
+   * Computes cart totals (tax, shipping, coupon discount, grand total) using the same
+   * RulesEngineService (admin Tax/Shipping DynamicRules) and round-off setting that
+   * orders.service.ts::computeAmountBreakdown uses to charge the order, so the total
+   * shown in the cart matches the Pay Now total instead of only appearing at checkout.
+   */
+  async calculateTotals(
+    cart: any,
+    couponCode?: string,
+    userId?: string,
+    userRole?: string,
+    shippingRegion?: string,
+  ) {
     const subtotal = cart.items.reduce(
       (sum: number, item: any) =>
         sum + Number(item.unitPrice) * item.quantity,
@@ -562,12 +576,51 @@ export class CartService {
       (sum: number, item: any) => sum + item.quantity,
       0,
     );
-    const tax = subtotal * 0.18; // 18% GST
-    const shipping = subtotal > 50000 ? 0 : 500; // Free shipping above 50k
-    let couponDiscount = 0;
-    let couponApplied = null;
 
-    return { subtotal, itemCount, tax, shipping, couponDiscount, couponApplied, total: subtotal + tax + shipping - couponDiscount };
+    const cartItems: CartItemContext[] = cart.items.map((item: any) => ({
+      productId: item.productId,
+      categoryId: item.product?.categoryId || undefined,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+    }));
+
+    const ruleResult = await this.rulesEngine.evaluateRules({
+      userId,
+      userRole,
+      cartItems,
+      subtotal,
+      shippingRegion,
+    });
+
+    const tax = ruleResult.taxes.reduce((sum, t) => sum + (subtotal * t.taxRate) / 100, 0);
+    const shipping = ruleResult.shipping?.cost ?? 0;
+
+    let couponDiscount = 0;
+    let couponApplied: string | null = null;
+    if (couponCode) {
+      const couponResult = await this.pricingService.applyCoupon(couponCode, subtotal);
+      if (couponResult.valid) {
+        couponDiscount = couponResult.discountAmount;
+        couponApplied = couponCode.toUpperCase();
+      }
+    }
+
+    const settings = await this.settingsService.findAll();
+    const roundOffEnabled = settings.roundOffEnabled === 'true';
+    const rawTotal = Math.max(0, subtotal - couponDiscount) + tax + shipping;
+    const total = roundOffEnabled ? Math.round(rawTotal) : rawTotal;
+
+    return {
+      subtotal,
+      itemCount,
+      tax,
+      shipping,
+      couponDiscount,
+      couponApplied,
+      total,
+      taxes: ruleResult.taxes,
+      shippingRule: ruleResult.shipping,
+    };
   }
 
   async validateCoupon(cart: any, couponCode: string) {

@@ -50,7 +50,6 @@ export function useStorefrontRules(
     }
 
     let cancelled = false
-    setLoading(true)
 
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
     const cartItems: CartItemContext[] = products.map((p) => ({
@@ -62,62 +61,84 @@ export function useStorefrontRules(
 
     const subtotal = cartItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
 
-    fetch("/api/rules/evaluate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        cartItems,
-        subtotal,
-        paymentMethod: options?.paymentMethod,
-        shippingRegion: options?.shippingRegion,
-      }),
-    })
-      .then((res) => {
-        if (!res.ok) {
-          console.error(`[useStorefrontRules] POST /rules/evaluate failed: ${res.status} ${res.statusText}`)
-          throw new Error(`Failed to evaluate rules: ${res.status}`)
-        }
-        return res.json()
+    const fetchRules = () => {
+      setLoading(true)
+      fetch("/api/rules/evaluate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          cartItems,
+          subtotal,
+          paymentMethod: options?.paymentMethod,
+          shippingRegion: options?.shippingRegion,
+        }),
       })
-      .then((data) => {
-        if (cancelled) return
-        const r = data.result || data
-        setResult({
-          hiddenProductIds: new Set(r.hiddenProducts || []),
-          hiddenPriceProductIds: new Set(r.hiddenPrices || []),
-          nonPurchasableProducts: new Map(
-            (r.nonPurchasable || []).map((np: any) => [np.productId, np.message || ""] as [string, string])
-          ),
-          productDiscounts: r.productDiscounts || [],
-          cartDiscount: r.cartDiscount || null,
-          paymentMethodDiscount: r.paymentMethodDiscount || null,
-          bogo: r.bogo || [],
-          shipping: r.shipping || null,
-          availablePaymentMethods: r.availablePaymentMethods || [],
-          minimumOrderQuantities: r.minimumOrderQuantities || [],
-          maximumOrderQuantities: r.maximumOrderQuantities || [],
-          taxes: r.taxes || [],
-          checkoutRestrictions: r.checkoutRestrictions || [],
-          quantityDiscounts: r.quantityDiscounts || [],
-          extraCharges: r.extraCharges || [],
-          customBadges: r.customBadges || [],
-          loading: false,
+        .then((res) => {
+          if (!res.ok) {
+            console.error(`[useStorefrontRules] POST /rules/evaluate failed: ${res.status} ${res.statusText}`)
+            throw new Error(`Failed to evaluate rules: ${res.status}`)
+          }
+          return res.json()
         })
-      })
-      .catch((err) => {
-        if (cancelled) return
-        console.error("[useStorefrontRules] Error evaluating rules:", err)
-        setResult(emptyStorefrontRules())
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+        .then((data) => {
+          if (cancelled) return
+          const r = data.result || data
+          setResult({
+            hiddenProductIds: new Set(r.hiddenProducts || []),
+            hiddenPriceProductIds: new Set(r.hiddenPrices || []),
+            nonPurchasableProducts: new Map(
+              (r.nonPurchasable || []).map((np: any) => [np.productId, np.message || ""] as [string, string])
+            ),
+            productDiscounts: r.productDiscounts || [],
+            cartDiscount: r.cartDiscount || null,
+            paymentMethodDiscount: r.paymentMethodDiscount || null,
+            bogo: r.bogo || [],
+            shipping: r.shipping || null,
+            availablePaymentMethods: r.availablePaymentMethods || [],
+            minimumOrderQuantities: r.minimumOrderQuantities || [],
+            maximumOrderQuantities: r.maximumOrderQuantities || [],
+            taxes: r.taxes || [],
+            checkoutRestrictions: r.checkoutRestrictions || [],
+            quantityDiscounts: r.quantityDiscounts || [],
+            extraCharges: r.extraCharges || [],
+            customBadges: r.customBadges || [],
+            loading: false,
+          })
+        })
+        .catch((err) => {
+          if (cancelled) return
+          console.error("[useStorefrontRules] Error evaluating rules:", err)
+          setResult(emptyStorefrontRules())
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }
+
+    fetchRules()
+
+    // An Admin can create/edit a Dynamic Rule at any time while a buyer already has this
+    // page open — there's no push channel from the backend, so without this the badge
+    // would stay stuck at whatever it was on initial mount until something happens to
+    // change productsKey/quantity/optionsKey (e.g. a quantity-stepper click), which reads
+    // as "the badge only shows after I interact with the page". Revalidating on focus/
+    // visibility (switching back to this tab) and on a short poll while visible keeps the
+    // badge in sync with the latest rule without requiring any buyer interaction.
+    const revalidate = () => {
+      if (document.visibilityState === "visible") fetchRules()
+    }
+    window.addEventListener("focus", revalidate)
+    document.addEventListener("visibilitychange", revalidate)
+    const pollId = window.setInterval(revalidate, 20000)
 
     return () => {
       cancelled = true
+      window.removeEventListener("focus", revalidate)
+      document.removeEventListener("visibilitychange", revalidate)
+      window.clearInterval(pollId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, productsKey, quantity, optionsKey])

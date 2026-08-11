@@ -54,11 +54,12 @@ export class CartController {
   async getCart(@Req() req: any) {
     const sessionId = this.getSessionId(req);
     const userId = this.resolveUserId(req);
+    const userRole = this.resolveUserRole(req);
     const cart = await this.cartService.getOrCreateCart(
       userId,
       sessionId || undefined,
     );
-    const totals = this.cartService.calculateTotals(cart);
+    const totals = await this.cartService.calculateTotals(cart, undefined, userId, userRole);
     return { cart, totals };
   }
 
@@ -86,7 +87,7 @@ export class CartController {
       (dto as any).packageMetadata,
       userRole,
     );
-    const totals = this.cartService.calculateTotals(cart);
+    const totals = await this.cartService.calculateTotals(cart, undefined, resolvedUserId, userRole);
     return { cart, totals };
   }
 
@@ -99,9 +100,10 @@ export class CartController {
   @ApiHeader({ name: 'x-session-id', required: false, description: 'Guest cart session identifier' })
   @ApiBearerAuth()
   async updateItem(@Body() dto: UpdateCartItemDto, @Req() req: any) {
+    const userId = this.resolveUserId(req);
     const userRole = this.resolveUserRole(req);
     const cart = await this.cartService.updateItem(dto.itemId, dto.quantity, undefined, userRole);
-    const totals = this.cartService.calculateTotals(cart);
+    const totals = await this.cartService.calculateTotals(cart, undefined, userId, userRole);
     return { cart, totals };
   }
 
@@ -112,9 +114,11 @@ export class CartController {
   @ApiBody({ type: RemoveCartItemDto })
   @ApiHeader({ name: 'x-session-id', required: false, description: 'Guest cart session identifier' })
   @ApiBearerAuth()
-  async removeItem(@Body() dto: RemoveCartItemDto) {
+  async removeItem(@Body() dto: RemoveCartItemDto, @Req() req: any) {
+    const userId = this.resolveUserId(req);
+    const userRole = this.resolveUserRole(req);
     const cart = await this.cartService.removeItem(dto.itemId);
-    const totals = this.cartService.calculateTotals(cart);
+    const totals = await this.cartService.calculateTotals(cart, undefined, userId, userRole);
     return { cart, totals };
   }
 

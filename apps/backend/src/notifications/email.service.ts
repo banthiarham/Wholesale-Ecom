@@ -1,34 +1,61 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { SmtpSettingsService, DecryptedSmtpConfig } from '../smtp-settings/smtp-settings.service';
 
 @Injectable()
 export class EmailService {
-  private transporter: nodemailer.Transporter;
+  constructor(
+    private configService: ConfigService,
+    private smtpSettingsService: SmtpSettingsService,
+  ) {}
 
-  constructor(private configService: ConfigService) {
+  /**
+   * Resolves the SMTP config to send with. Admin-configured DB settings (managed via the
+   * Email/SMTP Settings admin page) always win when present; otherwise falls back to the
+   * SMTP_* env vars (e.g. the Ethereal dev config) so the OTP flow keeps working either way.
+   * Resolved fresh on every send (not cached) so a settings change takes effect immediately.
+   */
+  private async resolveConfig(): Promise<DecryptedSmtpConfig | null> {
+    const dbConfig = await this.smtpSettingsService.getActiveDecryptedConfig();
+    if (dbConfig) return dbConfig;
+
     const host = this.configService.get<string>('SMTP_HOST', '');
     const port = this.configService.get<number>('SMTP_PORT', 587);
     const user = this.configService.get<string>('SMTP_USER', '');
     const pass = this.configService.get<string>('SMTP_PASS', '');
+    if (!host || !user || !pass) return null;
 
-    if (host && user && pass) {
-      this.transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: { user, pass },
-      });
-    }
+    const from = this.configService.get<string>('SMTP_FROM', 'WholesaleX Pro <noreply@wholesalex.com>');
+    const fromMatch = from.match(/^"?([^"<]*)"?\s*<(.+)>$/);
+    return {
+      host,
+      port: Number(port),
+      username: user,
+      password: pass,
+      fromName: fromMatch ? fromMatch[1].trim() : 'WholesaleX Pro',
+      fromEmail: fromMatch ? fromMatch[2].trim() : from,
+    };
   }
 
   async sendEmail(to: string, subject: string, html: string): Promise<void> {
-    if (!this.transporter) {
+    const config = await this.resolveConfig();
+    if (!config) {
       console.warn('Email not configured. Skipping email send.');
       return;
     }
-    const from = this.configService.get<string>('SMTP_FROM', 'noreply@wholesalex.com');
-    await this.transporter.sendMail({ from, to, subject, html });
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.port === 465,
+      auth: { user: config.username, pass: config.password },
+    });
+    await transporter.sendMail({
+      from: `"${config.fromName}" <${config.fromEmail}>`,
+      to,
+      subject,
+      html,
+    });
   }
 
   async sendNotificationEmail(to: string, title: string, message: string): Promise<void> {
@@ -85,7 +112,7 @@ export class EmailService {
     await this.sendEmail(to, 'Your OTP Code', html);
   }
 
-  isConfigured(): boolean {
-    return !!this.transporter;
+  async isConfigured(): Promise<boolean> {
+    return (await this.resolveConfig()) !== null;
   }
 }

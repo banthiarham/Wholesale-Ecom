@@ -4,6 +4,7 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -29,6 +30,8 @@ export interface TokenPayload {
 export interface AuthResponse {
   accessToken: string;
   user: Omit<User, 'password'>;
+  /** Only set by register() — whether the email-verification OTP actually sent. */
+  otpEmailSent?: boolean;
 }
 
 @Injectable()
@@ -124,12 +127,12 @@ export class AuthService {
       }
     }
 
-    await this.generateAndSaveOtp(user.id, 'EMAIL_VERIFICATION');
+    const { emailSent } = await this.generateAndSaveOtp(user.id, 'EMAIL_VERIFICATION');
 
     const accessToken = this.generateToken(user);
     const { password: _, ...userWithoutPassword } = user;
 
-    return { accessToken, user: userWithoutPassword };
+    return { accessToken, user: userWithoutPassword, otpEmailSent: emailSent };
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponse> {
@@ -279,7 +282,12 @@ export class AuthService {
       }
     }
 
-    await this.generateAndSaveOtp(user.id, 'EMAIL_VERIFICATION');
+    const { emailSent } = await this.generateAndSaveOtp(user.id, 'EMAIL_VERIFICATION');
+    if (!emailSent) {
+      throw new InternalServerErrorException(
+        'Could not send the OTP email — the email service is unavailable. Please try again shortly.',
+      );
+    }
 
     return { message: 'A new OTP has been sent to your email' };
   }
@@ -406,7 +414,7 @@ export class AuthService {
     });
   }
 
-  private async generateAndSaveOtp(userId: string, purpose: string): Promise<any> {
+  private async generateAndSaveOtp(userId: string, purpose: string): Promise<{ otp: any; emailSent: boolean }> {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
@@ -420,12 +428,17 @@ export class AuthService {
       },
     });
 
-    // Send OTP via email if configured
+    // Send OTP via email if configured. `emailSent` reflects whether the email service
+    // actually confirmed delivery to the SMTP server — callers must not report the OTP
+    // as "sent" to the user unless this is true (the OTP row above is always saved
+    // regardless, so the code still works if the user obtains it another way, e.g. resend).
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    let emailSent = false;
     if (user?.email) {
-      if (this.emailService.isConfigured()) {
+      if (await this.emailService.isConfigured()) {
         try {
           await this.emailService.sendOtpEmail(user.email, code);
+          emailSent = true;
         } catch (err) {
           console.error('Failed to send OTP email:', err.message);
         }
@@ -434,7 +447,7 @@ export class AuthService {
       }
     }
 
-    return otp;
+    return { otp, emailSent };
   }
 
   private generateRandomToken(): string {

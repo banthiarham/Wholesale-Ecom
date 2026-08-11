@@ -247,7 +247,7 @@ export class OrdersService {
     }
 
     // Send order confirmation email
-    if (order.user?.email && this.emailService.isConfigured()) {
+    if (order.user?.email && (await this.emailService.isConfigured())) {
       try {
         await this.emailService.sendOrderConfirmation(order.user.email, order.orderNumber.slice(0, 8), Number(order.totalAmount));
       } catch (err) {
@@ -336,7 +336,7 @@ export class OrdersService {
       }
     }
 
-    if (order.user?.email && this.emailService.isConfigured()) {
+    if (order.user?.email && (await this.emailService.isConfigured())) {
       try {
         await this.emailService.sendOrderConfirmation(order.user.email, order.orderNumber.slice(0, 8), Number(order.totalAmount));
       } catch (err) {

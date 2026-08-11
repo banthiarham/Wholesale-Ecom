@@ -933,6 +933,24 @@ model SiteSetting {
   @@index([group])
 }
 
+// Singleton row (service always reads/writes the earliest-created record) holding the
+// live SMTP configuration admins set via the Email/SMTP Settings admin page. The password
+// is stored AES-encrypted (never plaintext) and is never returned by the API — see
+// SmtpSettingsService. EmailService prefers this over SMTP_* env vars when isActive/present,
+// falling back to env (e.g. the Ethereal dev config) so the OTP flow keeps working either way.
+model SmtpSettings {
+  id                String   @id @default(uuid())
+  host              String
+  port              Int      @default(587)
+  username          String
+  passwordEncrypted String   @db.Text
+  fromName          String   @default("WholesaleX Pro")
+  fromEmail         String
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 model ShipmentSyncLog {
   id              String   @id @default(uuid())
   orderId         String

@@ -123,8 +123,13 @@ export default function CartPage() {
   }, 0)
   const extraChargesTotal = extraCharges.reduce((sum, ec) => sum + ec.chargeAmount, 0)
   const ruleTaxTotal = taxes.reduce((sum, tax) => sum + (totals.subtotal * tax.taxRate) / 100, 0)
+  // Falls back to the backend's rule-engine-computed totals.tax when the client-side rules
+  // hook has no taxes yet (e.g. guest carts, since /rules/evaluate requires auth) — matches
+  // the same fallback the Tax row below already renders, so the grand total never silently
+  // drops the tax that's visibly listed above it.
+  const effectiveTax = taxes.length > 0 ? ruleTaxTotal : totals.tax
   const effectiveShipping = shipping ? shipping.cost : totals.shipping
-  const adjustedTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount + extraChargesTotal + ruleTaxTotal + effectiveShipping)
+  const adjustedTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount + extraChargesTotal + effectiveTax + effectiveShipping)
   const totalSavings = (data?.cart.items ?? []).reduce((sum, item) => {
     const listPrice = Number(item.product.unitPrice); const effectivePrice = Number(item.unitPrice)
     const ruleDisc = ruleProductDiscountMap.get(item.product.id); const ruleDiscountPerUnit = ruleDisc ? ruleDisc.discountAmount : 0
@@ -304,7 +309,7 @@ export default function CartPage() {
           <div className="lg:col-span-1 sticky-rail">
             <CartSummary
               subtotal={totals.subtotal} itemCount={totals.itemCount}
-              tax={ruleTaxTotal > 0 ? ruleTaxTotal : totals.tax}
+              tax={effectiveTax}
               shipping={effectiveShipping} couponDiscount={couponDiscount}
               couponCode={couponCode} total={adjustedTotal}
               totalSavings={totalSavings} contractSavings={discountBreakdown.contract}

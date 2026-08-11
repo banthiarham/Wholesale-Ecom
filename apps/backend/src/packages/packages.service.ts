@@ -354,7 +354,7 @@ export class PackagesService {
 
     // Return updated cart with totals
     const cart = await this.cartService.getOrCreateCart(userId, sessionId);
-    const totals = this.cartService.calculateTotals(cart);
+    const totals = await this.cartService.calculateTotals(cart, undefined, userId);
     return { cart, totals };
   }
 }

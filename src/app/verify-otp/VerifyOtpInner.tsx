@@ -11,6 +11,9 @@ export default function VerifyOtpInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const emailFromQuery = searchParams.get("email") || ""
+  // "0" means signup's own OTP email send failed (see register page / auth.service.ts
+  // register()) — surfaced explicitly rather than assumed successful.
+  const emailSentFromQuery = searchParams.get("emailSent")
 
   const [email, setEmail] = useState(emailFromQuery)
   const [code, setCode] = useState("")
@@ -25,10 +28,16 @@ export default function VerifyOtpInner() {
     if (emailFromQuery) setEmail(emailFromQuery)
   }, [emailFromQuery])
 
-  // Arriving here straight from signup means an OTP was already just sent —
-  // start the resend button on cooldown so it can't be spammed immediately.
+  // Arriving here straight from signup means an OTP was already just sent — start the
+  // resend button on cooldown so it can't be spammed immediately. But if signup told us
+  // the send actually failed (emailSent=0), don't pretend one is in flight: skip the
+  // cooldown and surface the failure so the user knows to use Resend OTP right away.
   useEffect(() => {
-    if (emailFromQuery) setCooldown(RESEND_COOLDOWN_SECONDS)
+    if (emailFromQuery && emailSentFromQuery === "0") {
+      setError("We couldn't send your verification email. Please click \"Resend OTP\" to try again.")
+    } else if (emailFromQuery) {
+      setCooldown(RESEND_COOLDOWN_SECONDS)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

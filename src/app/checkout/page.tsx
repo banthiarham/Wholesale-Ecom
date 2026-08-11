@@ -466,6 +466,10 @@ export default function CheckoutPage() {
   }, 0)
   const extraChargesTotal = extraCharges.reduce((sum, ec) => sum + ec.chargeAmount, 0)
   const ruleTaxTotal = taxes.reduce((sum, tax) => sum + (totals.subtotal * tax.taxRate) / 100, 0)
+  // Falls back to the backend's rule-engine-computed totals.tax when the client-side rules
+  // hook has no taxes yet, matching the Tax row's own fallback below — keeps this total in
+  // sync with the cart page's total instead of silently dropping tax.
+  const effectiveTax = taxes.length > 0 ? ruleTaxTotal : totals.tax
   const effectiveShipping = shipping ? shipping.cost : totals.shipping
   const walletDeduction = useWallet ? Math.min(walletAmount, Number(loyalty?.walletBalance || 0), totals.total - couponDiscount) : 0
   const pointsValue = usePoints ? pointsToRedeem : 0
@@ -491,7 +495,7 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentMethod])
 
-  const preRoundTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount - bankOfferDiscount - walletDeduction - pointsValue + extraChargesTotal + ruleTaxTotal + effectiveShipping)
+  const preRoundTotal = Math.max(0, totals.subtotal - ruleProductSavings - ruleCartSavings - paymentSavings - qtyDiscountSavings - couponDiscount - bankOfferDiscount - walletDeduction - pointsValue + extraChargesTotal + effectiveTax + effectiveShipping)
   const roundOffAmount = roundOffEnabled ? Math.round(preRoundTotal) - preRoundTotal : 0
   const finalTotal = preRoundTotal + roundOffAmount
 

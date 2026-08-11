@@ -91,6 +91,16 @@ export default function ProductDetailPage() {
   )
   const { hiddenProductIds, hiddenPriceProductIds, nonPurchasableProducts, productDiscounts, bogo, quantityDiscounts, extraCharges, shipping, taxes, minimumOrderQuantities, maximumOrderQuantities, customBadges } = useStorefrontRules(rulesProducts, quantity)
 
+  // Related products share the main product's category (loadRelated fetches from
+  // `/api/categories/${p.category.handle}`), so the same categoryId applies to all of them.
+  // Evaluated separately from the main product so a Related Products badge doesn't depend
+  // on the main product's own quantity stepper.
+  const relatedRulesProducts = useMemo(
+    () => related.map((rp) => ({ id: rp.id, categoryId: product?.categoryId || product?.category?.id, unitPrice: Number(rp.unitPrice) })),
+    [related, product?.categoryId, product?.category?.id]
+  )
+  const { customBadges: relatedCustomBadges } = useStorefrontRules(relatedRulesProducts)
+
   const ruleDiscount = productDiscounts?.find((d) => d.productId === product?.id) ?? null
   const productBogo = bogo.filter((b) => b.buyProductId === product?.id)
   const productQtyDiscount = quantityDiscounts.find((qd) => qd.productId === product?.id)
@@ -852,6 +862,7 @@ export default function ProductDetailPage() {
                     key={rp.id}
                     product={rp}
                     view="grid"
+                    customBadges={relatedCustomBadges}
                     isAdding={relatedAddingId === rp.id}
                     onAddToCart={handleRelatedAddToCart}
                   />

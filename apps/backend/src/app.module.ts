@@ -34,6 +34,7 @@ import { BulkOrdersModule } from './bulk-orders/bulk-orders.module';
 import { PackagesModule } from './packages/packages.module';
 import { WalletModule } from './wallet/wallet.module';
 import { LedgerModule } from './ledger/ledger.module';
+import { SmtpSettingsModule } from './smtp-settings/smtp-settings.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { LedgerModule } from './ledger/ledger.module';
     PackagesModule,
     WalletModule,
     LedgerModule,
+    SmtpSettingsModule,
   ],
   controllers: [AppController],
 })
