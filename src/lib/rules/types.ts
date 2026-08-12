@@ -23,8 +23,12 @@ export interface StorefrontRulesResult {
   minimumOrderQuantities: { productId?: string; minQty: number; ruleName: string }[]
   /** Maximum order quantities from rules */
   maximumOrderQuantities: { productId?: string; maxQty: number; ruleName: string }[]
-  /** Tax rules applied */
-  taxes: { taxRate: number; taxLabel: string; ruleName: string }[]
+  /**
+   * Tax rules applied. cgstRate/sgstRate/igstRate are the auto-determined Indian GST split
+   * for this evaluation (same state as the business → CGST+SGST; different state → IGST) —
+   * always derived from taxRate, never an amount charged in addition to it.
+   */
+  taxes: { taxRate: number; taxLabel: string; ruleName: string; taxType: "CGST_SGST" | "IGST"; cgstRate: number; sgstRate: number; igstRate: number }[]
   /** Checkout restrictions from rules */
   checkoutRestrictions: { restricted: boolean; message: string; ruleName: string }[]
   /** Quantity-based discount tiers from rules */

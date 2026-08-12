@@ -33,4 +33,12 @@ export class UpsertSmtpSettingsDto {
   @ApiProperty({ example: 'noreply@wholesalex.com' })
   @IsEmail()
   fromEmail: string;
+
+  @ApiPropertyOptional({
+    description: 'Monitored inbox for the Reply-To header. Defaults to fromEmail if omitted — but a noreply From with no separate Reply-To is a common spam signal, so a monitored address (e.g. support@yourdomain.com) is recommended.',
+    example: 'support@wholesalex.com',
+  })
+  @IsOptional()
+  @IsEmail()
+  replyToEmail?: string;
 }

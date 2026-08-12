@@ -6,6 +6,7 @@ import { useRouter, useParams, useSearchParams } from "next/navigation"
 import {
   ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, RotateCcw, ShoppingCart,
   Navigation, ExternalLink, Circle, Layers, Download, RefreshCcw, ClipboardCheck, PackageCheck, Home, ReceiptText,
+  Repeat,
 } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useToast } from "@/components/ui/Toast"
@@ -50,6 +51,9 @@ interface OrderDetail {
   deliveryTracking?: { status: string; currentLocation: string | null; estimatedDelivery: string | null; events: { status: string; location: string | null; notes: string | null; occurredAt: string }[] } | null
 }
 
+type ItemSelection = Record<string, { qty: number; selected: boolean }>
+type TabKey = "details" | "return" | "replacement"
+
 const REFUND_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   PENDING: { label: "Refund Pending", className: "bg-orange-50 text-orange-700 border-orange-200" },
   APPROVED: { label: "Approved", className: "bg-blue-50 text-blue-700 border-blue-200" },
@@ -87,7 +91,57 @@ function getTimelineStepIndex(order: OrderDetail): number {
   return idx
 }
 
+function emptySelection(order: OrderDetail): ItemSelection {
+  const sel: ItemSelection = {}
+  order.items.forEach((item) => { sel[item.id] = { qty: item.quantity, selected: false } })
+  return sel
+}
+
 const POLL_INTERVAL_MS = 20000
+
+/** Shared item-picker used by both the Return and Replacement forms — identical shape, different backing state. */
+function ItemSelector({ items, selection, onChange }: {
+  items: OrderDetail["items"]
+  selection: ItemSelection
+  onChange: (next: ItemSelection) => void
+}) {
+  return (
+    <div>
+      <p className="text-sm font-medium text-gray-700 mb-2">Select items:</p>
+      {items.map((item) => (
+        <label key={item.id} className="flex items-center gap-3 py-2 border-b border-gray-50 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={selection[item.id]?.selected || false}
+            onChange={(e) => onChange({ ...selection, [item.id]: { ...selection[item.id], selected: e.target.checked } })}
+            className="rounded border-gray-300"
+          />
+          <span className="text-sm text-gray-900 flex-1">{item.product.title} (x{item.quantity})</span>
+          {selection[item.id]?.selected && (
+            <input
+              type="number"
+              min={1}
+              max={item.quantity}
+              value={selection[item.id]?.qty || 1}
+              onChange={(e) => onChange({ ...selection, [item.id]: { ...selection[item.id], qty: Number(e.target.value) } })}
+              className="w-16 text-center border border-gray-200 rounded px-2 py-1 text-sm"
+            />
+          )}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+/** Shown in the Return/Replacement tabs when the order isn't eligible yet (not DELIVERED). */
+function NotEligibleNotice({ icon: Icon, label }: { icon: any; label: string }) {
+  return (
+    <div className="text-center py-10">
+      <Icon size={32} className="text-gray-300 mx-auto mb-3" />
+      <p className="text-sm text-gray-500">You can request a {label.toLowerCase()} once this order has been delivered.</p>
+    </div>
+  )
+}
 
 export default function OrderDetailPage() {
   const router = useRouter()
@@ -98,12 +152,18 @@ export default function OrderDetailPage() {
   const [cancelling, setCancelling] = useState(false)
   const [reordering, setReordering] = useState(false)
   const [paymentAlert, setPaymentAlert] = useState<string | null>(null)
-  const [showReturnForm, setShowReturnForm] = useState(false)
-  const [returnMode, setReturnMode] = useState<"RETURN" | "REPLACE">("RETURN")
+  const [activeTab, setActiveTab] = useState<TabKey>("details")
+
   const [returnReason, setReturnReason] = useState("")
   const [returnNotes, setReturnNotes] = useState("")
-  const [returnItems, setReturnItems] = useState<Record<string, { qty: number; selected: boolean }>>({})
+  const [returnItems, setReturnItems] = useState<ItemSelection>({})
   const [submittingReturn, setSubmittingReturn] = useState(false)
+
+  const [replacementReason, setReplacementReason] = useState("")
+  const [replacementNotes, setReplacementNotes] = useState("")
+  const [replacementItems, setReplacementItems] = useState<ItemSelection>({})
+  const [submittingReplacement, setSubmittingReplacement] = useState(false)
+
   const [retrying, setRetrying] = useState(false)
   const { showToast } = useToast()
   const { openCartDrawer } = useCartDrawer()
@@ -118,9 +178,8 @@ export default function OrderDetailPage() {
       .then((data) => {
         setOrder(data.order || null)
         if (!silent && data.order) {
-          const ri: Record<string, { qty: number; selected: boolean }> = {}
-          data.order.items.forEach((item: any) => { ri[item.id] = { qty: item.quantity, selected: false } })
-          setReturnItems(ri)
+          setReturnItems(emptySelection(data.order))
+          setReplacementItems(emptySelection(data.order))
         }
       })
       .catch(() => {})
@@ -139,7 +198,9 @@ export default function OrderDetailPage() {
     if (payment === "failure") setPaymentAlert("Payment failed. Please try again or choose COD.")
     if (payment === "aborted") setPaymentAlert("Payment was cancelled. You can retry from this page.")
     if (payment === "error") setPaymentAlert("Something went wrong with the payment. Contact support if amount was deducted.")
-    if (searchParams.get("action") === "return") setShowReturnForm(true)
+    const action = searchParams.get("action")
+    if (action === "return") setActiveTab("return")
+    if (action === "replacement") setActiveTab("replacement")
   }, [searchParams])
 
   const cancelOrder = async () => {
@@ -261,36 +322,52 @@ export default function OrderDetailPage() {
     }
   }
 
-  const handleReturnSubmit = async () => {
+  // Shared by both the Return and Replacement forms — same endpoint/payload shape,
+  // only `type` and the backing form state differ.
+  const submitRequest = async (
+    type: "RETURN" | "REPLACEMENT",
+    items: ItemSelection,
+    reason: string,
+    notes: string,
+    setSubmitting: (v: boolean) => void,
+    resetForm: () => void,
+  ) => {
     if (!order) return
     const token = localStorage.getItem("token")
     if (!token) return
-    const selectedItems = Object.entries(returnItems).filter(([, v]) => v.selected).map(([id, v]) => ({ orderItemId: id, quantity: v.qty }))
+    const selectedItems = Object.entries(items).filter(([, v]) => v.selected).map(([id, v]) => ({ orderItemId: id, quantity: v.qty }))
     if (selectedItems.length === 0) { showToast("error", "Select at least one item"); return }
-    if (!returnReason.trim()) { showToast("error", "Please provide a reason"); return }
+    if (!reason.trim()) { showToast("error", "Please provide a reason"); return }
 
-    setSubmittingReturn(true)
+    setSubmitting(true)
     try {
       const res = await fetch("/api/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          orderId: order.id,
-          type: returnMode === "REPLACE" ? "REPLACEMENT" : "RETURN",
-          reason: returnReason,
-          notes: returnNotes,
-          items: selectedItems,
-        }),
+        body: JSON.stringify({ orderId: order.id, type, reason, notes, items: selectedItems }),
       })
-      if (res.ok) { setShowReturnForm(false); showToast("success", returnMode === "REPLACE" ? "Replacement request submitted!" : "Return request submitted!") }
-      else { const data = await res.json(); showToast("error", data.message || "Failed to submit request") }
+      if (res.ok) {
+        showToast("success", type === "REPLACEMENT" ? "Replacement request submitted!" : "Return request submitted!")
+        resetForm()
+        setActiveTab("details")
+      } else {
+        const data = await res.json()
+        showToast("error", data.message || "Failed to submit request")
+      }
     } catch (err) {
       console.error(err)
       showToast("error", "Something went wrong")
     } finally {
-      setSubmittingReturn(false)
+      setSubmitting(false)
     }
   }
+
+  const handleReturnSubmit = () => submitRequest("RETURN", returnItems, returnReason, returnNotes, setSubmittingReturn, () => {
+    setReturnReason(""); setReturnNotes(""); if (order) setReturnItems(emptySelection(order))
+  })
+  const handleReplacementSubmit = () => submitRequest("REPLACEMENT", replacementItems, replacementReason, replacementNotes, setSubmittingReplacement, () => {
+    setReplacementReason(""); setReplacementNotes(""); if (order) setReplacementItems(emptySelection(order))
+  })
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50/60">
@@ -325,6 +402,12 @@ export default function OrderDetailPage() {
   const discountAmount = hasPersistedBreakdown ? Number(order.discountAmount ?? 0) : 0
   const roundOffAmount = hasPersistedBreakdown ? Number(order.roundOffAmount ?? 0) : 0
 
+  const TABS: { key: TabKey; label: string; icon: any }[] = [
+    { key: "details", label: "Order Details", icon: Package },
+    { key: "return", label: "Return", icon: RotateCcw },
+    { key: "replacement", label: "Replacement", icon: Repeat },
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50/60">
       <main className="section-container max-w-5xl py-8">
@@ -354,368 +437,390 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Visual tracking timeline */}
-        <div id="tracking" className="card-base-static p-6 mb-6 scroll-mt-24">
-          <h2 className="font-semibold text-gray-900 mb-6 flex items-center gap-2"><Navigation size={16} className="text-primary-600" /> Order Tracking</h2>
-
-          {isCancelled ? (
-            <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl">
-              <XCircle size={22} className="text-red-500 flex-shrink-0" />
-              <p className="text-sm font-medium text-red-700">This order was {order.status === "REFUNDED" ? "refunded" : "cancelled"} and is no longer being processed.</p>
-            </div>
-          ) : (
-            <>
-              {/* Desktop: horizontal */}
-              <div className="hidden md:flex items-start">
-                {TIMELINE_STEPS.map((step, i) => {
-                  const done = i <= timelineIdx
-                  const current = i === timelineIdx && timelineIdx < TIMELINE_STEPS.length - 1
-                  const StepIcon = step.icon
-                  return (
-                    <div key={step.key} className="flex-1 flex items-start">
-                      <div className="flex flex-col items-center flex-shrink-0" style={{ width: 90 }}>
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${done ? "bg-primary-600 text-white shadow-[0_4px_12px_-2px_rgba(3,105,161,0.4)]" : "bg-gray-100 text-gray-400"} ${current ? "ring-4 ring-primary-100" : ""}`}>
-                          <StepIcon size={16} />
-                        </div>
-                        <span className={`text-[11px] text-center mt-2 leading-tight font-medium ${done ? "text-primary-700" : "text-gray-400"}`}>{step.label}</span>
-                        {i === 0 && <span className="text-[10px] text-gray-400 mt-0.5">{new Date(order.createdAt).toLocaleDateString()}</span>}
-                      </div>
-                      {i < TIMELINE_STEPS.length - 1 && (
-                        <div className={`flex-1 h-0.5 mt-5 transition-all duration-300 ${i < timelineIdx ? "bg-primary-600" : "bg-gray-200"}`} />
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Mobile: vertical */}
-              <div className="md:hidden space-y-0">
-                {TIMELINE_STEPS.map((step, i) => {
-                  const done = i <= timelineIdx
-                  const StepIcon = step.icon
-                  return (
-                    <div key={step.key} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${done ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-400"}`}>
-                          <StepIcon size={14} />
-                        </div>
-                        {i < TIMELINE_STEPS.length - 1 && <div className={`w-0.5 flex-1 min-h-[24px] ${i < timelineIdx ? "bg-primary-600" : "bg-gray-200"}`} />}
-                      </div>
-                      <div className="pb-5">
-                        <p className={`text-sm font-medium ${done ? "text-primary-700" : "text-gray-400"}`}>{step.label}</p>
-                        {i === 0 && <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</p>}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
-
-          {/* Live shipment tracking */}
-          {(order.trackingNumber || order.carrier || order.shippingEta || order.deliveryPartner || order.deliveryTracking) && (
-            <div className="mt-6 bg-blue-50/70 border border-blue-100 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-                  <Navigation size={13} className="text-white" />
-                </div>
-                <span className="text-sm font-bold text-blue-900">Shipment Tracking</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                {(order.deliveryPartner?.name || order.carrier) && <div><span className="text-blue-600">Carrier:</span> <span className="font-medium text-blue-900">{order.deliveryPartner?.name || order.carrier}</span></div>}
-                {order.trackingNumber && <div><span className="text-blue-600">Tracking #:</span> <span className="font-mono font-medium text-blue-900">{order.trackingNumber}</span></div>}
-                {(order.deliveryTracking?.estimatedDelivery || order.shippingEta) && <div><span className="text-blue-600">Est. Delivery:</span> <span className="font-medium text-blue-900">{new Date(order.deliveryTracking?.estimatedDelivery || order.shippingEta!).toLocaleDateString()}</span></div>}
-              </div>
-              {order.deliveryPartner?.trackingUrlTemplate && order.trackingNumber && (
-                <a
-                  href={order.deliveryPartner.trackingUrlTemplate.replace("{trackingNumber}", order.trackingNumber)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
-                >
-                  <ExternalLink size={12} /> Track on {order.deliveryPartner.name}
-                </a>
-              )}
-              {order.deliveryTracking?.currentLocation && (
-                <div className="mt-2 text-xs text-blue-600 flex items-center gap-1"><MapPin size={12} /> {order.deliveryTracking.currentLocation}</div>
-              )}
-              {order.deliveryTracking?.events && order.deliveryTracking.events.length > 0 && (
-                <div className="mt-4 space-y-0">
-                  {order.deliveryTracking.events.slice().reverse().map((event, i) => {
-                    const labels: Record<string, string> = {
-                      PENDING: "Pending", PICKED_UP: "Picked Up", IN_TRANSIT: "In Transit",
-                      OUT_FOR_DELIVERY: "Out for Delivery", DELIVERED: "Delivered",
-                      FAILED: "Failed", RETURNED: "Returned",
-                    }
-                    const isLatest = i === 0
-                    return (
-                      <div key={i} className="flex gap-3">
-                        <div className="flex flex-col items-center">
-                          <Circle size={14} className={isLatest ? "text-blue-600 fill-blue-600" : "text-gray-300"} />
-                          {i < order.deliveryTracking!.events.length - 1 && <div className="w-0.5 h-6 bg-gray-200" />}
-                        </div>
-                        <div className="pb-3">
-                          <p className={`text-xs font-medium ${isLatest ? "text-blue-900" : "text-gray-500"}`}>{labels[event.status] || event.status}</p>
-                          {event.location && <p className="text-xs text-gray-400">{event.location}</p>}
-                          {event.notes && <p className="text-xs text-gray-400">{event.notes}</p>}
-                          <p className="text-xs text-gray-400">{new Date(event.occurredAt).toLocaleString()}</p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+        {/* Tab strip */}
+        <div className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
+          {TABS.map((tab) => {
+            const TabIcon = tab.icon
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors ${
+                  activeTab === tab.key
+                    ? "border-primary-600 text-primary-700"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <TabIcon size={15} /> {tab.label}
+              </button>
+            )
+          })}
         </div>
 
-        <div className="card-base-static p-6 mb-6">
-          <div className="pt-0">
-            <h2 className="font-semibold text-gray-900 mb-4">Items</h2>
-            <div className="space-y-4">
-              {(() => {
-                const packageGroups = new Map<string, any[]>()
-                const standaloneItems: any[] = []
+        {activeTab === "details" && (
+          <>
+            {/* Visual tracking timeline */}
+            <div id="tracking" className="card-base-static p-6 mb-6 scroll-mt-24">
+              <h2 className="font-semibold text-gray-900 mb-6 flex items-center gap-2"><Navigation size={16} className="text-primary-600" /> Order Tracking</h2>
 
-                for (const item of order.items) {
-                  const meta = (item as any).metadata
-                  const packageId = meta?.packageId
-                  if (packageId) {
-                    if (!packageGroups.has(packageId)) packageGroups.set(packageId, [])
-                    packageGroups.get(packageId)!.push(item)
-                  } else {
-                    standaloneItems.push(item)
-                  }
-                }
-
-                return (
-                  <>
-                    {Array.from(packageGroups.entries()).map(([packageId, items]) => {
-                      const firstMeta = (items[0] as any).metadata
-                      const packageTitle = firstMeta?.packageTitle || "Custom Package"
-                      const selectedComponents = firstMeta?.selectedComponents || []
-                      const groupDiscounts = firstMeta?.groupDiscounts || []
-                      const packageTotal = firstMeta?.packageTotal ?? items.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0)
-
+              {isCancelled ? (
+                <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl">
+                  <XCircle size={22} className="text-red-500 flex-shrink-0" />
+                  <p className="text-sm font-medium text-red-700">This order was {order.status === "REFUNDED" ? "refunded" : "cancelled"} and is no longer being processed.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop: horizontal */}
+                  <div className="hidden md:flex items-start">
+                    {TIMELINE_STEPS.map((step, i) => {
+                      const done = i <= timelineIdx
+                      const current = i === timelineIdx && timelineIdx < TIMELINE_STEPS.length - 1
+                      const StepIcon = step.icon
                       return (
-                        <div key={packageId} className="bg-primary-50 rounded-xl border border-primary-200 overflow-hidden">
-                          <div className="px-4 py-3 bg-primary-100 flex items-center gap-2">
-                            <Layers size={16} className="text-primary-600" />
-                            <span className="font-semibold text-primary-800">{packageTitle}</span>
-                            <span className="text-xs bg-primary-200 text-primary-700 px-2 py-0.5 rounded-full">Package</span>
-                          </div>
-                          <div className="divide-y divide-primary-100">
-                            {selectedComponents.length > 0 ? selectedComponents.map((comp: any) => (
-                              <div key={comp.productId} className="px-4 py-2 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded">{comp.groupName}</span>
-                                  <span className="text-sm font-medium text-gray-900">{comp.productTitle}</span>
-                                </div>
-                                <span className="text-sm text-gray-700">{formatPrice(comp.unitPrice)}</span>
-                              </div>
-                            )) : items.map((item: any) => (
-                              <div key={item.id} className="px-4 py-2 flex items-center gap-3">
-                                {item.product.thumbnail ? <Image src={item.product.thumbnail} alt={item.product.title} width={40} height={40} className="w-10 h-10 rounded object-cover" /> : <Package size={20} className="text-gray-400" />}
-                                <span className="text-sm font-medium text-gray-900 flex-1">{item.product.title}</span>
-                                <span className="text-sm text-gray-700">{formatPrice(Number(item.totalPrice))}</span>
-                              </div>
-                            ))}
-                          </div>
-                          {groupDiscounts.length > 0 && (
-                            <div className="px-4 py-2 bg-green-50">
-                              {groupDiscounts.map((d: any, i: number) => (
-                                <div key={i} className="flex justify-between text-xs text-green-700">
-                                  <span>{d.groupName} discount</span>
-                                  <span>-{formatPrice(d.discountAmount)}</span>
-                                </div>
-                              ))}
+                        <div key={step.key} className="flex-1 flex items-start">
+                          <div className="flex flex-col items-center flex-shrink-0" style={{ width: 90 }}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${done ? "bg-primary-600 text-white shadow-[0_4px_12px_-2px_rgba(3,105,161,0.4)]" : "bg-gray-100 text-gray-400"} ${current ? "ring-4 ring-primary-100" : ""}`}>
+                              <StepIcon size={16} />
                             </div>
+                            <span className={`text-[11px] text-center mt-2 leading-tight font-medium ${done ? "text-primary-700" : "text-gray-400"}`}>{step.label}</span>
+                            {i === 0 && <span className="text-[10px] text-gray-400 mt-0.5">{new Date(order.createdAt).toLocaleDateString()}</span>}
+                          </div>
+                          {i < TIMELINE_STEPS.length - 1 && (
+                            <div className={`flex-1 h-0.5 mt-5 transition-all duration-300 ${i < timelineIdx ? "bg-primary-600" : "bg-gray-200"}`} />
                           )}
-                          <div className="px-4 py-2 flex justify-between items-center border-t border-primary-200">
-                            <span className="font-bold text-gray-900">Package Total</span>
-                            <span className="font-bold text-primary-700">{formatPrice(packageTotal)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Mobile: vertical */}
+                  <div className="md:hidden space-y-0">
+                    {TIMELINE_STEPS.map((step, i) => {
+                      const done = i <= timelineIdx
+                      const StepIcon = step.icon
+                      return (
+                        <div key={step.key} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${done ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-400"}`}>
+                              <StepIcon size={14} />
+                            </div>
+                            {i < TIMELINE_STEPS.length - 1 && <div className={`w-0.5 flex-1 min-h-[24px] ${i < timelineIdx ? "bg-primary-600" : "bg-gray-200"}`} />}
+                          </div>
+                          <div className="pb-5">
+                            <p className={`text-sm font-medium ${done ? "text-primary-700" : "text-gray-400"}`}>{step.label}</p>
+                            {i === 0 && <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</p>}
                           </div>
                         </div>
                       )
                     })}
-                    {standaloneItems.map((item) => (
-                      <div key={item.id} className="flex items-center gap-4">
-                        <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                          {item.product.thumbnail ? <Image src={item.product.thumbnail} alt={item.product.title} width={64} height={64} className="w-full h-full object-cover" /> : <Package size={24} className="text-gray-400" />}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{item.product.title}</p>
-                          {item.product.sku && <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>}
-                          <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-gray-900">{formatPrice(Number(item.totalPrice))}</p>
-                          <p className="text-xs text-gray-500">{formatPrice(Number(item.unitPrice))} each</p>
+                  </div>
+                </>
+              )}
+
+              {/* Live shipment tracking */}
+              {(order.trackingNumber || order.carrier || order.shippingEta || order.deliveryPartner || order.deliveryTracking) && (
+                <div className="mt-6 bg-blue-50/70 border border-blue-100 rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                      <Navigation size={13} className="text-white" />
+                    </div>
+                    <span className="text-sm font-bold text-blue-900">Shipment Tracking</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                    {(order.deliveryPartner?.name || order.carrier) && <div><span className="text-blue-600">Carrier:</span> <span className="font-medium text-blue-900">{order.deliveryPartner?.name || order.carrier}</span></div>}
+                    {order.trackingNumber && <div><span className="text-blue-600">Tracking #:</span> <span className="font-mono font-medium text-blue-900">{order.trackingNumber}</span></div>}
+                    {(order.deliveryTracking?.estimatedDelivery || order.shippingEta) && <div><span className="text-blue-600">Est. Delivery:</span> <span className="font-medium text-blue-900">{new Date(order.deliveryTracking?.estimatedDelivery || order.shippingEta!).toLocaleDateString()}</span></div>}
+                  </div>
+                  {order.deliveryPartner?.trackingUrlTemplate && order.trackingNumber && (
+                    <a
+                      href={order.deliveryPartner.trackingUrlTemplate.replace("{trackingNumber}", order.trackingNumber)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+                    >
+                      <ExternalLink size={12} /> Track on {order.deliveryPartner.name}
+                    </a>
+                  )}
+                  {order.deliveryTracking?.currentLocation && (
+                    <div className="mt-2 text-xs text-blue-600 flex items-center gap-1"><MapPin size={12} /> {order.deliveryTracking.currentLocation}</div>
+                  )}
+                  {order.deliveryTracking?.events && order.deliveryTracking.events.length > 0 && (
+                    <div className="mt-4 space-y-0">
+                      {order.deliveryTracking.events.slice().reverse().map((event, i) => {
+                        const labels: Record<string, string> = {
+                          PENDING: "Pending", PICKED_UP: "Picked Up", IN_TRANSIT: "In Transit",
+                          OUT_FOR_DELIVERY: "Out for Delivery", DELIVERED: "Delivered",
+                          FAILED: "Failed", RETURNED: "Returned",
+                        }
+                        const isLatest = i === 0
+                        return (
+                          <div key={i} className="flex gap-3">
+                            <div className="flex flex-col items-center">
+                              <Circle size={14} className={isLatest ? "text-blue-600 fill-blue-600" : "text-gray-300"} />
+                              {i < order.deliveryTracking!.events.length - 1 && <div className="w-0.5 h-6 bg-gray-200" />}
+                            </div>
+                            <div className="pb-3">
+                              <p className={`text-xs font-medium ${isLatest ? "text-blue-900" : "text-gray-500"}`}>{labels[event.status] || event.status}</p>
+                              {event.location && <p className="text-xs text-gray-400">{event.location}</p>}
+                              {event.notes && <p className="text-xs text-gray-400">{event.notes}</p>}
+                              <p className="text-xs text-gray-400">{new Date(event.occurredAt).toLocaleString()}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="card-base-static p-6 mb-6">
+              <div className="pt-0">
+                <h2 className="font-semibold text-gray-900 mb-4">Items</h2>
+                <div className="space-y-4">
+                  {(() => {
+                    const packageGroups = new Map<string, any[]>()
+                    const standaloneItems: any[] = []
+
+                    for (const item of order.items) {
+                      const meta = (item as any).metadata
+                      const packageId = meta?.packageId
+                      if (packageId) {
+                        if (!packageGroups.has(packageId)) packageGroups.set(packageId, [])
+                        packageGroups.get(packageId)!.push(item)
+                      } else {
+                        standaloneItems.push(item)
+                      }
+                    }
+
+                    return (
+                      <>
+                        {Array.from(packageGroups.entries()).map(([packageId, items]) => {
+                          const firstMeta = (items[0] as any).metadata
+                          const packageTitle = firstMeta?.packageTitle || "Custom Package"
+                          const selectedComponents = firstMeta?.selectedComponents || []
+                          const groupDiscounts = firstMeta?.groupDiscounts || []
+                          const packageTotal = firstMeta?.packageTotal ?? items.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0)
+
+                          return (
+                            <div key={packageId} className="bg-primary-50 rounded-xl border border-primary-200 overflow-hidden">
+                              <div className="px-4 py-3 bg-primary-100 flex items-center gap-2">
+                                <Layers size={16} className="text-primary-600" />
+                                <span className="font-semibold text-primary-800">{packageTitle}</span>
+                                <span className="text-xs bg-primary-200 text-primary-700 px-2 py-0.5 rounded-full">Package</span>
+                              </div>
+                              <div className="divide-y divide-primary-100">
+                                {selectedComponents.length > 0 ? selectedComponents.map((comp: any) => (
+                                  <div key={comp.productId} className="px-4 py-2 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded">{comp.groupName}</span>
+                                      <span className="text-sm font-medium text-gray-900">{comp.productTitle}</span>
+                                    </div>
+                                    <span className="text-sm text-gray-700">{formatPrice(comp.unitPrice)}</span>
+                                  </div>
+                                )) : items.map((item: any) => (
+                                  <div key={item.id} className="px-4 py-2 flex items-center gap-3">
+                                    {item.product.thumbnail ? <Image src={item.product.thumbnail} alt={item.product.title} width={40} height={40} className="w-10 h-10 rounded object-cover" /> : <Package size={20} className="text-gray-400" />}
+                                    <span className="text-sm font-medium text-gray-900 flex-1">{item.product.title}</span>
+                                    <span className="text-sm text-gray-700">{formatPrice(Number(item.totalPrice))}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              {groupDiscounts.length > 0 && (
+                                <div className="px-4 py-2 bg-green-50">
+                                  {groupDiscounts.map((d: any, i: number) => (
+                                    <div key={i} className="flex justify-between text-xs text-green-700">
+                                      <span>{d.groupName} discount</span>
+                                      <span>-{formatPrice(d.discountAmount)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="px-4 py-2 flex justify-between items-center border-t border-primary-200">
+                                <span className="font-bold text-gray-900">Package Total</span>
+                                <span className="font-bold text-primary-700">{formatPrice(packageTotal)}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {standaloneItems.map((item) => (
+                          <div key={item.id} className="flex items-center gap-4">
+                            <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {item.product.thumbnail ? <Image src={item.product.thumbnail} alt={item.product.title} width={64} height={64} className="w-full h-full object-cover" /> : <Package size={24} className="text-gray-400" />}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900">{item.product.title}</p>
+                              {item.product.sku && <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>}
+                              <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-medium text-gray-900">{formatPrice(Number(item.totalPrice))}</p>
+                              <p className="text-xs text-gray-500">{formatPrice(Number(item.unitPrice))} each</p>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* Price breakdown */}
+              <div className="mt-6 pt-4 border-t border-gray-100">
+                <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><ReceiptText size={16} className="text-primary-600" /> Order Summary</h2>
+                <div className="text-sm text-gray-600 space-y-2 max-w-xs ml-auto">
+                  <div className="flex justify-between"><span>Subtotal</span><span className="text-gray-900">{formatPrice(subtotal)}</span></div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between"><span>Discount</span><span className="text-green-600 font-medium">-{formatPrice(discountAmount)}</span></div>
+                  )}
+                  <div className="flex justify-between"><span>Shipping</span><span className="text-green-600 font-medium">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span></div>
+                  <div className="flex justify-between"><span>GST / Taxes</span><span className="text-gray-900">{formatPrice(taxAmount)}</span></div>
+                  {roundOffAmount !== 0 && (
+                    <div className="flex justify-between"><span>Round off</span><span className="text-gray-900">{roundOffAmount > 0 ? "+" : "-"}{formatPrice(Math.abs(roundOffAmount))}</span></div>
+                  )}
+                  <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span className="text-gray-900">Grand Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              {canReorder && (
+                <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-100">
+                  <button onClick={handleReorder} disabled={reordering} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">
+                    <ShoppingCart size={14} /> {reordering ? "Adding..." : "Reorder"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="card-base-static p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <MapPin className="text-primary-600" size={18} />
+                  <h2 className="font-semibold text-gray-900">Shipping Address</h2>
+                </div>
+                {order.shippingAddress ? (
+                  <div className="text-sm text-gray-700 space-y-1">
+                    <p>{order.shippingAddress.street}</p>
+                    <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}</p>
+                    <p>{order.shippingAddress.country}</p>
+                  </div>
+                ) : <p className="text-sm text-gray-500">No shipping address provided</p>}
+              </div>
+
+              <div className="card-base-static p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <ReceiptText className="text-primary-600" size={18} />
+                  <h2 className="font-semibold text-gray-900">Billing Address</h2>
+                </div>
+                {order.billingAddress ? (
+                  <div className="text-sm text-gray-700 space-y-1">
+                    <p>{order.billingAddress.street}</p>
+                    <p>{order.billingAddress.city}, {order.billingAddress.state} {order.billingAddress.zip}</p>
+                    <p>{order.billingAddress.country}</p>
+                  </div>
+                ) : <p className="text-sm text-gray-500">Same as shipping address</p>}
+              </div>
+
+              <div className="card-base-static p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard className="text-primary-600" size={18} />
+                  <h2 className="font-semibold text-gray-900">Payment</h2>
+                </div>
+                <div className="text-sm text-gray-700 space-y-2">
+                  <div className="flex justify-between"><span>Method</span><span className="font-medium">{order.payment?.provider || "COD"}</span></div>
+                  <div className="flex justify-between items-center"><span>Status</span><PaymentStatusBadge status={order.payment?.status || "PENDING"} /></div>
+                  {order.payment?.providerRef && <div className="flex justify-between"><span>Transaction ID</span><span className="font-medium text-xs">{order.payment.providerRef}</span></div>}
+                  {order.payment?.metadata?.razorpayOrderId && (
+                    <div className="flex justify-between"><span>Razorpay Order ID</span><span className="font-medium text-xs">{order.payment.metadata.razorpayOrderId}</span></div>
+                  )}
+                  {order.payment?.metadata?.razorpayPaymentId && (
+                    <div className="flex justify-between"><span>Razorpay Payment ID</span><span className="font-medium text-xs">{order.payment.metadata.razorpayPaymentId}</span></div>
+                  )}
+                  {order.payment?.metadata?.verifiedAt && (
+                    <div className="flex justify-between"><span>Verified At</span><span className="font-medium text-xs">{new Date(order.payment.metadata.verifiedAt).toLocaleString()}</span></div>
+                  )}
+                  <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span>Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
+
+                  {order.payment?.refunds && order.payment.refunds.length > 0 && (() => {
+                    const refund = order.payment!.refunds![0]
+                    const cfg = REFUND_STATUS_CONFIG[refund.status] || REFUND_STATUS_CONFIG.PENDING
+                    return (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Refund</p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between"><span>Refund Amount</span><span className="font-medium text-gray-900">{formatPrice(Number(refund.amount))}</span></div>
+                          <div className="flex justify-between items-center">
+                            <span>Refund Status</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${cfg.className}`}>{cfg.label}</span>
+                          </div>
+                          <div className="flex justify-between"><span>Requested Date</span><span className="font-medium text-gray-900">{new Date(refund.createdAt).toLocaleDateString()}</span></div>
                         </div>
                       </div>
-                    ))}
-                  </>
-                )
-              })()}
-            </div>
-          </div>
+                    )
+                  })()}
 
-          {/* Price breakdown */}
-          <div className="mt-6 pt-4 border-t border-gray-100">
-            <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><ReceiptText size={16} className="text-primary-600" /> Order Summary</h2>
-            <div className="text-sm text-gray-600 space-y-2 max-w-xs ml-auto">
-              <div className="flex justify-between"><span>Subtotal</span><span className="text-gray-900">{formatPrice(subtotal)}</span></div>
-              {discountAmount > 0 && (
-                <div className="flex justify-between"><span>Discount</span><span className="text-green-600 font-medium">-{formatPrice(discountAmount)}</span></div>
-              )}
-              <div className="flex justify-between"><span>Shipping</span><span className="text-green-600 font-medium">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span></div>
-              <div className="flex justify-between"><span>GST / Taxes</span><span className="text-gray-900">{formatPrice(taxAmount)}</span></div>
-              {roundOffAmount !== 0 && (
-                <div className="flex justify-between"><span>Round off</span><span className="text-gray-900">{roundOffAmount > 0 ? "+" : "-"}{formatPrice(Math.abs(roundOffAmount))}</span></div>
-              )}
-              <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span className="text-gray-900">Grand Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
+                  {order.payment?.provider === "RAZORPAY" && ["FAILED", "PENDING"].includes(order.payment?.status || "") && !["CANCELLED", "DELIVERED", "REFUNDED"].includes(order.status) && (
+                    <button
+                      onClick={retryPayment}
+                      disabled={retrying}
+                      className="w-full mt-2 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition disabled:opacity-50"
+                    >
+                      {retrying ? "Processing..." : "Retry Payment"}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          </>
+        )}
 
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-100">
-            {canReorder && (
-              <button onClick={handleReorder} disabled={reordering} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">
-                <ShoppingCart size={14} /> {reordering ? "Adding..." : "Reorder"}
-              </button>
+        {activeTab === "return" && (
+          <div className="card-base-static p-6">
+            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><RotateCcw size={16} className="text-primary-600" /> Request a Return</h2>
+            {!canReturn ? (
+              <NotEligibleNotice icon={RotateCcw} label="Return" />
+            ) : (
+              <div className="space-y-4">
+                <ItemSelector items={order.items} selection={returnItems} onChange={setReturnItems} />
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Reason *</label>
+                  <textarea value={returnReason} onChange={(e) => setReturnReason(e.target.value)} rows={3} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Why are you returning these items?" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Additional notes</label>
+                  <textarea value={returnNotes} onChange={(e) => setReturnNotes(e.target.value)} rows={2} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Any other details..." />
+                </div>
+                <button onClick={handleReturnSubmit} disabled={submittingReturn} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">
+                  {submittingReturn ? "Submitting..." : "Submit Return Request"}
+                </button>
+              </div>
             )}
-            {canReturn && !showReturnForm && (
-              <button onClick={() => setShowReturnForm(true)} className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium">
-                <RefreshCcw size={14} /> Return / Replace
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Return / Replace Form */}
-        {showReturnForm && (
-          <div className="card-base-static p-6 mb-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Request Return / Replacement</h2>
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                {(["RETURN", "REPLACE"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setReturnMode(mode)}
-                    className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-colors ${returnMode === mode ? "bg-primary-600 text-white border-primary-600" : "bg-white text-gray-600 border-gray-200 hover:border-primary-300"}`}
-                  >
-                    {mode === "RETURN" ? "Return for Refund" : "Replace Item"}
-                  </button>
-                ))}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Select items:</p>
-                {order.items.map((item) => (
-                  <label key={item.id} className="flex items-center gap-3 py-2 border-b border-gray-50 cursor-pointer">
-                    <input type="checkbox" checked={returnItems[item.id]?.selected || false} onChange={(e) => setReturnItems({ ...returnItems, [item.id]: { ...returnItems[item.id], selected: e.target.checked } })} className="rounded border-gray-300" />
-                    <span className="text-sm text-gray-900 flex-1">{item.product.title} (x{item.quantity})</span>
-                    {returnItems[item.id]?.selected && (
-                      <input type="number" min={1} max={item.quantity} value={returnItems[item.id]?.qty || 1} onChange={(e) => setReturnItems({ ...returnItems, [item.id]: { ...returnItems[item.id], qty: Number(e.target.value) } })} className="w-16 text-center border border-gray-200 rounded px-2 py-1 text-sm" />
-                    )}
-                  </label>
-                ))}
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Reason *</label>
-                <textarea value={returnReason} onChange={(e) => setReturnReason(e.target.value)} rows={3} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder={returnMode === "REPLACE" ? "Why do you need a replacement?" : "Why are you returning these items?"} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Additional notes</label>
-                <textarea value={returnNotes} onChange={(e) => setReturnNotes(e.target.value)} rows={2} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Any other details..." />
-              </div>
-              <div className="flex gap-3">
-                <button onClick={handleReturnSubmit} disabled={submittingReturn} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">{submittingReturn ? "Submitting..." : `Submit ${returnMode === "REPLACE" ? "Replacement" : "Return"} Request`}</button>
-                <button onClick={() => setShowReturnForm(false)} className="px-6 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm">Cancel</button>
-              </div>
-            </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {activeTab === "replacement" && (
           <div className="card-base-static p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <MapPin className="text-primary-600" size={18} />
-              <h2 className="font-semibold text-gray-900">Shipping Address</h2>
-            </div>
-            {order.shippingAddress ? (
-              <div className="text-sm text-gray-700 space-y-1">
-                <p>{order.shippingAddress.street}</p>
-                <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}</p>
-                <p>{order.shippingAddress.country}</p>
-              </div>
-            ) : <p className="text-sm text-gray-500">No shipping address provided</p>}
-          </div>
-
-          <div className="card-base-static p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <ReceiptText className="text-primary-600" size={18} />
-              <h2 className="font-semibold text-gray-900">Billing Address</h2>
-            </div>
-            {order.billingAddress ? (
-              <div className="text-sm text-gray-700 space-y-1">
-                <p>{order.billingAddress.street}</p>
-                <p>{order.billingAddress.city}, {order.billingAddress.state} {order.billingAddress.zip}</p>
-                <p>{order.billingAddress.country}</p>
-              </div>
-            ) : <p className="text-sm text-gray-500">Same as shipping address</p>}
-          </div>
-
-          <div className="card-base-static p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <CreditCard className="text-primary-600" size={18} />
-              <h2 className="font-semibold text-gray-900">Payment</h2>
-            </div>
-            <div className="text-sm text-gray-700 space-y-2">
-              <div className="flex justify-between"><span>Method</span><span className="font-medium">{order.payment?.provider || "COD"}</span></div>
-              <div className="flex justify-between items-center"><span>Status</span><PaymentStatusBadge status={order.payment?.status || "PENDING"} /></div>
-              {order.payment?.providerRef && <div className="flex justify-between"><span>Transaction ID</span><span className="font-medium text-xs">{order.payment.providerRef}</span></div>}
-              {order.payment?.metadata?.razorpayOrderId && (
-                <div className="flex justify-between"><span>Razorpay Order ID</span><span className="font-medium text-xs">{order.payment.metadata.razorpayOrderId}</span></div>
-              )}
-              {order.payment?.metadata?.razorpayPaymentId && (
-                <div className="flex justify-between"><span>Razorpay Payment ID</span><span className="font-medium text-xs">{order.payment.metadata.razorpayPaymentId}</span></div>
-              )}
-              {order.payment?.metadata?.verifiedAt && (
-                <div className="flex justify-between"><span>Verified At</span><span className="font-medium text-xs">{new Date(order.payment.metadata.verifiedAt).toLocaleString()}</span></div>
-              )}
-              <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span>Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
-
-              {order.payment?.refunds && order.payment.refunds.length > 0 && (() => {
-                const refund = order.payment!.refunds![0]
-                const cfg = REFUND_STATUS_CONFIG[refund.status] || REFUND_STATUS_CONFIG.PENDING
-                return (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Refund</p>
-                    <div className="space-y-2">
-                      <div className="flex justify-between"><span>Refund Amount</span><span className="font-medium text-gray-900">{formatPrice(Number(refund.amount))}</span></div>
-                      <div className="flex justify-between items-center">
-                        <span>Refund Status</span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${cfg.className}`}>{cfg.label}</span>
-                      </div>
-                      <div className="flex justify-between"><span>Requested Date</span><span className="font-medium text-gray-900">{new Date(refund.createdAt).toLocaleDateString()}</span></div>
-                    </div>
-                  </div>
-                )
-              })()}
-
-              {order.payment?.provider === "RAZORPAY" && ["FAILED", "PENDING"].includes(order.payment?.status || "") && !["CANCELLED", "DELIVERED", "REFUNDED"].includes(order.status) && (
-                <button
-                  onClick={retryPayment}
-                  disabled={retrying}
-                  className="w-full mt-2 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition disabled:opacity-50"
-                >
-                  {retrying ? "Processing..." : "Retry Payment"}
+            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><Repeat size={16} className="text-primary-600" /> Request a Replacement</h2>
+            {!canReturn ? (
+              <NotEligibleNotice icon={Repeat} label="Replacement" />
+            ) : (
+              <div className="space-y-4">
+                <ItemSelector items={order.items} selection={replacementItems} onChange={setReplacementItems} />
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Reason *</label>
+                  <textarea value={replacementReason} onChange={(e) => setReplacementReason(e.target.value)} rows={3} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Why do you need a replacement?" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Additional notes</label>
+                  <textarea value={replacementNotes} onChange={(e) => setReplacementNotes(e.target.value)} rows={2} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Any other details..." />
+                </div>
+                <button onClick={handleReplacementSubmit} disabled={submittingReplacement} className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium disabled:opacity-50">
+                  {submittingReplacement ? "Submitting..." : "Submit Replacement Request"}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </main>
     </div>
   )

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo, useRef } from "react"
+import { useEffect, useState, useMemo, useRef, Fragment } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck, ShoppingCart, Landmark } from "lucide-react"
@@ -1011,15 +1011,29 @@ export default function CheckoutPage() {
                     <span className="font-medium">{formatPrice(ec.chargeAmount)}</span>
                   </div>
                 ))}
-                {taxes.length > 0 ? taxes.map((tax, i) => {
-                  const taxAmount = (totals.subtotal * tax.taxRate) / 100
-                  return (
+                {taxes.length > 0 ? taxes.map((tax, i) => (
+                  // Indian GST: same state as the business → CGST+SGST (shown as two rows,
+                  // rate split evenly); different state → IGST (one row, full rate). This is
+                  // never in addition to tax.taxRate — cgstRate+sgstRate or igstRate always
+                  // sum back to it exactly.
+                  tax.taxType === "IGST" ? (
                     <div key={i} className="flex justify-between">
-                      <span className="text-gray-600">{tax.taxLabel} ({tax.taxRate}%)</span>
-                      <span className="font-medium">{formatPrice(taxAmount)}</span>
+                      <span className="text-gray-600">IGST ({tax.igstRate}%)</span>
+                      <span className="font-medium">{formatPrice((totals.subtotal * tax.igstRate) / 100)}</span>
                     </div>
+                  ) : (
+                    <Fragment key={i}>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">CGST ({tax.cgstRate}%)</span>
+                        <span className="font-medium">{formatPrice((totals.subtotal * tax.cgstRate) / 100)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">SGST ({tax.sgstRate}%)</span>
+                        <span className="font-medium">{formatPrice((totals.subtotal * tax.sgstRate) / 100)}</span>
+                      </div>
+                    </Fragment>
                   )
-                }) : ruleTaxTotal === 0 && (
+                )) : ruleTaxTotal === 0 && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Tax (18% GST)</span>
                     <span className="font-medium">{formatPrice(totals.tax)}</span>

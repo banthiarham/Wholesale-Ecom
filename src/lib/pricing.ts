@@ -57,6 +57,10 @@ export interface PricingBreakdown {
   tierPrice: number
   rolePrice: number | null
   appliedRoleName: string | null
+  /** The logged-in buyer's role's own quantity tiers for this product (Admin -> Role-Based
+   *  Pricing), if any — e.g. [{minQty:1,price:100},{minQty:10,price:90}]. Empty when the
+   *  buyer isn't logged in or their role has no tiers configured for this product. */
+  roleTiers?: { minQty: number; price: number }[]
   contractPrice: number | null
   seasonalDiscount: number
   finalPrice: number

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Search, PackageOpen, X, Building2, Mail, Phone, MapPin, Package, Layers, Wallet, CalendarDays, MessageSquare, Paperclip, Loader2, Check, Ban, History as HistoryIcon } from "lucide-react"
+import { Search, PackageOpen, X, Paperclip, Loader2, Check, Ban, History as HistoryIcon } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface BulkOrderRequest {
@@ -40,6 +40,24 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING: "Pending",
   ACCEPTED: "Accepted",
   REJECTED: "Rejected",
+}
+
+// The buyer-facing request form only ever collects `products` as a single free-text line
+// (see bulk-orders/request/page.tsx), so commas inside it are commonly part of one product's
+// description (e.g. "Cotton T-Shirts, assorted sizes") rather than a separator between
+// distinct products. Splitting on newline/semicolon only avoids breaking that up, while
+// still correctly expanding into multiple rows the moment multi-line input is ever entered.
+function getProductRows(r: BulkOrderRequest): { name: string; sku: string | null }[] {
+  const parts = r.products.split(/\r?\n|;/).map((s) => s.trim()).filter(Boolean)
+  const names = parts.length ? parts : [r.products.trim()]
+
+  if (!r.product) return names.map((name) => ({ name, sku: null }))
+
+  // A linked catalog product has a real SKU — attribute it to the matching line if we can
+  // find one, otherwise (most common case: a single free-text line) to the only row.
+  if (names.length === 1) return [{ name: r.product.title, sku: r.product.sku }]
+  const matchIndex = names.findIndex((n) => n.toLowerCase() === r.product!.title.toLowerCase())
+  return names.map((name, i) => (i === matchIndex ? { name: r.product!.title, sku: r.product!.sku } : { name, sku: null }))
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -230,7 +248,7 @@ export default function AdminBulkOrdersPage() {
       {selected && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
           <div
-            className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-2xl shadow-xl max-h-[85vh] overflow-y-auto animate-fade-in-up"
+            className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-3xl shadow-xl max-h-[85vh] overflow-y-auto animate-fade-in-up"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-5">
@@ -291,34 +309,60 @@ export default function AdminBulkOrdersPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-              <DetailBlock icon={Building2} label="Company">
-                {selected.companyName}
-                {selected.gstNumber && <span className="block text-xs text-gray-400 mt-0.5">GST: {selected.gstNumber}</span>}
-              </DetailBlock>
-              <DetailBlock icon={Mail} label="Contact">
-                {selected.contactPerson}
-                <span className="block text-xs text-gray-400 mt-0.5">{selected.email}</span>
-              </DetailBlock>
-              <DetailBlock icon={Phone} label="Mobile">{selected.mobileNumber}</DetailBlock>
-              <DetailBlock icon={MapPin} label="Business Address">{selected.businessAddress}</DetailBlock>
+            {/* Order details — plain key/value table per field, matching the rest of the
+                Admin Panel's table styling instead of the old scattered icon-card grid. */}
+            <div className="mb-5 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  <InfoRow label="Bulk Order ID">{selected.bulkOrderNumber}</InfoRow>
+                  <InfoRow label="Submitted Date &amp; Time">{new Date(selected.createdAt).toLocaleString("en-IN")}</InfoRow>
+                  <InfoRow label="Status">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[selected.status] || "bg-gray-100 text-gray-700"}`}>
+                      {STATUS_LABELS[selected.status] || selected.status}
+                    </span>
+                  </InfoRow>
+                  <InfoRow label="Company Name">
+                    {selected.companyName}
+                    {selected.gstNumber && <span className="text-gray-400 dark:text-gray-500"> &middot; GST: {selected.gstNumber}</span>}
+                  </InfoRow>
+                  <InfoRow label="Contact Person">{selected.contactPerson}</InfoRow>
+                  <InfoRow label="Email">{selected.email}</InfoRow>
+                  <InfoRow label="Mobile Number">{selected.mobileNumber}</InfoRow>
+                  <InfoRow label="Business Address">{selected.businessAddress}</InfoRow>
+                  <InfoRow label="Expected Budget">{selected.budget}</InfoRow>
+                  <InfoRow label="Expected Delivery Date">{new Date(selected.expectedDeliveryDate).toLocaleDateString("en-IN")}</InfoRow>
+                  <InfoRow label="Buyer Comment">{selected.message || "—"}</InfoRow>
+                </tbody>
+              </table>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-              <DetailBlock icon={Package} label="Product(s)">
-                {selected.products}
-                {selected.product && (
-                  <span className="block text-xs text-primary-600 mt-0.5">Linked: {selected.product.title}</span>
-                )}
-              </DetailBlock>
-              <DetailBlock icon={Layers} label="Required Quantity">{selected.quantity}</DetailBlock>
-              <DetailBlock icon={Wallet} label="Expected Budget">{selected.budget}</DetailBlock>
-              <DetailBlock icon={CalendarDays} label="Expected Delivery">{new Date(selected.expectedDeliveryDate).toLocaleDateString("en-IN")}</DetailBlock>
+            {/* Product line items — each product the buyer listed gets its own row. */}
+            <div className="mb-5">
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Product Details</p>
+              <div className="rounded-xl border border-gray-100 dark:border-gray-800 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left font-medium text-gray-600 dark:text-gray-400">Product Name</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-gray-600 dark:text-gray-400">SKU</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-gray-600 dark:text-gray-400">Requested Quantity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {getProductRows(selected).map((p, i) => (
+                      <tr key={i}>
+                        <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">{p.name}</td>
+                        <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 font-mono text-xs whitespace-nowrap">{p.sku || "—"}</td>
+                        <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{selected.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {getProductRows(selected).length > 1 && (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">Requested quantity reflects the total for the full order, not per product.</p>
+              )}
             </div>
-
-            <DetailBlock icon={MessageSquare} label="Message / Special Requirements" full>
-              {selected.message}
-            </DetailBlock>
 
             {selected.attachmentUrl && (
               <a
@@ -368,13 +412,13 @@ export default function AdminBulkOrdersPage() {
   )
 }
 
-function DetailBlock({ icon: Icon, label, children, full }: { icon: any; label: string; children: React.ReactNode; full?: boolean }) {
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className={full ? "mt-5" : ""}>
-      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-        <Icon size={12} /> {label}
-      </p>
-      <div className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed">{children}</div>
-    </div>
+    <tr>
+      <th scope="row" className="w-36 sm:w-48 px-4 py-2.5 text-left align-top font-medium text-gray-500 dark:text-gray-400 bg-gray-50/60 dark:bg-gray-800/40 whitespace-nowrap">
+        {label}
+      </th>
+      <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100 break-words">{children}</td>
+    </tr>
   )
 }

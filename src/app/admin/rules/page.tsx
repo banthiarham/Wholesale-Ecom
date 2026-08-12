@@ -388,7 +388,15 @@ function ConditionsActionsFields({ form, setForm, products, categories, roles }:
             <input type="text" value={c.region || ""} onChange={(e) => updateC("region", e.target.value || undefined)} placeholder="e.g. Maharashtra" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tax Rate (%)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tax Type</label>
+            <select value={a.taxType || "CGST_SGST"} onChange={(e) => updateA("taxType", e.target.value)} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+              <option value="CGST_SGST">CGST + SGST</option>
+              <option value="IGST">IGST</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Preview only — actual type is auto-determined per order from Admin → Tax Management&apos;s Business State vs the buyer&apos;s shipping state.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Total GST Rate (%)</label>
             <input type="number" step="0.01" value={a.taxRate ?? ""} onChange={(e) => updateA("taxRate", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 18" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
           <div>

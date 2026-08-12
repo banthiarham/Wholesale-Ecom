@@ -44,13 +44,15 @@ export class RolePricesService {
     const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
     if (!role) throw new NotFoundException(`Role "${dto.roleId}" not found`);
 
-    // Check for uniqueness
+    // A role can have multiple quantity tiers per product now — uniqueness is scoped to
+    // the specific tier (same productId+roleId+minQty), not the whole role anymore.
+    const minQty = dto.minQty ?? 1;
     const existing = await this.prisma.rolePrice.findUnique({
-      where: { productId_roleId: { productId: dto.productId, roleId: dto.roleId } },
+      where: { productId_roleId_minQty: { productId: dto.productId, roleId: dto.roleId, minQty } },
     });
     if (existing) {
       throw new ConflictException(
-        `Role price already exists for product "${product.title}" and role "${role.label}". Use PUT to update it.`,
+        `A tier at minimum quantity ${minQty} already exists for product "${product.title}" and role "${role.label}". Use PUT to update it.`,
       );
     }
 
@@ -107,19 +109,21 @@ export class RolePricesService {
         throw new NotFoundException(`Role "${entry.roleId}" not found`);
       }
 
-      // Upsert: create or update
+      // Upsert one tier (keyed by minQty, default 1) per role — this bulk tool remains a
+      // quick "set the base price for every role" action; per-role multi-tier management
+      // happens via create()/update() on individual tiers.
+      const minQty = entry.minQty ?? 1;
       const result = await this.prisma.rolePrice.upsert({
-        where: { productId_roleId: { productId: dto.productId, roleId: entry.roleId } },
+        where: { productId_roleId_minQty: { productId: dto.productId, roleId: entry.roleId, minQty } },
         update: {
           price: entry.price,
-          minQty: entry.minQty ?? 1,
           isActive: true,
         },
         create: {
           productId: dto.productId,
           roleId: entry.roleId,
           price: entry.price,
-          minQty: entry.minQty ?? 1,
+          minQty,
           isActive: true,
         },
         include: {

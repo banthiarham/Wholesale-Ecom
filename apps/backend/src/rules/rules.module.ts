@@ -4,8 +4,10 @@ import { RulesService } from './rules.service';
 import { RulesEngineService } from './rules-engine.service';
 import { RulesEnforcementService } from './rules-enforcement.service';
 import { RulesAuditService } from './rules-audit.service';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
+  imports: [SettingsModule],
   controllers: [RulesController],
   providers: [RulesService, RulesEngineService, RulesEnforcementService, RulesAuditService],
   exports: [RulesService, RulesEngineService, RulesEnforcementService, RulesAuditService],

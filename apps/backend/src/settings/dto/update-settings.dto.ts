@@ -131,4 +131,9 @@ export class UpdateSettingsDto {
   @IsString()
   @IsOptional()
   roundOffEnabled?: string;
+
+  @ApiProperty({ required: false, description: "The business's own GST-registered state, e.g. Maharashtra — used to determine CGST+SGST vs IGST" })
+  @IsString()
+  @IsOptional()
+  businessState?: string;
 }

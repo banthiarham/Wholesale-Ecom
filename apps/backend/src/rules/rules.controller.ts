@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery }
 import { RulesService } from './rules.service';
 import { RulesEngineService } from './rules-engine.service';
 import { RulesAuditService } from './rules-audit.service';
+import { SettingsService } from '../settings/settings.service';
 import { CreateRuleDto } from './dto/create-rule.dto';
 import { UpdateRuleDto } from './dto/update-rule.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -29,6 +30,7 @@ export class RulesController {
     private readonly rulesService: RulesService,
     private readonly rulesEngine: RulesEngineService,
     private readonly auditService: RulesAuditService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   @Get()
@@ -136,10 +138,12 @@ export class RulesController {
     @CurrentUser('id') userId?: string,
     @CurrentUser('effectiveRole') userRole?: string,
   ) {
+    const settings = await this.settingsService.findAll();
     const ruleContext = {
       ...context,
       userId,
       userRole,
+      sellerState: settings.businessState || undefined,
     };
     const result = await this.rulesEngine.evaluateRules(ruleContext);
     return { result };

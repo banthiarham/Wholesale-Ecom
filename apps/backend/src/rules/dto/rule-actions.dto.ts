@@ -69,7 +69,7 @@ export class ShippingActionDto {
 
 /** TAX_RULE actions */
 export class TaxActionDto {
-  @ApiProperty({ description: 'Tax rate percentage' })
+  @ApiProperty({ description: 'Total GST rate percentage (not an additional charge on top of CGST/SGST or IGST — this total IS the CGST+SGST split, or the full IGST amount)' })
   @IsNumber()
   @Min(0)
   taxRate: number;
@@ -78,6 +78,19 @@ export class TaxActionDto {
   @IsOptional()
   @IsString()
   taxLabel?: string;
+
+  /**
+   * Which GST breakdown this rule's rate previews as in the admin form. Purely informational —
+   * the actual CGST+SGST vs IGST split applied to a real order is always determined at
+   * evaluation time by comparing the business's registered state to the buyer's shipping
+   * state (see RulesEngineService.evaluateTaxRule), never by this stored value, since GST law
+   * ties the split to each transaction's place of supply rather than to a fixed rule setting.
+   * Defaults to 'CGST_SGST' when absent so pre-existing tax rules keep working unchanged.
+   */
+  @ApiPropertyOptional({ enum: ['CGST_SGST', 'IGST'], description: 'Admin form preview only — real split is auto-determined per order by seller vs buyer state' })
+  @IsOptional()
+  @IsEnum(['CGST_SGST', 'IGST'])
+  taxType?: 'CGST_SGST' | 'IGST';
 }
 
 /** EXTRA_CHARGE actions */

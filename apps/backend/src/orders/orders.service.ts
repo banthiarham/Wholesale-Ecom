@@ -49,7 +49,13 @@ export class OrdersService {
    * checkout-preview-only, unchanged from current behavior.
    */
   private async computeAmountBreakdown(subtotal: number, discountAmount: number, ruleResult: RuleEvaluationResult) {
-    const taxAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.taxRate) / 100, 0);
+    // Split into CGST/SGST/IGST per matched rule (see RulesEngineService.evaluateTaxRule) —
+    // cgst+sgst+igst always equals the same total the old flat `taxRate`-based sum produced,
+    // GST is never charged twice on top of its own components.
+    const cgstAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.cgstRate) / 100, 0);
+    const sgstAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.sgstRate) / 100, 0);
+    const igstAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.igstRate) / 100, 0);
+    const taxAmount = cgstAmount + sgstAmount + igstAmount;
     const shippingAmount = ruleResult.shipping?.cost ?? 0;
 
     const rawTotal = Math.max(0, subtotal - discountAmount) + taxAmount + shippingAmount;
@@ -62,11 +68,20 @@ export class OrdersService {
     return {
       subtotal,
       taxAmount,
+      cgstAmount,
+      sgstAmount,
+      igstAmount,
       shippingAmount,
       discountAmount,
       roundOffAmount,
       totalAmount: roundedTotal,
     };
+  }
+
+  /** The business's own GST-registered state, used to determine CGST+SGST vs IGST. */
+  private async getSellerState(): Promise<string | undefined> {
+    const settings = await this.settingsService.findAll();
+    return settings.businessState || undefined;
   }
 
   private async notifyOrderStatus(userId: string, orderId: string, orderNumber: string, status: OrderStatus) {
@@ -140,6 +155,7 @@ export class OrdersService {
       cartItems: cartItemsContext,
       subtotal: totalAmount,
       shippingRegion: data.shippingAddress?.state || undefined,
+      sellerState: await this.getSellerState(),
     });
 
     // Apply coupon discount if provided
@@ -212,6 +228,9 @@ export class OrdersService {
         totalAmount: breakdown.totalAmount,
         subtotal: breakdown.subtotal,
         taxAmount: breakdown.taxAmount,
+        cgstAmount: breakdown.cgstAmount,
+        sgstAmount: breakdown.sgstAmount,
+        igstAmount: breakdown.igstAmount,
         shippingAmount: breakdown.shippingAmount,
         discountAmount: breakdown.discountAmount,
         roundOffAmount: breakdown.roundOffAmount,
@@ -304,6 +323,7 @@ export class OrdersService {
       cartItems: bulkCartItems,
       subtotal: totalAmount,
       shippingRegion: data.shippingAddress?.state || undefined,
+      sellerState: await this.getSellerState(),
     });
 
     const breakdown = await this.computeAmountBreakdown(totalAmount, 0, ruleResult);
@@ -314,6 +334,9 @@ export class OrdersService {
         totalAmount: breakdown.totalAmount,
         subtotal: breakdown.subtotal,
         taxAmount: breakdown.taxAmount,
+        cgstAmount: breakdown.cgstAmount,
+        sgstAmount: breakdown.sgstAmount,
+        igstAmount: breakdown.igstAmount,
         shippingAmount: breakdown.shippingAmount,
         discountAmount: breakdown.discountAmount,
         roundOffAmount: breakdown.roundOffAmount,

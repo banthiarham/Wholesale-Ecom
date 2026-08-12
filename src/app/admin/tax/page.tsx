@@ -1,9 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Search, X, Trash2, Edit2, Receipt } from "lucide-react"
+import { Plus, Search, X, Trash2, Edit2, Receipt, Building2, Loader2, Check } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import MultiSelect from "@/components/admin/MultiSelect"
+import { INDIAN_STATES } from "@/lib/indian-address"
+
+type TaxType = "CGST_SGST" | "IGST"
 
 interface TaxRule {
   id: string
@@ -12,7 +15,7 @@ interface TaxRule {
   priority: number
   isActive: boolean
   conditions: { productIds?: string[]; categoryIds?: string[]; region?: string }
-  actions: { taxRate?: number; taxLabel?: string }
+  actions: { taxRate?: number; taxLabel?: string; taxType?: TaxType }
   createdAt: string
   updatedAt: string
 }
@@ -26,6 +29,7 @@ type TaxForm = {
   priority: string
   isActive: boolean
   taxRate: string
+  taxType: TaxType
   taxLabel: string
   productIds: string[]
   categoryIds: string[]
@@ -38,6 +42,7 @@ const emptyForm = (): TaxForm => ({
   priority: "0",
   isActive: true,
   taxRate: "",
+  taxType: "CGST_SGST",
   taxLabel: "",
   productIds: [],
   categoryIds: [],
@@ -47,8 +52,16 @@ const emptyForm = (): TaxForm => ({
 function validateForm(form: TaxForm): string[] {
   const errors: string[] = []
   if (!form.name.trim()) errors.push("Tax Rule Name is required")
-  if (form.taxRate === "" || Number(form.taxRate) < 0) errors.push("Tax Rate is required")
+  if (form.taxRate === "" || Number(form.taxRate) < 0) errors.push("Total GST Rate is required")
   return errors
+}
+
+/** Renders the CGST/SGST or IGST split for a given total rate + type, e.g. "CGST 9% + SGST 9%". */
+function splitPreview(taxRate: number, taxType: TaxType): string {
+  if (!Number.isFinite(taxRate)) return "—"
+  if (taxType === "IGST") return `IGST ${taxRate}%`
+  const half = taxRate / 2
+  return `CGST ${half}% + SGST ${half}%`
 }
 
 export default function AdminTaxPage() {
@@ -64,6 +77,13 @@ export default function AdminTaxPage() {
   const [form, setForm] = useState<TaxForm>(emptyForm())
   const [formErrors, setFormErrors] = useState<string[]>([])
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null)
+
+  // Business State — the seller's own GST-registered state. Governs every tax rule below:
+  // an order ships CGST+SGST when the buyer's shipping state matches this, IGST otherwise.
+  const [businessState, setBusinessState] = useState("")
+  const [businessStateLoading, setBusinessStateLoading] = useState(true)
+  const [businessStateSaving, setBusinessStateSaving] = useState(false)
+  const [businessStateSaved, setBusinessStateSaved] = useState(false)
 
   useEffect(() => {
     if (toast) {
@@ -88,7 +108,7 @@ export default function AdminTaxPage() {
     return res
   }
 
-  useEffect(() => { loadRules(); loadProducts(); loadCategories() }, [])
+  useEffect(() => { loadRules(); loadProducts(); loadCategories(); loadBusinessState() }, [])
   useEffect(() => {
     const q = search.toLowerCase()
     setFiltered(rules.filter((r) => r.name.toLowerCase().includes(q) || (r.actions.taxLabel || "").toLowerCase().includes(q)))
@@ -122,6 +142,32 @@ export default function AdminTaxPage() {
     } catch (e) { console.error(e) }
   }
 
+  const loadBusinessState = async () => {
+    setBusinessStateLoading(true)
+    try {
+      const res = await fetch("/api/settings")
+      const data = await res.json()
+      setBusinessState(data.settings?.businessState || "")
+    } catch (e) { console.error(e) } finally { setBusinessStateLoading(false) }
+  }
+
+  const saveBusinessState = async (value: string) => {
+    setBusinessState(value)
+    setBusinessStateSaving(true)
+    setBusinessStateSaved(false)
+    try {
+      const res = await authFetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessState: value }),
+      })
+      if (res.ok) {
+        setBusinessStateSaved(true)
+        setTimeout(() => setBusinessStateSaved(false), 2000)
+      }
+    } catch (e) { console.error(e) } finally { setBusinessStateSaving(false) }
+  }
+
   const resetForm = () => { setForm(emptyForm()); setEditing(null); setShowForm(false); setFormErrors([]) }
 
   const openEdit = (r: TaxRule) => {
@@ -132,6 +178,7 @@ export default function AdminTaxPage() {
       priority: String(r.priority),
       isActive: r.isActive,
       taxRate: r.actions.taxRate !== undefined ? String(r.actions.taxRate) : "",
+      taxType: r.actions.taxType || "CGST_SGST",
       taxLabel: r.actions.taxLabel || "",
       productIds: r.conditions.productIds || [],
       categoryIds: r.conditions.categoryIds || [],
@@ -163,6 +210,7 @@ export default function AdminTaxPage() {
       },
       actions: {
         taxRate: Number(form.taxRate),
+        taxType: form.taxType,
         taxLabel: form.taxLabel || undefined,
       },
     }
@@ -218,6 +266,9 @@ export default function AdminTaxPage() {
 
   if (loading) return <SkeletonTable rows={4} cols={6} />
 
+  const previewRate = Number(form.taxRate)
+  const hasValidPreviewRate = form.taxRate !== "" && Number.isFinite(previewRate) && previewRate >= 0
+
   return (
     <div className="space-y-6">
       {toast && (
@@ -232,6 +283,27 @@ export default function AdminTaxPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure tax rates applied at checkout and reflected in the buyer&apos;s order summary.</p>
         </div>
         <button onClick={() => { resetForm(); setShowForm(true) }} className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition"><Plus size={16} /> Add Tax Rule</button>
+      </div>
+
+      {/* Business State — governs CGST+SGST vs IGST for every tax rule below. */}
+      <div className="admin-card-static p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 flex-shrink-0">
+          <Building2 size={16} className="text-primary-600" /> Business State (for GST)
+        </div>
+        <select
+          value={businessState}
+          onChange={(e) => saveBusinessState(e.target.value)}
+          disabled={businessStateLoading}
+          className="sm:max-w-xs px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+        >
+          <option value="">Not set</option>
+          {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {businessStateSaving && <Loader2 size={16} className="animate-spin text-gray-400" />}
+        {businessStateSaved && <span className="flex items-center gap-1 text-xs text-green-600"><Check size={14} /> Saved</span>}
+        <p className="text-xs text-gray-400 dark:text-gray-500 sm:ml-auto">
+          Orders shipping to <strong>{businessState || "this state"}</strong> get CGST+SGST; every other state gets IGST.
+        </p>
       </div>
 
       <div className="relative">
@@ -259,10 +331,33 @@ export default function AdminTaxPage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tax Rule Name</label>
               <input required placeholder="e.g. GST 18%" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tax Rate (%)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tax Type</label>
+              <select value={form.taxType} onChange={(e) => setForm({ ...form, taxType: e.target.value as TaxType })} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="CGST_SGST">CGST + SGST</option>
+                <option value="IGST">IGST</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {form.taxType === "IGST" ? "IGST Rate (%)" : "Total GST Rate (%)"}
+              </label>
               <input required type="number" step="0.01" min="0" placeholder="e.g. 18" value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: e.target.value })} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
+
+            <div className="col-span-full -mt-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {hasValidPreviewRate ? (
+                  <>Preview: <span className="font-medium text-gray-700 dark:text-gray-300">{splitPreview(previewRate, form.taxType)}</span> — this is a single total tax, never charged as GST plus CGST/SGST or IGST on top.</>
+                ) : (
+                  "Enter a rate above to preview the split."
+                )}
+                {" "}The actual type applied to each order is determined automatically: same state as the Business State above → CGST+SGST, different state → IGST.
+              </p>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Buyer-Facing Label</label>
               <input placeholder="e.g. GST (18%)" value={form.taxLabel} onChange={(e) => setForm({ ...form, taxLabel: e.target.value })} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
@@ -273,7 +368,7 @@ export default function AdminTaxPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Region (optional)</label>
               <input placeholder="e.g. Maharashtra" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Matched against the buyer&apos;s shipping state. Leave blank to apply everywhere.</p>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Matched against the buyer&apos;s shipping state to decide whether this rule applies at all. Leave blank to apply everywhere.</p>
             </div>
 
             <div>
@@ -310,6 +405,7 @@ export default function AdminTaxPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Name</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Rate</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">GST Split (preview)</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Buyer Label</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Scope</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Priority</th>
@@ -322,6 +418,7 @@ export default function AdminTaxPage() {
                   <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{r.name}</td>
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.actions.taxRate ?? 0}%</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{splitPreview(r.actions.taxRate ?? 0, r.actions.taxType || "CGST_SGST")}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.actions.taxLabel || "—"}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{scopeSummary(r)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.priority}</td>

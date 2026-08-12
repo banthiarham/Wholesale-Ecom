@@ -277,14 +277,6 @@ export default function ProductDetailPage() {
     return () => { cancelled = true }
   }, [quantity, product?.id])
 
-  const effectivePrice = product ? getEffectiveUnitPrice(product.tierPrices, quantity, product.unitPrice) : 0
-  const activeTier = product ? findApplicableTier(product.tierPrices, quantity) : null
-  const totalCost = effectivePrice * quantity
-  const savingsPerUnit = product ? Number(product.unitPrice) - effectivePrice : 0
-  const totalSavings = savingsPerUnit * quantity
-  const discountPercent = product?.compareAtPrice && effectivePrice < Number(product.compareAtPrice)
-    ? Math.round(((Number(product.compareAtPrice) - effectivePrice) / Number(product.compareAtPrice)) * 100) : 0
-
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" /></div>
   if (!product) return <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50"><Package size={48} className="text-gray-300 mb-4" /><h1 className="heading-lg mb-2">Product not found</h1><p className="body-sm mb-4">This product may have been removed or is unavailable.</p><Link href="/products" className="btn-primary">Browse Products</Link></div>
 
@@ -309,9 +301,31 @@ export default function ProductDetailPage() {
   // (client-side) tier price so the displayed price and tier always update immediately,
   // never showing a stale role/contract price left over from the previous quantity.
   const pricingIsCurrent = pricing != null && pricingQty === quantity
+
+  // If the logged-in buyer's role has its own quantity tiers for this product (Admin ->
+  // Role-Based Pricing), show those in "Buy More, Save More" instead of the generic
+  // product-wide tier ladder — reuses the same tier-math helpers so the ladder can never
+  // disagree with the actually-charged price. Falls back to the universal product tier
+  // ladder when the buyer isn't logged in or their role has no tiers for this product.
+  const roleTierPrices: TierPrice[] =
+    pricingIsCurrent && pricing!.roleTiers && pricing!.roleTiers.length > 0
+      ? pricing!.roleTiers.map((rt) => ({ minQty: rt.minQty, maxQty: null, price: rt.price }))
+      : []
+  const displayTierPrices = roleTierPrices.length > 0 ? roleTierPrices : product.tierPrices
+
+  const effectivePrice = getEffectiveUnitPrice(displayTierPrices, quantity, product.unitPrice)
+  const activeTier = findApplicableTier(displayTierPrices, quantity)
+  const discountPercent = product.compareAtPrice && effectivePrice < Number(product.compareAtPrice)
+    ? Math.round(((Number(product.compareAtPrice) - effectivePrice) / Number(product.compareAtPrice)) * 100) : 0
+
   // The backend's finalPrice already reflects the full priority waterfall
-  // (Contract > Role Custom > Tier > Discount > Base) — trust it directly once current.
+  // (Contract > Role Custom [now itself quantity-tiered] > Tier > Discount > Base) — trust
+  // it directly once current, including for the calculator's Total/Savings figures so they
+  // never disagree with the Price/unit figure shown right above them.
   const displayPrice = pricingIsCurrent ? pricing!.finalPrice : effectivePrice
+  const totalCost = displayPrice * quantity
+  const savingsPerUnit = Number(product.unitPrice) - displayPrice
+  const totalSavings = savingsPerUnit * quantity
   const priceLabel = pricingIsCurrent && (pricing!.appliedRule === "role" || pricing!.appliedRule === "contract") ? pricing!.appliedRoleName : null
 
   if (pricingIsCurrent) {
@@ -430,18 +444,24 @@ export default function ProductDetailPage() {
                   </CollapsibleSection>
                 )}
 
-                {/* Tier Pricing */}
-                {product.tierPrices.length > 0 && (
+                {/* Tier Pricing — the buyer's own role tiers when configured, otherwise the
+                    universal product tier ladder (see displayTierPrices above). */}
+                {displayTierPrices.length > 0 && (
                   <CollapsibleSection title="Bulk Pricing" icon={Layers}>
+                    {roleTierPrices.length > 0 && (
+                      <p className="text-xs text-primary-600 font-medium mb-3 flex items-center gap-1.5">
+                        <Layers size={12} /> Special pricing for your account{priceLabel ? ` (${priceLabel})` : ""}
+                      </p>
+                    )}
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead><tr className="border-b border-gray-100"><th className="px-4 py-3 text-left font-medium text-gray-500">Quantity</th><th className="px-4 py-3 text-right font-medium text-gray-500">Price/unit</th><th className="px-4 py-3 text-right font-medium text-gray-500">You Save</th></tr></thead>
                         <tbody>
-                          {product.tierPrices.map((tp) => {
+                          {displayTierPrices.map((tp, idx) => {
                             const saving = Number(product.unitPrice) - Number(tp.price)
                             const isActive = tp === activeTier
                             return (
-                              <tr key={tp.id} className={`border-b border-gray-50 ${isActive ? "bg-primary-50" : ""}`}>
+                              <tr key={tp.id ?? `${tp.minQty}-${idx}`} className={`border-b border-gray-50 ${isActive ? "bg-primary-50" : ""}`}>
                                 <td className="px-4 py-3 font-medium">{tp.minQty}{tp.maxQty ? ` - ${tp.maxQty}` : "+"} units</td>
                                 <td className="px-4 py-3 text-right font-semibold">{formatPrice(Number(tp.price))}</td>
                                 <td className="px-4 py-3 text-right text-green-600 font-medium">{saving > 0 ? formatPrice(saving) : "—"}</td>
@@ -678,14 +698,21 @@ export default function ProductDetailPage() {
                     </span>
                   </div>
 
-                  {/* Tier pricing ladder — current price + upcoming slabs, active tier highlighted */}
-                  {product.tierPrices.length > 0 && (() => {
-                    const sortedTiers = sortTierPrices(product.tierPrices)
+                  {/* Tier pricing ladder — the buyer's own role tiers when configured,
+                      otherwise the universal product tier ladder; current price + upcoming
+                      slabs, active tier highlighted */}
+                  {displayTierPrices.length > 0 && (() => {
+                    const sortedTiers = sortTierPrices(displayTierPrices)
                     return (
                       <div className="rounded-xl border border-gray-100 bg-white p-4">
+                        {roleTierPrices.length > 0 && (
+                          <p className="text-xs text-primary-600 font-medium mb-2 flex items-center gap-1.5">
+                            <Layers size={12} /> Special pricing for your account{priceLabel ? ` (${priceLabel})` : ""}
+                          </p>
+                        )}
                         <div className="flex items-baseline justify-between gap-2 flex-wrap">
                           <p className="text-sm text-gray-500">
-                            Current <span className="text-lg font-bold text-gray-900">{formatPrice(effectivePrice)}</span>/piece
+                            Current <span className="text-lg font-bold text-gray-900">{formatPrice(displayPrice)}</span>/piece
                           </p>
                           {totalSavings > 0 && (
                             <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">

@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import * as CryptoJS from 'crypto-js';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +14,7 @@ export interface DecryptedSmtpConfig {
   password: string;
   fromName: string;
   fromEmail: string;
+  replyToEmail: string;
 }
 
 @Injectable()
@@ -74,6 +76,7 @@ export class SmtpSettingsService {
       password: this.decrypt(row.passwordEncrypted),
       fromName: row.fromName,
       fromEmail: row.fromEmail,
+      replyToEmail: row.replyToEmail || row.fromEmail,
     };
   }
 
@@ -94,6 +97,7 @@ export class SmtpSettingsService {
       passwordEncrypted,
       fromName: dto.fromName.trim(),
       fromEmail: dto.fromEmail.trim(),
+      replyToEmail: dto.replyToEmail?.trim() || null,
       isActive: true,
     };
 
@@ -128,10 +132,19 @@ export class SmtpSettingsService {
 
     try {
       await transporter.verify();
-      await transporter.sendMail({
-        from: `"${dto.fromName.trim()}" <${dto.fromEmail.trim()}>`,
+      const fromEmail = dto.fromEmail.trim();
+      const replyTo = dto.replyToEmail?.trim() || fromEmail;
+      const domain = fromEmail.split('@')[1] || 'localhost';
+      const info = await transporter.sendMail({
+        from: `"${dto.fromName.trim()}" <${fromEmail}>`,
+        replyTo: `"${dto.fromName.trim()}" <${replyTo}>`,
         to: dto.to.trim(),
         subject: 'WholesaleX Pro — SMTP Test Email',
+        messageId: `<${randomUUID()}@${domain}>`,
+        text:
+          'SMTP Test Successful\n\n' +
+          'This is a test email confirming your SMTP configuration is working correctly.\n\n' +
+          'WholesaleX Pro — B2B Wholesale Platform',
         html: `
           <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
             <h2 style="color:#2563eb;">SMTP Test Successful</h2>
@@ -141,6 +154,11 @@ export class SmtpSettingsService {
           </div>
         `,
       });
+      // A message ID confirmed by the SMTP server is proof of an actual send — do not
+      // report success on unverified/optimistic assumptions.
+      if (!info?.messageId && !info?.accepted?.length) {
+        return { success: false, message: 'SMTP server did not confirm delivery — check server logs.' };
+      }
       return { success: true, message: `Test email sent successfully to ${dto.to}` };
     } catch (err: any) {
       return { success: false, message: err?.message || 'Failed to send test email. Check your SMTP configuration.' };

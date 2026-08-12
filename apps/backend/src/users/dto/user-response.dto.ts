@@ -41,6 +41,27 @@ export class UserResponseDto {
   @ApiProperty({ nullable: true })
   taxId: string | null;
 
+  @ApiProperty({ nullable: true })
+  organizationName: string | null;
+
+  @ApiProperty({ nullable: true })
+  gstin: string | null;
+
+  @ApiProperty({ nullable: true })
+  panNumber: string | null;
+
+  @ApiProperty({ nullable: true })
+  contactPersonName: string | null;
+
+  @ApiProperty({ nullable: true })
+  pincode: string | null;
+
+  @ApiProperty({ nullable: true })
+  city: string | null;
+
+  @ApiProperty({ nullable: true })
+  state: string | null;
+
   @ApiProperty()
   createdAt: Date;
 

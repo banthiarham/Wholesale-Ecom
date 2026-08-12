@@ -11,6 +11,7 @@ interface SmtpSettings {
   username: string
   fromName: string
   fromEmail: string
+  replyToEmail: string | null
   isActive: boolean
   hasPassword: boolean
 }
@@ -22,6 +23,7 @@ const DEFAULT_FORM = {
   password: "",
   fromName: "WholesaleX Pro",
   fromEmail: "",
+  replyToEmail: "",
 }
 
 export default function AdminSmtpSettingsPage() {
@@ -59,6 +61,7 @@ export default function AdminSmtpSettingsPage() {
           password: "",
           fromName: s.fromName,
           fromEmail: s.fromEmail,
+          replyToEmail: s.replyToEmail || "",
         })
         setHasPassword(!!s.hasPassword)
       }
@@ -84,6 +87,7 @@ export default function AdminSmtpSettingsPage() {
         username: form.username.trim(),
         fromName: form.fromName.trim(),
         fromEmail: form.fromEmail.trim(),
+        replyToEmail: form.replyToEmail.trim() || undefined,
       }
       if (form.password.trim()) body.password = form.password.trim()
 
@@ -119,6 +123,7 @@ export default function AdminSmtpSettingsPage() {
         password: form.password.trim() || undefined,
         fromName: form.fromName.trim(),
         fromEmail: form.fromEmail.trim(),
+        replyToEmail: form.replyToEmail.trim() || undefined,
         to: testTo.trim(),
       }
       const res = await fetch("/api/smtp-settings/test-email", {
@@ -256,9 +261,23 @@ export default function AdminSmtpSettingsPage() {
               className={inputClass}
             />
           </div>
+          <div>
+            <label className={labelClass}>
+              Reply-To Email
+              <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">(optional — defaults to From Email)</span>
+            </label>
+            <input
+              type="email"
+              placeholder="support@wholesalex.com"
+              value={form.replyToEmail}
+              onChange={(e) => update("replyToEmail", e.target.value)}
+              className={inputClass}
+            />
+          </div>
         </div>
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          The password is encrypted at rest and is never shown or returned by the API once saved.
+          The password is encrypted at rest and is never shown or returned by the API once saved. A noreply@ From address
+          with no separate, monitored Reply-To is a common spam signal — set a Reply-To your team actually reads.
         </p>
       </div>
 

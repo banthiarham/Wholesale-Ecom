@@ -11,7 +11,7 @@ interface CategoryNode {
   description: string | null
   parentId: string | null
   children?: CategoryNode[]
-  productCount?: number
+  _count?: { products: number }
 }
 
 export default function AdminCategoriesPage() {
@@ -168,7 +168,7 @@ export default function AdminCategoriesPage() {
                 <Folder size={16} className="text-amber-500" />
                 <span className="flex-1 font-medium text-gray-900 dark:text-gray-100">{node.name}</span>
                 <span className="text-xs text-gray-400 dark:text-gray-500 mr-4">/{node.handle}</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400 mr-4">{node.productCount ?? 0} products</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 mr-4">{node._count?.products ?? 0} products</span>
                 <div className="flex items-center gap-2">
                   <button onClick={() => openEdit(node)} className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded hover:bg-primary-50 dark:hover:bg-primary-900/20"><Edit size={14} /></button>
                   <button onClick={() => handleDelete(node.id)} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 size={14} /></button>

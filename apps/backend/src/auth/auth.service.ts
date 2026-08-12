@@ -94,6 +94,8 @@ export class AuthService {
     // Generate referral code
     const referralCode = `${registerDto.firstName?.substring(0, 3).toUpperCase() || 'USR'}${Date.now().toString(36).toUpperCase()}`;
 
+    const isDealerSignup = registerDto.accountCategory === 'DEALER';
+
     const user = await this.prisma.user.create({
       data: {
         email: registerDto.email,
@@ -107,6 +109,20 @@ export class AuthService {
         accountType: AccountType.LOCAL,
         referralCode,
         referredBy: registerDto.referralCode || null,
+        // Dealer / B2B profile fields — RegisterDto only requires/validates these when
+        // accountCategory is 'DEALER', but guard here too so a Customer submission can
+        // never write stray Dealer data even if some were present in the payload.
+        ...(isDealerSignup && {
+          companyName: registerDto.companyName,
+          companyAddress: registerDto.companyAddress,
+          organizationName: registerDto.organizationName,
+          gstin: registerDto.gstin?.toUpperCase(),
+          panNumber: registerDto.panNumber?.toUpperCase(),
+          contactPersonName: registerDto.contactPersonName,
+          pincode: registerDto.pincode,
+          city: registerDto.city,
+          state: registerDto.state,
+        }),
       },
       include: { roleRel: true },
     });

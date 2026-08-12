@@ -584,15 +584,24 @@ export class CartService {
       unitPrice: Number(item.unitPrice),
     }));
 
+    const settings = await this.settingsService.findAll();
+
     const ruleResult = await this.rulesEngine.evaluateRules({
       userId,
       userRole,
       cartItems,
       subtotal,
       shippingRegion,
+      sellerState: settings.businessState || undefined,
     });
 
-    const tax = ruleResult.taxes.reduce((sum, t) => sum + (subtotal * t.taxRate) / 100, 0);
+    // Split into CGST/SGST/IGST per matched rule (see RulesEngineService.evaluateTaxRule) —
+    // cgst+sgst+igst always equals the same total the old flat `taxRate`-based sum produced,
+    // GST is never charged twice.
+    const cgstAmount = ruleResult.taxes.reduce((sum, t) => sum + (subtotal * t.cgstRate) / 100, 0);
+    const sgstAmount = ruleResult.taxes.reduce((sum, t) => sum + (subtotal * t.sgstRate) / 100, 0);
+    const igstAmount = ruleResult.taxes.reduce((sum, t) => sum + (subtotal * t.igstRate) / 100, 0);
+    const tax = cgstAmount + sgstAmount + igstAmount;
     const shipping = ruleResult.shipping?.cost ?? 0;
 
     let couponDiscount = 0;
@@ -605,7 +614,6 @@ export class CartService {
       }
     }
 
-    const settings = await this.settingsService.findAll();
     const roundOffEnabled = settings.roundOffEnabled === 'true';
     const rawTotal = Math.max(0, subtotal - couponDiscount) + tax + shipping;
     const total = roundOffEnabled ? Math.round(rawTotal) : rawTotal;
@@ -614,6 +622,9 @@ export class CartService {
       subtotal,
       itemCount,
       tax,
+      cgstAmount,
+      sgstAmount,
+      igstAmount,
       shipping,
       couponDiscount,
       couponApplied,

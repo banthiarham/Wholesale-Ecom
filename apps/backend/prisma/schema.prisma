@@ -133,6 +133,17 @@ model User {
   companyAddress String?
   taxId          String?
 
+  // Dealer / B2B signup profile fields (collected on the B2B signup form; unused by
+  // Customer signups). companyName/companyAddress/phone above double as the Company
+  // Name / Full Address / Mobile Number fields for B2B accounts.
+  organizationName  String?
+  gstin             String?
+  panNumber         String?
+  contactPersonName String?
+  pincode           String?
+  city              String?
+  state             String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   lastLoginAt DateTime?
@@ -434,6 +445,12 @@ model Order {
   totalAmount     Decimal     @db.Decimal(12, 2)
   subtotal        Decimal?    @db.Decimal(12, 2)
   taxAmount       Decimal?    @db.Decimal(12, 2)
+  // GST breakdown of taxAmount — Indian GST: intra-state orders split the total rate evenly
+  // into cgstAmount+sgstAmount, inter-state orders charge the full rate as igstAmount alone.
+  // taxAmount always equals cgstAmount+sgstAmount+igstAmount; never an amount on top of them.
+  cgstAmount      Decimal?    @db.Decimal(12, 2)
+  sgstAmount      Decimal?    @db.Decimal(12, 2)
+  igstAmount      Decimal?    @db.Decimal(12, 2)
   shippingAmount  Decimal?    @db.Decimal(12, 2)
   discountAmount  Decimal?    @db.Decimal(12, 2)
   roundOffAmount  Decimal?    @db.Decimal(12, 2)
@@ -946,6 +963,7 @@ model SmtpSettings {
   passwordEncrypted String   @db.Text
   fromName          String   @default("WholesaleX Pro")
   fromEmail         String
+  replyToEmail      String?
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -1020,6 +1038,9 @@ model RolePermission {
   @@index([permissionId])
 }
 
+// A role can now have multiple quantity tiers per product (e.g. Buyer: qty 1 -> ₹100,
+// qty 10 -> ₹90, qty 50 -> ₹80) — each tier is its own row sharing (productId, roleId),
+// distinguished by minQty. See PricingService for how the applicable tier is resolved.
 model RolePrice {
   id        String   @id @default(uuid())
   productId String
@@ -1033,7 +1054,7 @@ model RolePrice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([productId, roleId])
+  @@unique([productId, roleId, minQty])
   @@index([productId])
   @@index([roleId])
   @@index([isActive])

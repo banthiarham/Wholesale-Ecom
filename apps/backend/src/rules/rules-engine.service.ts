@@ -15,6 +15,8 @@ export interface RuleContext {
   subtotal?: number;
   paymentMethod?: string;
   shippingRegion?: string;
+  /** The business's own GST-registered state (Admin → Tax Management → Business State). */
+  sellerState?: string;
 }
 
 export interface RuleEvaluationResult {
@@ -25,7 +27,16 @@ export interface RuleEvaluationResult {
   bogo: { buyProductId: string; buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[];
   shipping: { shippingType: string; cost: number; ruleName: string } | null;
   minimumOrderQuantities: { productId?: string; minQty: number; ruleName: string }[];
-  taxes: { taxRate: number; taxLabel: string; ruleName: string }[];
+  taxes: {
+    taxRate: number;
+    taxLabel: string;
+    ruleName: string;
+    /** Actual GST type applied to this evaluation — auto-determined by state comparison, not the rule's stored (preview-only) taxType. */
+    taxType: 'CGST_SGST' | 'IGST';
+    cgstRate: number;
+    sgstRate: number;
+    igstRate: number;
+  }[];
   checkoutRestrictions: { restricted: boolean; message: string; ruleName: string }[];
   quantityDiscounts: { productId?: string; tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }[];
   extraCharges: { chargeAmount: number; chargeLabel: string; ruleName: string }[];
@@ -345,7 +356,27 @@ export class RulesEngineService {
     const items = this.matchesProducts(c, context);
     if (!regionMatch) return;
     if (items.length === 0 && (c.productIds?.length > 0 || c.categoryIds?.length > 0)) return;
-    result.taxes.push({ taxRate: a.taxRate, taxLabel: a.taxLabel || 'Tax', ruleName: name });
+
+    // Indian GST: same state as the business → CGST+SGST (rate split evenly); different
+    // state → IGST (full rate). This is always derived from the actual seller/buyer states
+    // for this order, never from the rule's stored (preview-only) actions.taxType — GST law
+    // ties the split to each transaction's place of supply, not to a fixed rule setting. If
+    // either state is unknown (e.g. Business State not yet configured, or no shipping address
+    // yet), default to CGST+SGST — the total tax charged is identical either way (taxRate is
+    // never applied twice), only the label/breakdown differs.
+    const taxRate = a.taxRate;
+    const isInterState = !!context.sellerState && !!context.shippingRegion && context.sellerState !== context.shippingRegion;
+    const taxType: 'CGST_SGST' | 'IGST' = isInterState ? 'IGST' : 'CGST_SGST';
+
+    result.taxes.push({
+      taxRate,
+      taxLabel: a.taxLabel || 'GST',
+      ruleName: name,
+      taxType,
+      cgstRate: taxType === 'CGST_SGST' ? taxRate / 2 : 0,
+      sgstRate: taxType === 'CGST_SGST' ? taxRate / 2 : 0,
+      igstRate: taxType === 'IGST' ? taxRate : 0,
+    });
   }
 
   private evaluateCheckoutRestriction(

@@ -84,93 +84,105 @@ export default function InvoicePage() {
         </button>
       </div>
 
-      <div className="max-w-3xl mx-auto card-base-static print:shadow-none print:rounded-none print:border-none p-8 sm:p-12">
-        {/* Header */}
-        <div className="flex items-start justify-between pb-6 border-b-2 border-gray-900/5">
+      <div className="max-w-3xl mx-auto bg-white border border-gray-200 rounded-2xl print:shadow-none print:rounded-none print:border-none p-8 sm:p-12" style={{ boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -8px rgba(15,23,42,0.12)" }}>
+        {/* Header — brand on the left, TAX INVOICE on the right, both on one baseline */}
+        <div className="flex items-start justify-between pb-6 border-b-2 border-gray-900">
           <div>
-            <h1 className="heading-md">{siteName}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{siteName}</h1>
             <p className="text-xs text-gray-500 mt-1">B2B Wholesale E-Commerce Platform</p>
           </div>
           <div className="text-right">
-            <h2 className="text-lg font-extrabold text-primary-700 uppercase tracking-wide">Tax Invoice</h2>
-            <p className="text-xs text-gray-500 mt-1">Invoice #{order.orderNumber.slice(0, 8).toUpperCase()}</p>
-            <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p>
+            <h2 className="text-2xl font-bold text-gray-900 uppercase tracking-wider">Tax Invoice</h2>
+          </div>
+        </div>
+
+        {/* Invoice number + date, directly under the title */}
+        <div className="flex items-start justify-between py-4 border-b border-gray-100 text-xs">
+          <div />
+          <div className="text-right space-y-0.5">
+            <p className="text-gray-500">Invoice No. <span className="font-semibold text-gray-900">{order.orderNumber.slice(0, 8).toUpperCase()}</span></p>
+            <p className="text-gray-500">Invoice Date <span className="font-semibold text-gray-900">{new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</span></p>
           </div>
         </div>
 
         {/* Bill to / Ship to */}
-        <div className="grid grid-cols-2 gap-8 py-6 border-b border-gray-200">
-          <div>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Billed To</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-200 border-b border-gray-200">
+          <div className="py-5 sm:pr-8">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Billed To</p>
             <p className="text-sm font-semibold text-gray-900">{order.user.firstName} {order.user.lastName}</p>
-            <p className="text-xs text-gray-500 mb-1">{order.user.email}{order.user.phone ? ` · ${order.user.phone}` : ""}</p>
+            <p className="text-xs text-gray-500 mb-1.5">{order.user.email}{order.user.phone ? ` · ${order.user.phone}` : ""}</p>
             <div className="text-xs text-gray-600 leading-relaxed">{address(order.billingAddress || order.shippingAddress)}</div>
           </div>
-          <div>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Shipped To</p>
+          <div className="py-5 sm:pl-8">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Shipped To</p>
             <div className="text-xs text-gray-600 leading-relaxed">{address(order.shippingAddress)}</div>
           </div>
         </div>
 
         {/* Items table */}
-        <div className="py-6 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-left text-[11px] font-bold text-gray-400 uppercase tracking-wide">
-                <th className="pb-2">Item</th>
-                <th className="pb-2">SKU</th>
-                <th className="pb-2 text-center">Qty</th>
-                <th className="pb-2 text-right">Unit Price</th>
-                <th className="pb-2 text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {order.items.map((item) => (
-                <tr key={item.id}>
-                  <td className="py-2.5 text-gray-900">{item.product.title}</td>
-                  <td className="py-2.5 text-gray-500">{item.product.sku || "—"}</td>
-                  <td className="py-2.5 text-center text-gray-700">{item.quantity}</td>
-                  <td className="py-2.5 text-right text-gray-700">{formatPrice(Number(item.unitPrice))}</td>
-                  <td className="py-2.5 text-right font-medium text-gray-900">{formatPrice(Number(item.totalPrice))}</td>
+        <div className="py-6">
+          <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3">Item</th>
+                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3 text-center">Qty</th>
+                  <th className="px-4 py-3 text-right">Unit Price</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {order.items.map((item) => (
+                  <tr key={item.id}>
+                    <td className="px-4 py-3 text-gray-900">{item.product.title}</td>
+                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">{item.product.sku || "—"}</td>
+                    <td className="px-4 py-3 text-center text-gray-700">{item.quantity}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{formatPrice(Number(item.unitPrice))}</td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-900">{formatPrice(Number(item.totalPrice))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Totals */}
         <div className="flex justify-end pb-6 border-b border-gray-200">
-          <div className="w-full max-w-xs text-sm text-gray-600 space-y-2">
-            <div className="flex justify-between"><span>Subtotal</span><span className="text-gray-900">{formatPrice(subtotal)}</span></div>
+          <div className="w-full max-w-xs border border-gray-200 rounded-lg p-4 text-sm text-gray-600 space-y-2.5">
+            <div className="flex justify-between"><span>Subtotal</span><span className="text-gray-900 font-medium">{formatPrice(subtotal)}</span></div>
             {discountAmount > 0 && (
-              <div className="flex justify-between"><span>Discount</span><span className="text-gray-900">-{formatPrice(discountAmount)}</span></div>
+              <div className="flex justify-between"><span>Discount</span><span className="text-gray-900 font-medium">-{formatPrice(discountAmount)}</span></div>
             )}
-            <div className="flex justify-between"><span>Shipping</span><span className="text-gray-900">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span></div>
-            <div className="flex justify-between"><span>GST / Taxes</span><span className="text-gray-900">{formatPrice(taxAmount)}</span></div>
+            <div className="flex justify-between"><span>Shipping</span><span className="text-gray-900 font-medium">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span></div>
+            <div className="flex justify-between"><span>GST / Taxes</span><span className="text-gray-900 font-medium">{formatPrice(taxAmount)}</span></div>
             {roundOffAmount !== 0 && (
-              <div className="flex justify-between"><span>Round off</span><span className="text-gray-900">{roundOffAmount > 0 ? "+" : "-"}{formatPrice(Math.abs(roundOffAmount))}</span></div>
+              <div className="flex justify-between"><span>Round off</span><span className="text-gray-900 font-medium">{roundOffAmount > 0 ? "+" : "-"}{formatPrice(Math.abs(roundOffAmount))}</span></div>
             )}
-            <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200"><span className="text-gray-900">Grand Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
+            <div className="flex justify-between items-baseline text-base font-bold pt-2.5 border-t border-gray-200">
+              <span className="text-gray-900">Grand Total</span>
+              <span className="text-primary-700 text-lg">{formatPrice(Number(order.totalAmount))}</span>
+            </div>
           </div>
         </div>
 
-        {/* Payment details */}
-        <div className="pt-6 grid grid-cols-2 gap-8 text-sm">
-          <div>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Payment Details</p>
-            <div className="text-xs text-gray-600 space-y-1.5">
-              <p>Method: <span className="text-gray-900 font-medium">{order.payment?.provider || "COD"}</span></p>
-              <div className="flex items-center gap-1.5">Status: <PaymentStatusBadge status={order.payment?.status || "PENDING"} size="sm" /></div>
-              {order.payment?.providerRef && <p>Transaction ID: <span className="text-gray-900 font-medium">{order.payment.providerRef}</span></p>}
+        {/* Payment details / Order status */}
+        <div className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
+          <div className="border border-gray-200 rounded-lg p-4">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2.5">Payment Details</p>
+            <div className="text-xs text-gray-600 space-y-2">
+              <p className="flex justify-between"><span>Method</span><span className="text-gray-900 font-medium">{order.payment?.provider || "COD"}</span></p>
+              <div className="flex items-center justify-between"><span>Status</span><PaymentStatusBadge status={order.payment?.status || "PENDING"} size="sm" /></div>
+              {order.payment?.providerRef && <p className="flex justify-between gap-3"><span className="flex-shrink-0">Transaction ID</span><span className="text-gray-900 font-medium text-right break-all">{order.payment.providerRef}</span></p>}
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Order Status</p>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2.5">Order Status</p>
             <OrderStatusBadge status={order.status} size="sm" />
           </div>
         </div>
 
-        <p className="text-center text-[11px] text-gray-400 mt-10 pt-6 border-t border-gray-100">
+        <p className="text-center text-[11px] text-gray-400 mt-8 pt-6 border-t border-gray-100">
           This is a computer-generated invoice and does not require a signature.
         </p>
       </div>

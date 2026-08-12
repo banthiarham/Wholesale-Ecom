@@ -18,6 +18,13 @@ export class UserEntity implements PrismaUser {
   companyName: string | null;
   companyAddress: string | null;
   taxId: string | null;
+  organizationName: string | null;
+  gstin: string | null;
+  panNumber: string | null;
+  contactPersonName: string | null;
+  pincode: string | null;
+  city: string | null;
+  state: string | null;
   referralCode: string | null;
   referredBy: string | null;
   createdAt: Date;

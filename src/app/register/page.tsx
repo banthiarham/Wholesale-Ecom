@@ -1,10 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getContrastTextColor } from "@/lib/utils"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, Mail, Lock, User, Phone, Shield, Check, Building2, ArrowLeft, ChevronRight } from "lucide-react"
+import { Eye, EyeOff, Mail, Lock, User, Phone, Building2, ArrowLeft, ChevronRight } from "lucide-react"
 
 interface SelectableRole {
   id: string
@@ -18,20 +17,43 @@ interface SelectableRole {
 
 type SignupType = "buyer" | "b2b" | null
 
+// The backend's legacy `role` column is a fixed enum (BUYER/VENDOR/DISTRIBUTOR/ADMIN) kept
+// only for backward compatibility — dynamic roles like DEALER aren't members of it and the
+// API rejects any other value there. `roleId` is what actually assigns the role; `role` is
+// only ever sent when it happens to match one of these, otherwise omitted so the backend
+// falls back to its own BUYER default for that column while roleId carries the real role.
+const LEGACY_ROLE_ENUM = ["BUYER", "VENDOR", "DISTRIBUTOR", "ADMIN"]
+
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/
+const PINCODE_REGEX = /^[1-9][0-9]{5}$/
+const MOBILE_REGEX = /^[6-9]\d{9}$/
+
+const DEFAULT_FORM = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  password: "",
+  confirmPassword: "",
+  roleId: "",
+  // Dealer / B2B-only fields
+  companyName: "",
+  organizationName: "",
+  gstin: "",
+  panNumber: "",
+  contactPersonName: "",
+  companyAddress: "",
+  pincode: "",
+  city: "",
+  state: "",
+}
+
 export default function RegisterPage() {
   const router = useRouter()
   const [signupType, setSignupType] = useState<SignupType>(null)
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
-    roleId: "",
-  })
+  const [form, setForm] = useState({ ...DEFAULT_FORM })
   const [roles, setRoles] = useState<SelectableRole[]>([])
-  const [loadingRoles, setLoadingRoles] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -39,27 +61,46 @@ export default function RegisterPage() {
   useEffect(() => {
     fetch("/api/roles/public")
       .then((res) => res.json())
-      .then((data) => {
-        setRoles(data.roles || [])
-        // Default to BUYER role
-        const buyerRole = (data.roles || []).find((r: SelectableRole) => r.name === "BUYER")
-        if (buyerRole) setForm((prev) => ({ ...prev, roleId: buyerRole.id }))
-      })
+      .then((data) => setRoles(data.roles || []))
       .catch(() => setRoles([]))
-      .finally(() => setLoadingRoles(false))
   }, [])
+
+  // Customer signups always get BUYER; Dealer/B2B signups always get the DEALER role
+  // (falls back to BUYER if that role is ever renamed/removed, so the form can't get
+  // stuck with no role selected) — there's no picker anymore, so this runs whenever the
+  // signup type is chosen or the role list finishes loading, whichever comes later.
+  useEffect(() => {
+    if (!roles.length || !signupType) return
+    const targetRoleName = signupType === "buyer" ? "BUYER" : "DEALER"
+    const targetRole = roles.find((r) => r.name === targetRoleName) || roles.find((r) => r.name === "BUYER")
+    if (targetRole) setForm((prev) => ({ ...prev, roleId: targetRole.id }))
+  }, [roles, signupType])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  const buyerRole = roles.find((r) => r.name === "BUYER")
   const selectedRole = roles.find((r) => r.id === form.roleId)
 
   const chooseBuyer = () => {
     setError("")
-    if (buyerRole) setForm((prev) => ({ ...prev, roleId: buyerRole.id }))
     setSignupType("buyer")
+  }
+
+  // Only runs for the Dealer / B2B form — the Customer flow never touches these fields,
+  // so it can't be affected by this validation.
+  const validateDealerFields = (): string | null => {
+    if (!form.companyName.trim()) return "Company Name is required"
+    if (!form.organizationName.trim()) return "Organization Name is required"
+    if (!GSTIN_REGEX.test(form.gstin.trim().toUpperCase())) return "Enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5)"
+    if (!PAN_REGEX.test(form.panNumber.trim().toUpperCase())) return "Enter a valid 10-character PAN (e.g. ABCDE1234F)"
+    if (!form.contactPersonName.trim()) return "Contact Person Name is required"
+    if (!MOBILE_REGEX.test(form.phone.trim())) return "Enter a valid 10-digit mobile number"
+    if (!form.companyAddress.trim()) return "Full Address is required"
+    if (!PINCODE_REGEX.test(form.pincode.trim())) return "Enter a valid 6-digit pincode"
+    if (!form.city.trim()) return "City is required"
+    if (!form.state.trim()) return "State is required"
+    return null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,6 +112,13 @@ export default function RegisterPage() {
     if (!form.roleId) {
       setError("Please select a role")
       return
+    }
+    if (signupType === "b2b") {
+      const dealerError = validateDealerFields()
+      if (dealerError) {
+        setError(dealerError)
+        return
+      }
     }
     setLoading(true)
     setError("")
@@ -85,8 +133,20 @@ export default function RegisterPage() {
           email: form.email,
           phone: form.phone || undefined,
           password: form.password,
-          role: selectedRole?.name || "BUYER",
+          ...(selectedRole && LEGACY_ROLE_ENUM.includes(selectedRole.name) && { role: selectedRole.name }),
           roleId: form.roleId,
+          accountCategory: signupType === "b2b" ? "DEALER" : "CUSTOMER",
+          ...(signupType === "b2b" && {
+            companyName: form.companyName.trim(),
+            organizationName: form.organizationName.trim(),
+            gstin: form.gstin.trim().toUpperCase(),
+            panNumber: form.panNumber.trim().toUpperCase(),
+            contactPersonName: form.contactPersonName.trim(),
+            companyAddress: form.companyAddress.trim(),
+            pincode: form.pincode.trim(),
+            city: form.city.trim(),
+            state: form.state.trim(),
+          }),
         }),
       })
       const data = await res.json()
@@ -104,10 +164,11 @@ export default function RegisterPage() {
     }
   }
 
-  // Step 1: ask whether this is a quick Buyer signup or a B2B signup (Vendor/Distributor/etc,
-  // subject to admin approval). Everything below this gate reuses the exact same form,
-  // API call, roles, and approval workflow that already existed — this only decides whether
-  // the role picker is shown or the role is preset to BUYER.
+  // Step 1: ask whether this is a quick Customer signup (preset to BUYER) or a Dealer / B2B
+  // signup (preset to DEALER, subject to admin approval via the existing RoleChangeRequest
+  // workflow — see the effect above). Everything below this gate reuses the same base form
+  // and API call that already existed; this only decides whether the Dealer/B2B-only
+  // business fields are shown.
   if (!signupType) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
@@ -130,7 +191,7 @@ export default function RegisterPage() {
                 <User size={20} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-gray-900">Normal Buyer Signup</div>
+                <div className="font-semibold text-gray-900">Customer</div>
                 <p className="text-xs text-gray-500 mt-0.5">Shop and buy products right away — no approval needed.</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
@@ -145,7 +206,7 @@ export default function RegisterPage() {
                 <Building2 size={20} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-gray-900">B2B Signup</div>
+                <div className="font-semibold text-gray-900">Dealer / B2B</div>
                 <p className="text-xs text-gray-500 mt-0.5">Register as Vendor, Distributor, Wholesaler &amp; more — subject to admin approval.</p>
               </div>
               <ChevronRight size={18} className="text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
@@ -168,7 +229,7 @@ export default function RegisterPage() {
           <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <span className="text-white font-bold text-xl">W</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">{signupType === "buyer" ? "Create your buyer account" : "B2B account signup"}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">{signupType === "buyer" ? "Create your Customer account" : "Create your Dealer / B2B account"}</h1>
           <p className="text-gray-500 text-sm">Join WholesaleX Pro today</p>
         </div>
 
@@ -207,63 +268,111 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{signupType === "b2b" ? "Mobile Number" : "Phone"}</label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                <input type="tel" name="phone" value={form.phone} onChange={handleChange} className="input-base pl-9" placeholder="+91 98765 43210" />
+                <input
+                  type="tel"
+                  name="phone"
+                  value={form.phone}
+                  onChange={handleChange}
+                  required={signupType === "b2b"}
+                  pattern={signupType === "b2b" ? "[6-9][0-9]{9}" : undefined}
+                  title={signupType === "b2b" ? "Enter a valid 10-digit mobile number" : undefined}
+                  className="input-base pl-9"
+                  placeholder={signupType === "b2b" ? "9876543210" : "+91 98765 43210"}
+                />
               </div>
             </div>
 
-            {/* Role Selection — only shown for the B2B flow; Normal Buyer signup keeps the
-                role preset to BUYER (set in chooseBuyer()) and skips this picker entirely. */}
+            {/* Dealer / B2B business details — only shown for the B2B flow. All fields here
+                are required and validated both client-side (above) and server-side
+                (RegisterDto), and are saved on the user's profile alongside the existing
+                companyName/companyAddress columns. */}
             {signupType === "b2b" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Choose Your Account Type</label>
-                {loadingRoles ? (
-                  <div className="flex items-center justify-center py-6">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+              <div className="space-y-4 p-4 rounded-xl bg-gray-50 border border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Business Details</p>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Company Name</label>
+                    <input type="text" name="companyName" value={form.companyName} onChange={handleChange} required className="input-base" placeholder="Acme Traders Pvt Ltd" />
                   </div>
-                ) : (
-                  <div className="grid gap-2">
-                    {roles.map((role) => (
-                      <button
-                        key={role.id}
-                        type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, roleId: role.id }))}
-                        className={`relative flex items-start gap-3 p-4 rounded-xl border-2 transition-all text-left ${
-                          form.roleId === role.id
-                            ? "border-primary-500 bg-primary-50"
-                            : "border-gray-200 hover:border-gray-300 bg-white"
-                        }`}
-                      >
-                        <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                          form.roleId === role.id
-                            ? "border-primary-500 bg-primary-500"
-                            : "border-gray-300 bg-white"
-                        }`}>
-                          {form.roleId === role.id && <Check size={12} className="text-white" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-                              style={{ backgroundColor: role.color || "#6B7280", color: getContrastTextColor(role.color || "#6B7280") }}
-                            >
-                              <Shield size={14} />
-                            </div>
-                            <span className="font-medium text-gray-900">{role.label}</span>
-                            {role.isSystem && (
-                              <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded font-medium">DEFAULT</span>
-                            )}
-                          </div>
-                          {role.description && (
-                            <p className="text-xs text-gray-500 mt-1 ml-9">{role.description}</p>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Organization Name</label>
+                    <input type="text" name="organizationName" value={form.organizationName} onChange={handleChange} required className="input-base" placeholder="Acme Traders" />
                   </div>
-                )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">GSTIN</label>
+                    <input
+                      type="text"
+                      name="gstin"
+                      value={form.gstin}
+                      onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
+                      required
+                      maxLength={15}
+                      pattern="[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}"
+                      title="Enter a valid 15-character GSTIN"
+                      className="input-base uppercase"
+                      placeholder="27ABCDE1234F1Z5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">PAN Number</label>
+                    <input
+                      type="text"
+                      name="panNumber"
+                      value={form.panNumber}
+                      onChange={(e) => setForm({ ...form, panNumber: e.target.value.toUpperCase() })}
+                      required
+                      maxLength={10}
+                      pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                      title="Enter a valid 10-character PAN"
+                      className="input-base uppercase"
+                      placeholder="ABCDE1234F"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Contact Person Name</label>
+                  <input type="text" name="contactPersonName" value={form.contactPersonName} onChange={handleChange} required className="input-base" placeholder="Ramesh Kumar" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Address</label>
+                  <input type="text" name="companyAddress" value={form.companyAddress} onChange={handleChange} required className="input-base" placeholder="123 Industrial Area, Sector 5" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Pincode</label>
+                    <input
+                      type="text"
+                      name="pincode"
+                      value={form.pincode}
+                      onChange={handleChange}
+                      required
+                      maxLength={6}
+                      pattern="[1-9][0-9]{5}"
+                      title="Enter a valid 6-digit pincode"
+                      className="input-base"
+                      placeholder="400001"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">City</label>
+                    <input type="text" name="city" value={form.city} onChange={handleChange} required className="input-base" placeholder="Mumbai" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">State</label>
+                  <input type="text" name="state" value={form.state} onChange={handleChange} required className="input-base" placeholder="Maharashtra" />
+                </div>
               </div>
             )}
 

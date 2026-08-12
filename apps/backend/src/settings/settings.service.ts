@@ -81,6 +81,7 @@ export class SettingsService {
       heroCarouselSpeed: '5000',
       heroCarouselAutoplay: 'true',
       roundOffEnabled: 'false',
+      businessState: '',
     };
   }
 
@@ -112,6 +113,7 @@ export class SettingsService {
       { key: 'heroCarouselSpeed', value: '5000', label: 'Carousel Speed (ms)', type: 'number', group: 'homepage' },
       { key: 'heroCarouselAutoplay', value: 'true', label: 'Auto-rotate Carousel', type: 'text', group: 'homepage' },
       { key: 'roundOffEnabled', value: 'false', label: 'Round Off Order Totals', type: 'boolean', group: 'commerce' },
+      { key: 'businessState', value: '', label: 'Business State (for GST)', type: 'text', group: 'commerce' },
     ];
   }
 

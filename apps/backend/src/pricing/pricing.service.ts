@@ -14,6 +14,7 @@ export class PricingService {
     tierPrice: number;
     rolePrice: number | null;
     appliedRoleName: string | null;
+    roleTiers: { minQty: number; price: number }[];
     contractPrice: number | null;
     seasonalDiscount: number;
     finalPrice: number;
@@ -41,9 +42,14 @@ export class PricingService {
     );
     const tierPrice = tier ? Number(tier.price) : basePrice;
 
-    // Role Custom Price (priority 1, after contract) — Admin → Role Pricing.
+    // Role Custom Price (priority 1, after contract) — Admin → Role-Based Pricing.
+    // A role can have multiple quantity tiers per product (e.g. qty 1 -> ₹100, qty 10 ->
+    // ₹90, qty 50 -> ₹80); the applicable tier is the one with the highest minQty that
+    // doesn't exceed the requested quantity — same "best applicable slab" rule as Product
+    // Tier Pricing above, just scoped to this buyer's role.
     let rolePrice: number | null = null;
     let appliedRoleName: string | null = null;
+    let roleTiers: { minQty: number; price: number }[] = [];
     let loggedInRole: string | null = null;
     if (userId) {
       const user = await this.prisma.user.findUnique({
@@ -52,11 +58,16 @@ export class PricingService {
       });
       if (user?.roleId) {
         loggedInRole = user.roleRel?.label || user.roleRel?.name || null;
-        const rolePriceRecord = await this.prisma.rolePrice.findUnique({
-          where: { productId_roleId: { productId, roleId: user.roleId } },
+        const roleTierRecords = await this.prisma.rolePrice.findMany({
+          where: { productId, roleId: user.roleId, isActive: true },
+          orderBy: { minQty: 'asc' },
         });
-        if (rolePriceRecord && rolePriceRecord.isActive && quantity >= rolePriceRecord.minQty) {
-          rolePrice = Number(rolePriceRecord.price);
+        roleTiers = roleTierRecords.map((rt) => ({ minQty: rt.minQty, price: Number(rt.price) }));
+        const applicableRoleTier = [...roleTierRecords]
+          .sort((a, b) => b.minQty - a.minQty)
+          .find((rt) => quantity >= rt.minQty);
+        if (applicableRoleTier) {
+          rolePrice = Number(applicableRoleTier.price);
           appliedRoleName = user.roleRel?.label || user.roleRel?.name || null;
         }
       }
@@ -104,7 +115,7 @@ export class PricingService {
     }
 
     // Strict priority waterfall — the first applicable rule wins outright; nothing stacks:
-    // Contract Price > Role Custom Price > (Role Tier Pricing — not implemented) > Product Tier Pricing > Product Discount > Base Price
+    // Contract Price > Role Custom Price (now itself quantity-tiered) > Product Tier Pricing > Product Discount > Base Price
     let finalPrice: number;
     let appliedRule: 'contract' | 'role' | 'tier' | 'discount' | 'base';
     if (contractPrice !== null) {
@@ -158,6 +169,7 @@ export class PricingService {
       tierPrice,
       rolePrice,
       appliedRoleName,
+      roleTiers,
       contractPrice,
       seasonalDiscount,
       finalPrice,
@@ -181,6 +193,7 @@ export class PricingService {
     tierPrice: number;
     rolePrice: number | null;
     appliedRoleName: string | null;
+    roleTiers: { minQty: number; price: number }[];
     seasonalDiscount: number;
     finalPrice: number;
     discountAmount: number;
@@ -205,15 +218,22 @@ export class PricingService {
     );
     const tierPrice = tier ? Number(tier.price) : basePrice;
 
-    // Role Custom Price
+    // Role Custom Price — same multi-tier "best applicable slab" resolution as
+    // calculateEffectivePrice, just against an explicit roleId instead of a userId.
     let rolePrice: number | null = null;
     let appliedRoleName: string | null = null;
+    let roleTiers: { minQty: number; price: number }[] = [];
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
-    const rolePriceRecord = await this.prisma.rolePrice.findUnique({
-      where: { productId_roleId: { productId, roleId } },
+    const roleTierRecords = await this.prisma.rolePrice.findMany({
+      where: { productId, roleId, isActive: true },
+      orderBy: { minQty: 'asc' },
     });
-    if (rolePriceRecord && rolePriceRecord.isActive && quantity >= rolePriceRecord.minQty) {
-      rolePrice = Number(rolePriceRecord.price);
+    roleTiers = roleTierRecords.map((rt) => ({ minQty: rt.minQty, price: Number(rt.price) }));
+    const applicableRoleTier = [...roleTierRecords]
+      .sort((a, b) => b.minQty - a.minQty)
+      .find((rt) => quantity >= rt.minQty);
+    if (applicableRoleTier) {
+      rolePrice = Number(applicableRoleTier.price);
       appliedRoleName = role?.label || role?.name || null;
     }
 
@@ -281,6 +301,7 @@ export class PricingService {
       tierPrice,
       rolePrice,
       appliedRoleName,
+      roleTiers,
       seasonalDiscount,
       finalPrice,
       discountAmount,
