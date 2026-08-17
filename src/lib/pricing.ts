@@ -20,7 +20,12 @@ export function sortTierPrices(tierPrices: TierPrice[]): TierPrice[] {
 export function findApplicableTier(tierPrices: TierPrice[], qty: number): TierPrice | null {
   if (!tierPrices || tierPrices.length === 0) return null
   const sorted = sortTierPrices(tierPrices)
-  return sorted.find((tp) => qty >= tp.minQty && (tp.maxQty == null || qty <= tp.maxQty)) || null
+  // Several open-ended tiers can be eligible at once (for example role tiers at
+  // 1+, 10+, and 50+). The most specific applicable slab is the one with the
+  // highest minimum quantity, matching the server-side pricing engine.
+  return [...sorted]
+    .reverse()
+    .find((tp) => qty >= tp.minQty && (tp.maxQty == null || qty <= tp.maxQty)) || null
 }
 
 export function findNextTier(tierPrices: TierPrice[], qty: number): TierPrice | null {

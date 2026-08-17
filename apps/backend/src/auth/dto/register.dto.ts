@@ -71,9 +71,8 @@ export class RegisterDto {
   companyName?: string;
 
   @ApiPropertyOptional({ example: 'Acme Traders' })
-  @ValidateIf((o) => o.accountCategory === 'DEALER')
   @IsString()
-  @IsNotEmpty({ message: 'Organization Name is required for Dealer / B2B signup' })
+  @IsOptional()
   organizationName?: string;
 
   @ApiPropertyOptional({ example: '27ABCDE1234F1Z5' })

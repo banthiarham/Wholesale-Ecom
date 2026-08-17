@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
+import { useSiteSettings } from "@/lib/settings/SiteSettingsProvider"
 import {
   LayoutDashboard,
   Users,
@@ -163,6 +164,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const { user, role, loading: authLoading, logout: authLogout } = useAuth()
   const { can } = usePermissions()
+  const { loaded: settingsLoaded } = useSiteSettings()
 
   // Sidebar state
   const [collapsed, setCollapsed] = useState(false)
@@ -179,9 +181,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     }
   })
 
-  // Dark mode — ref to the admin wrapper div so it never bleeds into the storefront
+  // Dark mode is scoped to the admin wrapper so it never bleeds into the storefront.
   const [darkMode, setDarkMode] = useState(false)
-  const adminRootRef = useRef<HTMLDivElement>(null)
+  const [themeReady, setThemeReady] = useState(false)
 
   // Search
   const [searchQuery, setSearchQuery] = useState("")
@@ -206,20 +208,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     // Ensure the global <html> never has "dark" class (storefront must stay light)
     document.documentElement.classList.remove("dark")
     const saved = localStorage.getItem("admin-theme")
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-    if (saved === "dark" || (!saved && prefersDark)) {
-      setDarkMode(true)
-    }
+    // Admin defaults to light. Dark mode is used only after an explicit choice.
+    setDarkMode(saved === "dark")
+    setThemeReady(true)
   }, [])
-
-  // Apply dark class to admin root whenever darkMode state changes
-  useEffect(() => {
-    if (darkMode) {
-      adminRootRef.current?.classList.add("dark")
-    } else {
-      adminRootRef.current?.classList.remove("dark")
-    }
-  }, [darkMode])
 
   const toggleDarkMode = useCallback(() => {
     setDarkMode(prev => {
@@ -281,16 +273,16 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     return pathname === href || pathname.startsWith(href + "/")
   }
 
-  if (authLoading || !user || !can("admin", "access")) {
+  if (authLoading || !user || !can("admin", "access") || !settingsLoaded || !themeReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-500"></div>
       </div>
     )
   }
 
   return (
-    <div ref={adminRootRef} className="min-h-screen flex bg-gray-50 dark:bg-gray-950">
+    <div className={`${darkMode ? "dark" : ""} min-h-screen flex bg-gray-50 dark:bg-gray-950`}>
       {/* ── Mobile overlay ── */}
       {mobileOpen && (
         <div

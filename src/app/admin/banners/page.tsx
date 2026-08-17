@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Search, X, Trash2, Edit2, Image as ImageIcon, ArrowUp, ArrowDown, ToggleLeft, ToggleRight } from "lucide-react"
+import { Plus, Search, X, Trash2, Edit2, Image as ImageIcon, ArrowUp, ArrowDown, ToggleLeft, ToggleRight, Images } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface Banner {
@@ -26,6 +26,13 @@ const SECTIONS = [
   { value: "cta", label: "CTA Banner" },
 ]
 
+const ELECTRONICS_BANNERS = [
+  { title: "Electronics for Every Business", subtitle: "Source trusted computers, power solutions, networking equipment, accessories, and electrical essentials at wholesale prices.", imageUrl: "/images/electronics-hero.png", linkUrl: "/products", buttonText: "Shop Electronics" },
+  { title: "Computing & Networking Solutions", subtitle: "Equip your business with computers, routers, switches, cables, and connectivity essentials in bulk.", imageUrl: "/images/electronics-networking-hero.png", linkUrl: "/products", buttonText: "Explore Networking" },
+  { title: "Reliable Power for Every Setup", subtitle: "Shop UPS systems, power protection, LED lighting, chargers, adapters, and electrical essentials.", imageUrl: "/images/electronics-power-hero.png", linkUrl: "/products", buttonText: "Shop Power Products" },
+  { title: "Smart Security & Accessories", subtitle: "Discover CCTV systems, smart devices, audio accessories, chargers, and connectivity products.", imageUrl: "/images/electronics-security-hero.png", linkUrl: "/products", buttonText: "View Smart Electronics" },
+]
+
 export default function AdminBannersPage() {
   const [banners, setBanners] = useState<Banner[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,6 +42,7 @@ export default function AdminBannersPage() {
   const [editing, setEditing] = useState<Banner | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [addingSet, setAddingSet] = useState(false)
   const [form, setForm] = useState({
     title: "",
     subtitle: "",
@@ -136,6 +144,33 @@ export default function AdminBannersPage() {
     setBanners((prev) => prev.filter((b) => b.id !== id))
   }
 
+  const addElectronicsSet = async () => {
+    setAddingSet(true)
+    try {
+      const existingImages = new Set(banners.map((banner) => banner.imageUrl))
+      const nextRank = banners.reduce((max, banner) => Math.max(max, banner.rank), -1) + 1
+      const missing = ELECTRONICS_BANNERS.filter((banner) => !existingImages.has(banner.imageUrl))
+
+      for (let index = 0; index < missing.length; index++) {
+        const banner = missing[index]
+        const res = await fetch("/api/banners", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ ...banner, section: "hero", rank: nextRank + index, isActive: true }),
+        })
+        if (!res.ok) throw new Error("Failed to add electronics banners")
+      }
+
+      await loadBanners()
+      alert(missing.length ? `${missing.length} electronics banners added.` : "Electronics banners are already in the admin panel.")
+    } catch (e) {
+      console.error(e)
+      alert("Failed to add electronics banners")
+    } finally {
+      setAddingSet(false)
+    }
+  }
+
   const toggleActive = async (b: Banner) => {
     await fetch(`/api/banners/${b.id}`, {
       method: "PUT",
@@ -179,9 +214,14 @@ export default function AdminBannersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Banners</h1>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition">
-          <Plus size={16} /> Create Banner
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={addElectronicsSet} disabled={addingSet} className="flex items-center gap-2 px-4 py-2.5 border border-primary-200 text-primary-700 bg-primary-50 rounded-lg text-sm font-medium hover:bg-primary-100 transition disabled:opacity-50">
+            <Images size={16} /> {addingSet ? "Adding..." : "Add Electronics Set"}
+          </button>
+          <button onClick={() => { resetForm(); setShowForm(true) }} className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition">
+            <Plus size={16} /> Create Banner
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-4">

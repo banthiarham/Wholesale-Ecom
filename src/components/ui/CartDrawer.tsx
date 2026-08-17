@@ -204,7 +204,7 @@ export function CartDrawerProvider({ children }: { children: ReactNode }) {
   return (
     <CartDrawerContext.Provider value={{ openCartDrawer, closeCartDrawer }}>
       {children}
-      <div className={`fixed inset-0 z-[95] ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!isOpen}>
+      <div className={`fixed inset-0 z-[95] overflow-hidden ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!isOpen}>
         <div
           className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"}`}
           onClick={closeCartDrawer}

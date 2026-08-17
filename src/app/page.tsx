@@ -231,7 +231,7 @@ export default function Home() {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: siteName,
-    url: typeof window !== "undefined" ? window.location.origin : "https://wholesalex.com",
+    url: "https://wholesalex.com",
     description: "India's trusted B2B wholesale marketplace. Buy bulk products at the best prices with tier pricing, contract deals, and fast shipping across India.",
     contactPoint: { "@type": "ContactPoint", contactType: "customer service", availableLanguage: "English" },
   }
@@ -254,7 +254,14 @@ export default function Home() {
             {homeSections
               .filter((s) => s.isActive !== false)
               .sort((a, b) => a.rank - b.rank)
-              .map((section) => renderSection(section))}
+              .map((section) => (
+                <div key={section.id}>
+                  {renderSection(section)}
+                  {section.type === "shop_by_category" && (
+                    <HomepageTopSelling products={visibleProducts} discounts={discounts} hiddenPriceProductIds={hiddenPriceProductIds} nonPurchasableProducts={nonPurchasableProducts} ruleDiscountMap={ruleDiscountMap} bogoMap={bogoMap} qtyDiscountMap={qtyDiscountMap} rolePricingMap={rolePricingMap} customBadges={customBadges} addingId={addingId} handleAddToCart={handleAddToCart} />
+                  )}
+                </div>
+              ))}
           </>
         ) : (
           /* ── Default layout ── */
@@ -318,6 +325,22 @@ export default function Home() {
             {/* ── Shop by Category ── */}
             <ShopByCategoryGrid />
 
+            <HomepageTopSelling
+              products={visibleProducts}
+              discounts={discounts}
+              hiddenPriceProductIds={hiddenPriceProductIds}
+              nonPurchasableProducts={nonPurchasableProducts}
+              ruleDiscountMap={ruleDiscountMap}
+              bogoMap={bogoMap}
+              qtyDiscountMap={qtyDiscountMap}
+              rolePricingMap={rolePricingMap}
+              customBadges={customBadges}
+              addingId={addingId}
+              handleAddToCart={handleAddToCart}
+            />
+
+            <div className="section-container py-4 sm:py-6"><CTABannerSection headline="Ready to Buy in Bulk?" subtext="Get the best wholesale prices with tier discounts and reliable delivery." ctaText="Browse Products" ctaLink="/products" /></div>
+
             {/* ── Trust Badges / Why Choose Us ── */}
             <TrustBadgesSection />
 
@@ -328,6 +351,19 @@ export default function Home() {
       </div>
     </>
   )
+}
+
+function HomepageTopSelling({ products, discounts, hiddenPriceProductIds, nonPurchasableProducts, ruleDiscountMap, bogoMap, qtyDiscountMap, rolePricingMap, customBadges, addingId, handleAddToCart }: {
+  products: Product[]; discounts: SeasonalDiscount[]; hiddenPriceProductIds: Set<string>; nonPurchasableProducts: Map<string,string>
+  ruleDiscountMap: Map<string,{discountPercent:number;discountAmount:number;ruleName:string}>; bogoMap: Map<string,{buyQuantity:number;freeProductId:string;freeQuantity:number;ruleName:string}[]>
+  qtyDiscountMap: Map<string,{tiers:{minQty:number;discountType:string;discountValue:number}[];ruleName:string}>; rolePricingMap: Record<string,{rolePrice:number;appliedRoleName:string|null;savings:number;savingsPercent:number;finalPrice:number}>
+  customBadges:{productId:string;badgeLabel:string;badgeColor:string|null;ruleName:string}[]; addingId:string|null; handleAddToCart:(id:string,qty:number)=>void
+}) {
+  if (!products.length) return null
+  return <section className="section-padding-tight bg-white"><div className="section-container">
+    <div className="section-header pr-24"><div><h2 className="heading-lg">Top Selling Products</h2><p className="body-sm mt-1.5">High-demand products trusted by businesses nationwide.</p></div><Link href="/products" className="hidden items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 lg:inline-flex">View All Products <ArrowRight size={16}/></Link></div>
+    <ProductCarousel items={products.slice(0,12).map(product=><ProductCard key={product.id} product={{...product,thumbnail:product.thumbnail||product.images?.[0]||null}} view="grid" isPriceHidden={hiddenPriceProductIds.has(product.id)} isNonPurchasable={nonPurchasableProducts.has(product.id)} nonPurchasableMsg={nonPurchasableProducts.get(product.id)||""} rolePricing={rolePricingMap[product.id]} ruleDiscount={ruleDiscountMap.get(product.id)} bogo={bogoMap.get(product.id)} quantityDiscount={qtyDiscountMap.get(product.id)} customBadges={customBadges} seasonalDiscount={getProductDiscount(discounts,product.id,product.categoryId)} isAdding={addingId===product.id} onAddToCart={handleAddToCart}/>)}/>
+  </div></section>
 }
 
 /* ------------------------------------------------------------------ */

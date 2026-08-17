@@ -77,6 +77,7 @@ export default function ProductDetailPage() {
   const [userHasReviewed, setUserHasReviewed] = useState(false)
   const [pricing, setPricing] = useState<PricingBreakdown | null>(null)
   const [pricingQty, setPricingQty] = useState<number | null>(null)
+  const [pricingProductId, setPricingProductId] = useState<string | null>(null)
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
   const [showOffersModal, setShowOffersModal] = useState(false)
@@ -265,14 +266,15 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (!product) return
     const token = localStorage.getItem("token")
-    if (!token) { setPricing(null); setPricingQty(null); return }
+    if (!token) { setPricing(null); setPricingQty(null); setPricingProductId(null); return }
     const userId = JSON.parse(atob(token.split(".")[1]))?.userId || JSON.parse(atob(token.split(".")[1]))?.sub
-    if (!userId) { setPricing(null); setPricingQty(null); return }
+    if (!userId) { setPricing(null); setPricingQty(null); setPricingProductId(null); return }
     let cancelled = false
     fetchPricing(product.id, quantity, userId).then((result) => {
       if (cancelled) return
       setPricing(result)
       setPricingQty(quantity)
+      setPricingProductId(product.id)
     })
     return () => { cancelled = true }
   }, [quantity, product?.id])
@@ -308,8 +310,8 @@ export default function ProductDetailPage() {
   // disagree with the actually-charged price. Falls back to the universal product tier
   // ladder when the buyer isn't logged in or their role has no tiers for this product.
   const roleTierPrices: TierPrice[] =
-    pricingIsCurrent && pricing!.roleTiers && pricing!.roleTiers.length > 0
-      ? pricing!.roleTiers.map((rt) => ({ minQty: rt.minQty, maxQty: null, price: rt.price }))
+    pricingProductId === product.id && pricing?.roleTiers && pricing.roleTiers.length > 0
+      ? pricing.roleTiers.map((rt) => ({ minQty: rt.minQty, maxQty: null, price: rt.price }))
       : []
   const displayTierPrices = roleTierPrices.length > 0 ? roleTierPrices : product.tierPrices
 
@@ -731,9 +733,9 @@ export default function ProductDetailPage() {
                                   isActive ? "bg-primary-600 text-white font-bold shadow-sm" : "bg-gray-50 text-gray-600"
                                 }`}
                               >
-                                <span>Buy {tp.minQty}+</span>
+                                <span>{tp.minQty}+ Pieces</span>
                                 <span>
-                                  {formatPrice(Number(tp.price))}/piece
+                                  → {formatPrice(Number(tp.price))}/piece
                                   {isBest && (
                                     <span className={isActive ? "text-primary-100 font-semibold" : "text-primary-600 font-semibold"}> (Best Price)</span>
                                   )}

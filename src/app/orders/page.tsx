@@ -4,16 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  ShoppingBag, Package, Clock, CheckCircle2, XCircle, Truck, RefreshCcw,
+  ShoppingBag, Package, Clock, CheckCircle2, XCircle, Truck, RefreshCcw, RotateCcw,
   Search, ArrowUpDown, ChevronRight,
 } from "lucide-react"
 import { getCartSessionId } from "@/lib/utils"
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
 import { EmptyState } from "@/components/ui/EmptyState"
-import { OrderCard, type Order } from "@/components/orders/OrderCard"
+import { OrderCard, type Order, type OrderRequestSummary } from "@/components/orders/OrderCard"
 
-const STATUS_FILTERS = ["All", "PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"] as const
+const STATUS_FILTERS = ["All", "PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNS", "REPLACEMENTS"] as const
 type StatusFilter = (typeof STATUS_FILTERS)[number]
 
 type SortOption = "newest" | "oldest" | "amount_desc" | "amount_asc"
@@ -28,6 +28,13 @@ const STATUS_THEME: Record<StatusFilter, { icon: any; iconBg: string; tileBg: st
   SHIPPED: { icon: Truck, iconBg: "bg-cyan-500", tileBg: "bg-cyan-50/70 border-cyan-100", chipActive: "bg-cyan-500 border-cyan-500" },
   DELIVERED: { icon: CheckCircle2, iconBg: "bg-green-500", tileBg: "bg-green-50/70 border-green-100", chipActive: "bg-green-500 border-green-500" },
   CANCELLED: { icon: XCircle, iconBg: "bg-red-500", tileBg: "bg-red-50/70 border-red-100", chipActive: "bg-red-500 border-red-500" },
+  RETURNS: { icon: RotateCcw, iconBg: "bg-amber-500", tileBg: "bg-amber-50/70 border-amber-100", chipActive: "bg-amber-500 border-amber-500" },
+  REPLACEMENTS: { icon: RefreshCcw, iconBg: "bg-indigo-500", tileBg: "bg-indigo-50/70 border-indigo-100", chipActive: "bg-indigo-500 border-indigo-500" },
+}
+
+interface ReturnRequestRecord extends OrderRequestSummary {
+  orderId: string
+  items: { orderItemId: string }[]
 }
 
 const STAT_TILES: { key: StatusFilter; label: string }[] = [
@@ -44,6 +51,7 @@ const POLL_INTERVAL_MS = 20000
 export default function OrdersPage() {
   const router = useRouter()
   const [orders, setOrders] = useState<Order[]>([])
+  const [requests, setRequests] = useState<ReturnRequestRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [reorderingId, setReorderingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -61,9 +69,14 @@ export default function OrdersPage() {
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
     if (!silent) setLoading(true)
-    fetch("/api/orders", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.json())
-      .then((data) => setOrders(data.orders || []))
+    Promise.all([
+      fetch("/api/orders", { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
+      fetch("/api/returns", { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
+    ])
+      .then(([ordersData, requestsData]) => {
+        setOrders(ordersData.orders || [])
+        setRequests(requestsData.returns || [])
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [router])
@@ -137,13 +150,37 @@ export default function OrdersPage() {
     const counts: Record<string, number> = { All: orders.length }
     for (const s of STATUS_FILTERS) {
       if (s === "All") continue
-      counts[s] = orders.filter((o) => o.status === s).length
+      if (s === "RETURNS" || s === "REPLACEMENTS") {
+        const type = s === "RETURNS" ? "RETURN" : "REPLACEMENT"
+        counts[s] = new Set(requests.filter((request) => request.type === type).map((request) => request.orderId)).size
+      } else {
+        counts[s] = orders.filter((o) => o.status === s).length
+      }
     }
     return counts
-  }, [orders])
+  }, [orders, requests])
+
+  const requestsByOrder = useMemo(() => {
+    const map = new Map<string, ReturnRequestRecord[]>()
+    requests.forEach((request) => map.set(request.orderId, [...(map.get(request.orderId) || []), request]))
+    return map
+  }, [requests])
 
   const visibleOrders = useMemo(() => {
     let result = statusFilter === "All" ? orders : orders.filter((o) => o.status === statusFilter)
+    if (statusFilter === "RETURNS" || statusFilter === "REPLACEMENTS") {
+      const type = statusFilter === "RETURNS" ? "RETURN" : "REPLACEMENT"
+      result = orders
+        .filter((order) => requestsByOrder.get(order.id)?.some((request) => request.type === type))
+        .map((order) => {
+          const requestedItemIds = new Set(
+            (requestsByOrder.get(order.id) || [])
+              .filter((request) => request.type === type)
+              .flatMap((request) => request.items.map((item) => item.orderItemId))
+          )
+          return { ...order, items: order.items.filter((item) => requestedItemIds.has(item.id)) }
+        })
+    }
 
     const q = search.trim().toLowerCase()
     if (q) {
@@ -170,7 +207,7 @@ export default function OrdersPage() {
         sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     }
     return sorted
-  }, [orders, statusFilter, search, sort])
+  }, [orders, requestsByOrder, statusFilter, search, sort])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -292,6 +329,13 @@ export default function OrdersPage() {
         ) : (
           <div className="space-y-4">
             {visibleOrders.map((order) => (
+              (() => {
+                const type = statusFilter === "RETURNS" ? "RETURN" : statusFilter === "REPLACEMENTS" ? "REPLACEMENT" : null
+                const matchingRequests = type
+                  ? (requestsByOrder.get(order.id) || []).filter((request) => request.type === type).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  : []
+                const request = matchingRequests[0] ? { ...matchingRequests[0], count: matchingRequests.length } : undefined
+                return (
               <OrderCard
                 key={order.id}
                 order={order}
@@ -299,7 +343,10 @@ export default function OrdersPage() {
                 isCancelling={cancellingId === order.id}
                 onReorder={handleReorder}
                 onCancel={handleCancel}
+                request={request}
               />
+                )
+              })()
             ))}
           </div>
         )}

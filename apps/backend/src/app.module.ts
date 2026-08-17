@@ -35,6 +35,7 @@ import { PackagesModule } from './packages/packages.module';
 import { WalletModule } from './wallet/wallet.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { SmtpSettingsModule } from './smtp-settings/smtp-settings.module';
+import { RmaTicketsModule } from './rma-tickets/rma-tickets.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { SmtpSettingsModule } from './smtp-settings/smtp-settings.module';
     WalletModule,
     LedgerModule,
     SmtpSettingsModule,
+    RmaTicketsModule,
   ],
   controllers: [AppController],
 })

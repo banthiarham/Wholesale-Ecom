@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsNumber, IsOptional, IsInt, Min, ValidateNested } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsOptional, IsInt, IsBoolean, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class RolePriceEntryDto {
@@ -23,4 +23,8 @@ export class BulkRolePriceDto {
   @ValidateNested({ each: true })
   @Type(() => RolePriceEntryDto)
   prices: RolePriceEntryDto[];
+
+  @IsOptional()
+  @IsBoolean()
+  replaceExisting?: boolean;
 }

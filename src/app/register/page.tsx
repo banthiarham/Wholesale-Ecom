@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, Mail, Lock, User, Phone, Building2, ArrowLeft, ChevronRight } from "lucide-react"
+import { INDIAN_STATES } from "@/lib/indian-address"
 
 interface SelectableRole {
   id: string
@@ -39,7 +40,6 @@ const DEFAULT_FORM = {
   roleId: "",
   // Dealer / B2B-only fields
   companyName: "",
-  organizationName: "",
   gstin: "",
   panNumber: "",
   contactPersonName: "",
@@ -76,7 +76,7 @@ export default function RegisterPage() {
     if (targetRole) setForm((prev) => ({ ...prev, roleId: targetRole.id }))
   }, [roles, signupType])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
@@ -91,7 +91,6 @@ export default function RegisterPage() {
   // so it can't be affected by this validation.
   const validateDealerFields = (): string | null => {
     if (!form.companyName.trim()) return "Company Name is required"
-    if (!form.organizationName.trim()) return "Organization Name is required"
     if (!GSTIN_REGEX.test(form.gstin.trim().toUpperCase())) return "Enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5)"
     if (!PAN_REGEX.test(form.panNumber.trim().toUpperCase())) return "Enter a valid 10-character PAN (e.g. ABCDE1234F)"
     if (!form.contactPersonName.trim()) return "Contact Person Name is required"
@@ -138,7 +137,6 @@ export default function RegisterPage() {
           accountCategory: signupType === "b2b" ? "DEALER" : "CUSTOMER",
           ...(signupType === "b2b" && {
             companyName: form.companyName.trim(),
-            organizationName: form.organizationName.trim(),
             gstin: form.gstin.trim().toUpperCase(),
             panNumber: form.panNumber.trim().toUpperCase(),
             contactPersonName: form.contactPersonName.trim(),
@@ -293,15 +291,9 @@ export default function RegisterPage() {
               <div className="space-y-4 p-4 rounded-xl bg-gray-50 border border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Business Details</p>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Company Name</label>
-                    <input type="text" name="companyName" value={form.companyName} onChange={handleChange} required className="input-base" placeholder="Acme Traders Pvt Ltd" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Organization Name</label>
-                    <input type="text" name="organizationName" value={form.organizationName} onChange={handleChange} required className="input-base" placeholder="Acme Traders" />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Company Name</label>
+                  <input type="text" name="companyName" value={form.companyName} onChange={handleChange} required className="input-base" placeholder="Acme Traders Pvt Ltd" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -371,7 +363,20 @@ export default function RegisterPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">State</label>
-                  <input type="text" name="state" value={form.state} onChange={handleChange} required className="input-base" placeholder="Maharashtra" />
+                  <input
+                    type="text"
+                    name="state"
+                    list="indian-states"
+                    value={form.state}
+                    onChange={handleChange}
+                    required
+                    autoComplete="off"
+                    className="input-base"
+                    placeholder="Search or select state"
+                  />
+                  <datalist id="indian-states">
+                    {INDIAN_STATES.map((state) => <option key={state} value={state} />)}
+                  </datalist>
                 </div>
               </div>
             )}

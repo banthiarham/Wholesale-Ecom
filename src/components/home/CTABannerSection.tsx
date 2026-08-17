@@ -21,21 +21,21 @@ export default function CTABannerSection({
   ctaLink2 = "/rfqs/new",
 }: CTABannerSectionProps) {
   return (
-    <section className="relative overflow-hidden bg-secondary-600 py-12 lg:py-16">
+    <section className="relative overflow-hidden rounded-2xl bg-secondary-600 py-9 lg:py-11 shadow-[0_16px_40px_-24px_rgba(15,23,42,.7)]">
       {/* Subtle background pattern */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-primary-400/10 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative section-container">
+      <div className="relative px-6 sm:px-8 lg:px-10">
         <div className="flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-16">
           <div className="lg:max-w-xl text-center lg:text-left">
             <div className="inline-flex items-center gap-2 mb-4 px-3.5 py-1.5 bg-primary-600/20 rounded-full border border-primary-500/30">
               <Zap size={14} className="text-primary-400" />
               <span className="text-xs font-semibold text-primary-400 uppercase tracking-wider">Wholesale Platform</span>
             </div>
-            <h2 className="text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight tracking-tight">{headline}</h2>
+            <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2 leading-tight tracking-tight">{headline}</h2>
             <p className="text-gray-400 text-base leading-relaxed">{subtext}</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">

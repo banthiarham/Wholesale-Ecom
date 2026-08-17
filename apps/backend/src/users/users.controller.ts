@@ -9,8 +9,12 @@ import {
   Query,
   UseGuards,
   ParseEnumPipe,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UserRole, UserStatus } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -33,6 +37,18 @@ export class UsersController {
   @ApiOperation({ summary: 'Create a new user (Admin only)' })
   create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
     return this.usersService.create(createUserDto);
+  }
+
+  @Post('bulk-upload')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Bulk create users from CSV or Excel (Admin only)' })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  bulkUpload(@UploadedFile() file?: Express.Multer.File) {
+    if (!file?.buffer) throw new BadRequestException('CSV or Excel file is required');
+    return this.usersService.bulkUpload(file.buffer);
   }
 
   @Get()

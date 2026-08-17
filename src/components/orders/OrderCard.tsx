@@ -34,6 +34,14 @@ export interface Order {
   items: { id: string; productId: string; quantity: number; totalPrice: number; product: { title: string; thumbnail: string | null } }[]
 }
 
+export interface OrderRequestSummary {
+  id: string
+  type: "RETURN" | "REPLACEMENT"
+  status: string
+  createdAt: string
+  count?: number
+}
+
 // Status -> headline copy, icon and a soft/solid color pair used for the
 // prominent status chip that anchors each card (Amazon/Flipkart-style).
 const ORDER_STATUS_STYLES: Record<string, { headline: string; icon: any; chip: string }> = {
@@ -73,6 +81,24 @@ const DELIVERY_STATUS_STYLES: Record<string, { label: string; className: string 
   DELIVERED: { label: "Delivered", className: "bg-white text-green-700 ring-1 ring-inset ring-green-200" },
   FAILED: { label: "Failed", className: "bg-white text-red-700 ring-1 ring-inset ring-red-200" },
   RETURNED: { label: "Returned", className: "bg-white text-gray-600 ring-1 ring-inset ring-gray-200" },
+}
+
+const REQUEST_STATUS_STYLES: Record<string, string> = {
+  REQUESTED: "bg-orange-50 text-orange-700 ring-orange-200",
+  PENDING: "bg-orange-50 text-orange-700 ring-orange-200",
+  APPROVED: "bg-blue-50 text-blue-700 ring-blue-200",
+  PROCESSING: "bg-purple-50 text-purple-700 ring-purple-200",
+  COMPLETED: "bg-green-50 text-green-700 ring-green-200",
+  REJECTED: "bg-red-50 text-red-700 ring-red-200",
+}
+
+const REQUEST_STATUS_LABELS: Record<string, string> = {
+  REQUESTED: "Pending",
+  PENDING: "Pending",
+  APPROVED: "Approved",
+  PROCESSING: "Processing",
+  COMPLETED: "Completed",
+  REJECTED: "Rejected",
 }
 
 function MetaCell({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -131,9 +157,10 @@ interface OrderCardProps {
   isCancelling: boolean
   onReorder: (e: React.MouseEvent, order: Order) => void
   onCancel: (e: React.MouseEvent, order: Order) => void
+  request?: OrderRequestSummary
 }
 
-export const OrderCard = memo(function OrderCard({ order, isReordering, isCancelling, onReorder, onCancel }: OrderCardProps) {
+export const OrderCard = memo(function OrderCard({ order, isReordering, isCancelling, onReorder, onCancel, request }: OrderCardProps) {
   const canCancel = !["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)
   const canReturn = order.status === "DELIVERED"
   const canReorder = order.status !== "CANCELLED"
@@ -152,9 +179,10 @@ export const OrderCard = memo(function OrderCard({ order, isReordering, isCancel
   const courierName = order.deliveryPartner?.name || order.carrier
   const eta = order.deliveryTracking?.estimatedDelivery || order.shippingEta
   const trackHref = `/orders/${order.id}#tracking`
+  const detailsHref = request ? `/account/returns?request=${request.id}` : `/orders/${order.id}`
 
   const actions: ActionItem[] = [
-    { key: "view", label: "View Details", icon: Eye, href: `/orders/${order.id}`, variant: "solid" },
+    { key: "view", label: "View Details", icon: Eye, href: detailsHref, variant: "solid" },
     { key: "track", label: "Track Order", icon: Truck, href: trackHref, variant: "outline" },
     { key: "invoice", label: "Download Invoice", icon: Download, href: `/orders/${order.id}/invoice`, external: true, variant: "outline" },
     ...(canReorder ? [{ key: "reorder", label: isReordering ? "Adding..." : "Reorder", icon: RotateCcw, onClick: (e: React.MouseEvent) => onReorder(e, order), disabled: isReordering, variant: "outline" as Variant }] : []),
@@ -182,6 +210,13 @@ export const OrderCard = memo(function OrderCard({ order, isReordering, isCancel
             <statusCfg.icon size={15} />
             {statusCfg.headline}
           </span>
+          {request && (
+            <span className={`ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ring-1 ring-inset ${REQUEST_STATUS_STYLES[request.status] || "bg-gray-50 text-gray-700 ring-gray-200"}`}>
+              <RefreshCcw size={13} />
+              {request.type === "REPLACEMENT" ? "Replacement" : "Return"}: {REQUEST_STATUS_LABELS[request.status] || request.status.charAt(0) + request.status.slice(1).toLowerCase()}
+              {(request.count || 0) > 1 ? ` (${request.count} requests)` : ""}
+            </span>
+          )}
 
           {/* Item rows — larger imagery, premium spacing */}
           <div className="space-y-4">

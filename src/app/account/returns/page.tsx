@@ -28,14 +28,25 @@ interface ReturnRequest {
   createdAt: string
   updatedAt: string
   items: ReturnItem[]
+  rmaTicket?: {
+    ticketNumber: string
+    status: string
+    priority: string
+    openedAt: string
+    closedAt: string | null
+    resolutionTimeMinutes: number | null
+    activities?: { id: string; toStatus: string; note: string | null; createdAt: string }[]
+  } | null
 }
 
 export default function ReturnsPage() {
   const router = useRouter()
   const [returns, setReturns] = useState<ReturnRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedRequestId, setSelectedRequestId] = useState("")
 
   useEffect(() => {
+    setSelectedRequestId(new URLSearchParams(window.location.search).get("request") || "")
     const token = localStorage.getItem("token")
     if (!token) { router.push("/login"); return }
     fetch("/api/returns", { headers: { Authorization: `Bearer ${token}` } })
@@ -43,6 +54,12 @@ export default function ReturnsPage() {
       .then((data) => { setReturns(data.returns || []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [router])
+
+  useEffect(() => {
+    if (!loading && selectedRequestId) {
+      document.getElementById(`request-${selectedRequestId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  }, [loading, selectedRequestId])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -88,7 +105,7 @@ export default function ReturnsPage() {
           {returns.map((ret) => {
             const badge = getStatusBadge(ret.status)
             return (
-              <div key={ret.id} className="card-base-static p-5">
+              <div id={`request-${ret.id}`} key={ret.id} className={`card-base-static p-5 scroll-mt-24 ${selectedRequestId === ret.id ? "ring-2 ring-primary-500" : ""}`}>
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <div>
                     <p className="text-sm text-gray-500">
@@ -106,6 +123,15 @@ export default function ReturnsPage() {
                   <div className="mb-3 px-3 py-2 bg-blue-50 rounded-lg">
                     <p className="text-xs font-medium text-blue-700 mb-0.5">Note from our team:</p>
                     <p className="text-sm text-blue-800">{ret.adminRemarks}</p>
+                  </div>
+                )}
+                {ret.rmaTicket && (
+                  <div className="mb-3 rounded-lg border border-primary-100 bg-primary-50/60 px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div><p className="text-xs font-medium text-primary-700">RMA Ticket {ret.rmaTicket.ticketNumber}</p><p className="text-xs text-gray-500">Opened {new Date(ret.rmaTicket.openedAt).toLocaleString("en-IN")}</p></div>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-primary-700">{ret.rmaTicket.status.replace(/_/g, " ")}</span>
+                    </div>
+                    {ret.rmaTicket.activities?.length ? <div className="mt-2 border-t border-primary-100 pt-2"><p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Latest ticket activity</p>{ret.rmaTicket.activities.slice(0, 3).map((activity) => <div key={activity.id} className="text-xs text-gray-600"><span className="font-medium">{activity.toStatus.replace(/_/g, " ")}</span> · {new Date(activity.createdAt).toLocaleString("en-IN")}{activity.note && <span className="block text-gray-500">{activity.note}</span>}</div>)}</div> : null}
                   </div>
                 )}
                 <div className="border-t border-gray-100 pt-3">

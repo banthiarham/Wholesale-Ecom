@@ -26,10 +26,24 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       })
-      const data = await res.json()
+      const responseText = await res.text()
+      let data: any = {}
+      if (responseText) {
+        try {
+          data = JSON.parse(responseText)
+        } catch {
+          // Next.js returns plain text when its backend rewrite target is offline.
+          // Keep handling the HTTP status below instead of masking it as a JSON error.
+        }
+      }
 
       if (!res.ok) {
-        setError(data.message || t("login.submit"))
+        setError(
+          data.message ||
+          (res.status >= 500
+            ? "The server is unavailable. Please start the backend and try again."
+            : "Unable to sign in. Please check your credentials.")
+        )
       } else {
         const token = data.accessToken || data.access_token
         localStorage.setItem("token", token)
@@ -58,7 +72,8 @@ export default function LoginPage() {
         router.push(redirectTo)
       }
     } catch (err) {
-      setError("Something went wrong")
+      console.error("Login request failed", err)
+      setError("Unable to connect to the server. Please try again.")
     } finally {
       setLoading(false)
     }

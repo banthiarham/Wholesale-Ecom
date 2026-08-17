@@ -25,7 +25,7 @@ interface Product {
   vendorName: string | null
   tags: string[]
   categoryId?: string
-  category?: { id: string }
+  category?: { id: string; name: string; handle: string }
   tierPrices: { minQty: number; maxQty: number | null; price: number }[]
 }
 

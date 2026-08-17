@@ -56,6 +56,18 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    const handleSettingsUpdated = (event: Event) => {
+      const updated = (event as CustomEvent<Record<string, string>>).detail
+      if (updated) {
+        setSettings((prev) => ({ ...prev, ...updated }))
+        setLoaded(true)
+      }
+    }
+    window.addEventListener("wholesalex-settings-updated", handleSettingsUpdated)
+    return () => window.removeEventListener("wholesalex-settings-updated", handleSettingsUpdated)
+  }, [])
+
+  useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((data) => {

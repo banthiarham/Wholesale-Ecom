@@ -394,7 +394,7 @@ export class OrdersService {
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true, sku: true } } } },
         payment: { include: { refunds: { orderBy: { createdAt: 'desc' } } } },
-        user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, companyName: true, gstin: true } },
         deliveryPartner: true,
         deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
       },

@@ -166,7 +166,7 @@ export default function WishlistPage() {
           {items.map((item) => (
             <ProductCard
               key={item.id}
-              product={item.product}
+              product={{ ...item.product, categoryId: item.product.categoryId || undefined }}
               view="grid"
               isWishlisted
               customBadges={customBadges}

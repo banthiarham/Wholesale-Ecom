@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRolePriceDto } from './dto/create-role-price.dto';
 import { UpdateRolePriceDto } from './dto/update-role-price.dto';
@@ -75,6 +75,23 @@ export class RolePricesService {
     const existing = await this.prisma.rolePrice.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Role price "${id}" not found`);
 
+    if (dto.minQty !== undefined && dto.minQty !== existing.minQty) {
+      const duplicateTier = await this.prisma.rolePrice.findUnique({
+        where: {
+          productId_roleId_minQty: {
+            productId: existing.productId,
+            roleId: existing.roleId,
+            minQty: dto.minQty,
+          },
+        },
+      });
+      if (duplicateTier) {
+        throw new ConflictException(
+          `A tier at minimum quantity ${dto.minQty} already exists for this product and role.`,
+        );
+      }
+    }
+
     return this.prisma.rolePrice.update({
       where: { id },
       data: {
@@ -99,6 +116,49 @@ export class RolePricesService {
     // Verify product exists
     const product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
     if (!product) throw new NotFoundException(`Product "${dto.productId}" not found`);
+
+    const seenTiers = new Set<string>();
+    for (const entry of dto.prices) {
+      const minQty = entry.minQty ?? 1;
+      const key = `${entry.roleId}:${minQty}`;
+      if (seenTiers.has(key)) {
+        throw new BadRequestException(`Duplicate minimum quantity ${minQty} for the same role is not allowed`);
+      }
+      seenTiers.add(key);
+    }
+
+    // Matrix saves are authoritative for the selected product: removing a quantity row or
+    // clearing a role cell in the modal must remove that stored tier too. Keep the original
+    // upsert behavior as the default for any older callers of this endpoint.
+    if (dto.replaceExisting) {
+      const roleIds = [...new Set(dto.prices.map((entry) => entry.roleId))];
+      if (roleIds.length > 0) {
+        const validRoleCount = await this.prisma.role.count({ where: { id: { in: roleIds } } });
+        if (validRoleCount !== roleIds.length) {
+          throw new NotFoundException('One or more selected roles no longer exist');
+        }
+      }
+
+      return this.prisma.$transaction(async (tx) => {
+        await tx.rolePrice.deleteMany({ where: { productId: dto.productId } });
+        if (dto.prices.length > 0) {
+          await tx.rolePrice.createMany({
+            data: dto.prices.map((entry) => ({
+              productId: dto.productId,
+              roleId: entry.roleId,
+              price: entry.price,
+              minQty: entry.minQty ?? 1,
+              isActive: true,
+            })),
+          });
+        }
+        return tx.rolePrice.findMany({
+          where: { productId: dto.productId },
+          include: { role: { select: { id: true, name: true, label: true, color: true } } },
+          orderBy: [{ minQty: 'asc' }, { roleId: 'asc' }],
+        });
+      });
+    }
 
     const results = [];
 

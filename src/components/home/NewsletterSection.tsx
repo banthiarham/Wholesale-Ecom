@@ -18,9 +18,9 @@ export default function NewsletterSection() {
   }
 
   return (
-    <section className="section-padding-tight">
+    <section className="pt-0 pb-6 lg:pb-8">
       <div className="section-container">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-50 via-white to-primary-50 border border-primary-100/60 px-6 py-12 sm:px-12 sm:py-14 lg:px-16 lg:py-16 text-center">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-50 via-white to-primary-50 border border-primary-100/60 px-6 py-8 sm:px-12 lg:px-16 lg:py-10 text-center">
           {/* Decorative texture */}
           <div className="absolute inset-0 pointer-events-none">
             <div
@@ -32,11 +32,11 @@ export default function NewsletterSection() {
           </div>
 
           <div className="relative">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl mb-6 shadow-[0_8px_24px_-8px_rgba(2,84,129,0.25)] border border-primary-100">
-              <Mail size={26} className="text-primary-600" />
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-white rounded-xl mb-4 shadow-[0_8px_24px_-8px_rgba(2,84,129,0.25)] border border-primary-100">
+              <Mail size={22} className="text-primary-600" />
             </div>
-            <h2 className="heading-lg mb-3">Stay Updated</h2>
-            <p className="body-lg max-w-md mx-auto mb-9">
+            <h2 className="heading-lg mb-2">Stay Updated</h2>
+            <p className="body-lg max-w-md mx-auto mb-6">
               Get the latest deals, new arrivals, and exclusive wholesale offers delivered to your inbox.
             </p>
             <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row items-center gap-2 max-w-lg mx-auto p-1.5 sm:rounded-full bg-white border border-gray-200 shadow-[0_4px_16px_-4px_rgba(15,23,42,0.08)]">
@@ -59,7 +59,7 @@ export default function NewsletterSection() {
                 )}
               </button>
             </form>
-            <p className="text-xs text-gray-400 mt-5">No spam, unsubscribe anytime. We respect your privacy.</p>
+            <p className="text-xs text-gray-400 mt-3">No spam, unsubscribe anytime. We respect your privacy.</p>
           </div>
         </div>
       </div>

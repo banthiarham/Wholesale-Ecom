@@ -71,6 +71,14 @@
   background-color: rgb(30 64 175) !important;
 }
 
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  overscroll-behavior: none;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -364,6 +372,19 @@ h1, h2, h3, h4, h5, h6 {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+.carousel-track {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  padding: .25rem .15rem 1rem;
+}
+.carousel-category-item, .carousel-product-item { scroll-snap-align: start; flex: 0 0 calc((100% - 3rem) / 4); min-width: 0; }
+.carousel-arrow { @apply inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition-all hover:border-primary-300 hover:text-primary-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2; }
+@media (max-width: 1023px) { .carousel-category-item, .carousel-product-item { flex-basis: calc((100% - 1rem) / 2); } }
+@media (max-width: 639px) { .carousel-track { margin-right: -1rem; padding-right: 1rem; } .carousel-category-item, .carousel-product-item { flex-basis: 84%; } }
 
 /* ── Animations ── */
 

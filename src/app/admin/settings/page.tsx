@@ -191,6 +191,7 @@ export default function AdminSettingsPage() {
         body: JSON.stringify(payload),
       })
       if (!res.ok) throw new Error("Failed to save settings")
+      window.dispatchEvent(new CustomEvent("wholesalex-settings-updated", { detail: payload }))
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch {

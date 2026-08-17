@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Search, ChevronDown, ChevronUp, Shield, User, Ban, Trash2, X, Plus } from "lucide-react"
+import Link from "next/link"
+import { Search, ChevronDown, ChevronUp, Shield, User, Ban, Trash2, X, Plus, Upload } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { getContrastTextColor } from "@/lib/utils"
 
@@ -243,6 +244,9 @@ export default function AdminUsersPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500 dark:text-gray-400">{filtered.length} user{filtered.length !== 1 ? "s" : ""}</span>
+          <Link href="/admin/users/bulk-upload" className="flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 transition hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-900/20 dark:text-primary-300">
+            <Upload size={16} /> Bulk Upload
+          </Link>
           <button
             onClick={() => { setShowAddModal(true); resetAddForm() }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm"

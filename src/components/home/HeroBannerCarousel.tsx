@@ -16,6 +16,45 @@ interface Banner {
   section: string
 }
 
+const CATEGORY_HEROES: Banner[] = [
+  {
+    id: "electronics-hero",
+    title: "Electronics for Every Business",
+    subtitle: "Source trusted computers, power solutions, networking equipment, accessories, and electrical essentials at wholesale prices.",
+    imageUrl: "/images/electronics-hero.png",
+    linkUrl: "/products",
+    buttonText: "Shop Electronics",
+    section: "hero",
+  },
+  {
+    id: "electronics-networking-hero",
+    title: "Computing & Networking Solutions",
+    subtitle: "Equip your business with computers, routers, switches, cables, and connectivity essentials in bulk.",
+    imageUrl: "/images/electronics-networking-hero.png",
+    linkUrl: "/products",
+    buttonText: "Explore Networking",
+    section: "hero",
+  },
+  {
+    id: "electronics-power-hero",
+    title: "Reliable Power for Every Setup",
+    subtitle: "Shop UPS systems, power protection, LED lighting, chargers, adapters, and electrical essentials.",
+    imageUrl: "/images/electronics-power-hero.png",
+    linkUrl: "/products",
+    buttonText: "Shop Power Products",
+    section: "hero",
+  },
+  {
+    id: "electronics-security-hero",
+    title: "Smart Security & Accessories",
+    subtitle: "Discover CCTV systems, smart devices, audio accessories, chargers, and connectivity products.",
+    imageUrl: "/images/electronics-security-hero.png",
+    linkUrl: "/products",
+    buttonText: "View Smart Electronics",
+    section: "hero",
+  },
+]
+
 const FALLBACK_HEROES = [
   {
     title: "Bulk Orders. Best Prices.",
@@ -54,9 +93,12 @@ export default function HeroBannerCarousel() {
       .then((res) => res.json())
       .then((data) => {
         const list = Array.isArray(data) ? data : data.banners || []
-        setBanners(list)
+        setBanners(list.length > 0 ? list : CATEGORY_HEROES)
       })
-      .catch((err) => { console.error("Failed to fetch hero banners:", err) })
+      .catch((err) => {
+        console.error("Failed to fetch hero banners:", err)
+        setBanners(CATEGORY_HEROES)
+      })
   }, [])
 
   const next = useCallback(() => {
@@ -80,7 +122,7 @@ export default function HeroBannerCarousel() {
   if (banners.length === 0) {
     return (
       <section className="relative overflow-hidden">
-        <div className="relative h-[460px] sm:h-[520px] lg:h-[600px]">
+        <div className="relative h-[430px] sm:h-[500px] lg:h-[560px]">
           {FALLBACK_HEROES.map((hero, index) => {
             const Icon = hero.icon
             return (
@@ -160,7 +202,7 @@ export default function HeroBannerCarousel() {
 
   return (
     <section className="relative overflow-hidden">
-      <div className="relative h-[460px] sm:h-[520px] lg:h-[600px]">
+      <div className="relative h-[430px] sm:h-[500px] lg:h-[560px]">
         {banners.map((banner, index) => (
           <a
             key={banner.id}
@@ -171,11 +213,11 @@ export default function HeroBannerCarousel() {
               src={banner.imageUrl}
               alt={banner.title}
               fill
-              className="object-cover"
+              className={`object-cover ${banner.imageUrl.includes("/images/electronics-") ? "brightness-[1.22] saturate-[0.88]" : ""}`}
               sizes="100vw"
               priority={index === 0}
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/35 to-transparent" />
+            <div className={`absolute inset-0 ${banner.imageUrl.includes("/images/electronics-") ? "bg-gradient-to-r from-primary-900/70 via-primary-700/20 to-white/5" : "bg-gradient-to-r from-slate-950/85 via-slate-950/40 to-black/10"}`} />
             <div className="absolute inset-0 flex items-center">
               <div className="section-container w-full">
                 <div className="max-w-lg">
