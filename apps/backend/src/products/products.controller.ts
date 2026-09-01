@@ -109,7 +109,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk upload/edit products via Excel file with optional images (Admin only)' })
+  @ApiOperation({ summary: 'Bulk upload/edit products via WooCommerce CSV or Excel file with optional images (Admin only)' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'file', maxCount: 1 },
@@ -121,7 +121,7 @@ export class ProductsController {
   ) {
     const excelBuffer = files.file?.[0]?.buffer;
     if (!excelBuffer) {
-      throw new BadRequestException('Excel file is required');
+      throw new BadRequestException('CSV or Excel file is required');
     }
     let imageMapping: Record<string, string> = {};
     if (imageMappingStr) {

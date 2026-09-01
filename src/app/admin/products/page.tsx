@@ -94,7 +94,7 @@ function AdminProductsContent() {
   const loadProducts = async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED", { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED&limit=2000", { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       const list = Array.isArray(data) ? data : data.products || []
       setProducts(list)

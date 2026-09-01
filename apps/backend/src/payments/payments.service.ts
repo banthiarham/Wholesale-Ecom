@@ -109,7 +109,11 @@ export class PaymentsService {
     const gatewayProvider = this.gatewayFactory.getProvider(provider);
 
     const defaultReturnUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/orders/${orderId}`;
-    const effectiveReturnUrl = returnUrl || defaultReturnUrl;
+    // CCAvenue posts its encrypted response to redirect_url/cancel_url. Those
+    // URLs must reach this backend so the response is processed first.
+    const effectiveReturnUrl = provider.toUpperCase() === 'CCAVENUE'
+      ? this.getCcavenueCallbackUrl(gatewayConfig.webhookUrl)
+      : returnUrl || defaultReturnUrl;
 
     let existingPayment = await this.prisma.payment.findUnique({ where: { orderId } });
 
@@ -185,26 +189,44 @@ export class PaymentsService {
     const result = await gatewayProvider.handleCallback(payload, gatewayConfig.credentials, gatewayConfig.testMode);
 
     if (result.orderId) {
-      await this.prisma.payment.upsert({
+      const payment = await this.prisma.payment.findUnique({
         where: { orderId: result.orderId },
-        update: {
-          status: result.paymentStatus,
-          providerRef: result.providerRef,
-        },
-        create: {
-          orderId: result.orderId,
-          provider,
-          providerRef: result.providerRef,
-          amount: 0,
-          status: result.paymentStatus,
-          gatewayId: gatewayConfig.gatewayId !== 'env-fallback' ? gatewayConfig.gatewayId : null,
-        },
+        include: { order: true },
       });
 
-      await this.prisma.order.update({
-        where: { id: result.orderId },
-        data: { status: result.orderStatus },
-      });
+      // Reconcile only the payment created during initiation; never create a
+      // zero-value payment from an unsolicited gateway callback.
+      if (!payment || payment.provider !== provider) {
+        throw new BadRequestException('Payment not found for this gateway callback');
+      }
+
+      const callbackAmount = result.rawResponse?.amount;
+      if (callbackAmount !== undefined && Number(callbackAmount) !== Number(payment.amount)) {
+        throw new BadRequestException('Gateway callback amount does not match the order payment');
+      }
+
+      // CCAvenue may retry callbacks. A completed payment cannot be downgraded
+      // by a delayed failed/aborted response.
+      if (payment.status !== PaymentStatus.CAPTURED) {
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: result.paymentStatus, providerRef: result.providerRef || payment.providerRef },
+        });
+
+        await this.prisma.order.update({
+          where: { id: result.orderId },
+          data: { status: result.orderStatus },
+        });
+
+        if (result.paymentStatus === PaymentStatus.CAPTURED) {
+          await this.notificationsService.createNotification(
+            payment.order.userId,
+            'PAYMENT',
+            'Payment Successful',
+            `Your payment for order #${payment.order.orderNumber} was received successfully.`,
+          );
+        }
+      }
     }
 
     return result;
@@ -435,8 +457,8 @@ export class PaymentsService {
   /**
    * Initiate CCAvenue payment (backward compatible).
    */
-  async initiateCcavenue(orderId: string, returnUrl: string) {
-    return this.initiatePayment(orderId, 'CCAVENUE', returnUrl);
+  async initiateCcavenue(orderId: string, returnUrl: string, currentUser?: any) {
+    return this.initiatePayment(orderId, 'CCAVENUE', returnUrl, currentUser);
   }
 
   /**
@@ -444,5 +466,12 @@ export class PaymentsService {
    */
   async handleCcavenueCallback(encryptedResponse: string) {
     return this.handleCallback('CCAVENUE', { encResp: encryptedResponse });
+  }
+
+  private getCcavenueCallbackUrl(configuredUrl?: string): string {
+    if (configuredUrl) return configuredUrl;
+
+    const apiBaseUrl = process.env.PUBLIC_API_URL || process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
+    return `${apiBaseUrl.replace(/\/$/, '')}/api/v1/payments/callback/CCAVENUE`;
   }
 }

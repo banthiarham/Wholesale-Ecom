@@ -145,11 +145,14 @@ export class ProductsService {
     });
   }
 
-  async addImages(id: string, urls: string[]) {
+  async addImages(id: string, urls: string[], replacedSourceUrls: string[] = []) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Product not found');
     const existing = (product.images as string[]) || [];
-    const updated = [...existing, ...urls];
+    // A failed import may temporarily retain an external image URL. Once that
+    // image is successfully re-hosted, replace (rather than duplicate) it.
+    const retained = existing.filter((url) => !replacedSourceUrls.includes(url));
+    const updated = [...new Set([...retained, ...urls])];
     const data: any = { images: updated };
     if (!product.thumbnail && updated.length > 0) {
       data.thumbnail = updated[0];
@@ -333,6 +336,10 @@ export class ProductsService {
     return match ? parseFloat(match[0]) : NaN;
   }
 
+  private normalizeImportIdentity(value: string): string {
+    return value.trim().toLocaleLowerCase();
+  }
+
   // Sniffs the actual downloaded bytes for a known image file signature, rather
   // than trusting the HTTP Content-Type header (which real-world hosts frequently
   // get wrong — e.g. serving genuine .avif files as "text/plain" when the server's
@@ -351,6 +358,64 @@ export class ProductsService {
     return false;
   }
 
+  /** Reject reports such as customer exports before any rows can be imported as products. */
+  private assertProductImportHeaders(rows: Record<string, any>[]): void {
+    const headers = new Set(
+      Object.keys(rows[0] || {}).map((header) => this.normalizeHeaderKey(header)),
+    );
+    const productSpecificHeaders = [
+      'sku', 'skucode', 'itemcode', 'productcode', 'regularprice', 'saleprice',
+      'unitprice', 'sellingprice', 'description', 'shortdescription', 'images',
+      'categories', 'stock', 'instock', 'parent', 'type',
+    ];
+
+    if (!productSpecificHeaders.some((header) => headers.has(header))) {
+      throw new BadRequestException(
+        'This file does not contain product columns (such as SKU, price, description, stock, category, or images). It appears to be a non-product report and was not imported.',
+      );
+    }
+  }
+
+  /** Converts WooCommerce HTML and escaped markup into readable plain text. */
+  private cleanProductDescription(fullDescription: string, shortDescription: string): string {
+    const clean = (value: string) => {
+      if (!value) return '';
+      const withBreaks = value
+        .replace(/\\r\\n|\\n|\\r/g, '\n')
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>|<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<\s*br\s*\/?>/gi, '\n')
+        .replace(/<\/?(?:p|div|section|article|header|footer|h[1-6])\b[^>]*>/gi, '\n')
+        .replace(/<\s*li\b[^>]*>/gi, '\n• ')
+        .replace(/<\s*\/\s*li\s*>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;|&#34;/gi, '"')
+        .replace(/&#39;|&apos;/gi, "'")
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&#(x[\da-f]+|\d+);/gi, (_, code) => String.fromCodePoint(
+          code.toLowerCase().startsWith('x') ? parseInt(code.slice(1), 16) : parseInt(code, 10),
+        ));
+
+      return withBreaks
+        .split('\n')
+        .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+        .filter(Boolean)
+        .join('\n\n');
+    };
+
+    const full = clean(fullDescription);
+    const short = clean(shortDescription);
+    if (!full) return short;
+    if (!short || full.toLowerCase().includes(short.toLowerCase())) return full;
+    return `${short}\n\n${full}`;
+  }
+
+  private descriptionNeedsCleaning(description: string): boolean {
+    return /<[^>]+>|\\r\\n|\\n|\\r|&(?:nbsp|amp|quot|lt|gt|#\d+|#x[\da-f]+);/i.test(description);
+  }
+
   async bulkUploadFromExcel(
     buffer: Buffer,
     imageFiles: Express.Multer.File[] = [],
@@ -365,11 +430,17 @@ export class ProductsService {
     if (rows.length === 0) {
       throw new BadRequestException('Excel file is empty or has no data rows');
     }
+    this.assertProductImportHeaders(rows);
 
     const results = {
+      totalRows: rows.length,
       created: 0,
       updated: 0,
       skipped: 0,
+      skippedDuplicates: 0,
+      existingUnchanged: 0,
+      uniqueProductsAffected: 0,
+      actualUniqueProducts: 0,
       categoriesCreated: [] as string[],
       errors: [] as string[],
       imageErrors: [] as string[],
@@ -377,6 +448,36 @@ export class ProductsService {
       imagesUploaded: 0,
     };
     const categoryCache = new Map<string, string>(); // lowercase, trimmed name -> category id
+    const variationPrices = new Map<string, { sale: number; regular: number }[]>();
+    const imageDownloadCache = new Map<string, Promise<string | null>>();
+    // Do exact normalized comparisons in memory. Prisma's case-insensitive
+    // equality uses ILIKE on PostgreSQL, where '_' and '%' are wildcards; that
+    // can incorrectly merge distinct SKUs such as ZEB_OPERA and ZEB OPERA.
+    const existingProducts = await this.prisma.product.findMany();
+    const productsBySku = new Map<string, any>();
+    const productsByTitle = new Map<string, any>();
+    for (const product of existingProducts) {
+      if (product.sku) productsBySku.set(this.normalizeImportIdentity(product.sku), product);
+      productsByTitle.set(this.normalizeImportIdentity(product.title), product);
+    }
+    const createdProductIds = new Set<string>();
+    const updatedProductIds = new Set<string>();
+    const seenProductIds = new Set<string>();
+
+    // WooCommerce variable parents commonly have no price of their own. Collect child
+    // variation prices first so the parent can use its lowest available child price.
+    for (const rawRow of rows) {
+      const normalized = this.normalizeRowKeys(rawRow);
+      const parentSku = this.getField(normalized, 'Parent');
+      if (!parentSku) continue;
+      const sale = this.parseNumericField(this.getField(normalized, 'Sale price'));
+      const regular = this.parseNumericField(this.getField(normalized, 'Regular price'));
+      if (!Number.isFinite(sale) && !Number.isFinite(regular)) continue;
+      variationPrices.set(parentSku, [
+        ...(variationPrices.get(parentSku) || []),
+        { sale, regular },
+      ]);
+    }
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -394,91 +495,163 @@ export class ProductsService {
         const r = this.normalizeRowKeys(row);
         const sku = this.getField(r, 'sku', 'skuCode', 'itemCode', 'productCode');
         const title = this.getField(r, 'title', 'name', 'productTitle', 'productName', 'itemName');
-        const unitPriceStr = this.getField(r, 'unitPrice', 'price', 'sellingPrice', 'unitCost');
-        const unitPrice = unitPriceStr ? this.parseNumericField(unitPriceStr) : 0;
+        const salePriceStr = this.getField(r, 'Sale price');
+        const regularPriceStr = this.getField(r, 'Regular price');
+        const childPrices = variationPrices.get(sku) || [];
+        const childUnitPrice = childPrices
+          .map((price) => Number.isFinite(price.sale) ? price.sale : price.regular)
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b)[0];
+        const unitPriceStr = this.getField(r, 'unitPrice', 'Sale price', 'Regular price', 'price', 'sellingPrice', 'unitCost')
+          || (Number.isFinite(childUnitPrice) ? String(childUnitPrice) : '');
+        const parsedUnitPrice = unitPriceStr ? this.parseNumericField(unitPriceStr) : NaN;
+        const hasUnitPrice = Number.isFinite(parsedUnitPrice) && parsedUnitPrice >= 0;
+        const unitPrice = hasUnitPrice ? parsedUnitPrice : 0;
         const moqStr = this.getField(r, 'moq', 'minQty', 'minimumOrderQuantity');
         const moq = moqStr ? Math.round(this.parseNumericField(moqStr)) : 1;
-        const inventoryQuantityStr = this.getField(r, 'inventoryQuantity', 'stock', 'qty', 'quantity');
-        const inventoryQuantity = inventoryQuantityStr ? Math.round(this.parseNumericField(inventoryQuantityStr)) : 0;
-        const description = this.getField(r, 'description');
-        const status = (this.getField(r, 'status') || 'PUBLISHED').toUpperCase();
-        const vendorName = this.getField(r, 'vendorName');
-        const categoryName = this.getField(r, 'category', 'categoryName');
+        const inventoryQuantityStr = this.getField(r, 'inventoryQuantity', 'Stock', 'qty', 'quantity');
+        const inStock = this.getField(r, 'In stock?');
+        const hasInventoryQuantity = inventoryQuantityStr !== '';
+        const inventoryQuantity = inventoryQuantityStr
+          ? Math.round(this.parseNumericField(inventoryQuantityStr))
+          : ['1', 'true', 'yes'].includes(inStock.toLowerCase()) ? 1 : 0;
+        const description = this.cleanProductDescription(
+          this.getField(r, 'Description'),
+          this.getField(r, 'Short description'),
+        );
+        const explicitStatus = this.getField(r, 'status');
+        const published = this.getField(r, 'Published');
+        const status = explicitStatus
+          ? explicitStatus.toUpperCase()
+          : published ? (['1', 'true', 'yes'].includes(published.toLowerCase()) ? 'PUBLISHED' : 'DRAFT') : 'PUBLISHED';
+        const vendorName = this.getField(r, 'vendorName', 'Brands');
+        const categories = this.getField(r, 'Categories', 'category', 'categoryName');
+        const categoryName = categories.split(',')[0]?.split('>').pop()?.trim() || '';
         const tagsStr = this.getField(r, 'tags');
         const tags = tagsStr ? tagsStr.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
-        const compareAtPriceStr = this.getField(r, 'compareAtPrice');
+        const childRegularPrice = childPrices.map((price) => price.regular).filter(Number.isFinite).sort((a, b) => a - b)[0];
+        const compareAtPriceStr = this.getField(r, 'compareAtPrice')
+          || (salePriceStr ? regularPriceStr : '')
+          || (Number.isFinite(childRegularPrice) ? String(childRegularPrice) : '');
         const compareAtPrice = compareAtPriceStr ? this.parseNumericField(compareAtPriceStr) || null : null;
         const imagesStr = this.getField(r, 'images', 'imageUrls', 'imageUrl', 'image', 'imageLink', 'imageLinks', 'productImage', 'productImages');
         const imageUrlList = imagesStr ? imagesStr.split(',').map((u: string) => u.trim()).filter(Boolean) : [];
+        const backorders = this.getField(r, 'Backorders allowed?').toLowerCase();
+        const allowBackorder = ['1', 'yes', 'true', 'notify'].includes(backorders);
 
-        if (!sku || !title || !unitPrice) {
-          const missing = [!sku && 'sku', !title && 'title', !unitPrice && 'unitPrice'].filter(Boolean).join(', ');
-          results.errors.push(`Row ${i + 2}: Missing required fields (${missing})`);
+        if (!sku && !title) {
+          results.errors.push(`Row ${i + 2}: Missing both product name and SKU, so the row cannot be identified safely`);
           continue;
         }
+        const effectiveTitle = title || sku;
 
         const categoryId = categoryName
           ? await this.resolveCategoryIdByName(categoryName, categoryCache, results.categoriesCreated)
           : '';
 
-        // Check if product with this SKU already exists
-        const existing = await this.prisma.product.findUnique({ where: { sku } });
+        // SKU is the primary key. Imports without SKU still safely match an
+        // existing product by title instead of creating a duplicate.
+        const existing = sku
+          ? productsBySku.get(this.normalizeImportIdentity(sku))
+          : productsByTitle.get(this.normalizeImportIdentity(effectiveTitle));
+        const imageSourceMap: Record<string, string> =
+          existing?.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata)
+            ? ((existing.metadata as any).importedImageSources || {})
+            : {};
         let productId: string;
+        let skippedDuplicate = false;
 
         if (existing) {
-          // Update existing product
-          const updateData: any = {
-            title: title || existing.title,
-            unitPrice: unitPrice || existing.unitPrice,
-            moq: moq > 0 ? moq : existing.moq,
-            inventoryQuantity: inventoryQuantity || existing.inventoryQuantity,
-          };
-          if (description) updateData.description = description;
-          if (['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status)) updateData.status = status;
-          if (vendorName) updateData.vendorName = vendorName;
-          if (categoryId) updateData.categoryId = categoryId;
-          if (tags.length > 0) updateData.tags = tags;
-          if (compareAtPrice) updateData.compareAtPrice = compareAtPrice;
+          if (seenProductIds.has(existing.id)) {
+            results.skippedDuplicates++;
+            continue;
+          }
+          // Keep existing populated fields intact. The import fills gaps and
+          // synchronizes explicit stock values without clobbering catalog data.
+          const updateData: any = {};
+          if (!existing.title && effectiveTitle) updateData.title = effectiveTitle;
+          if ((!existing.unitPrice || Number(existing.unitPrice) <= 0) && hasUnitPrice) updateData.unitPrice = unitPrice;
+          if ((!existing.moq || existing.moq < 1) && moq > 0) updateData.moq = moq;
+          if (hasInventoryQuantity && Number.isFinite(inventoryQuantity)) updateData.inventoryQuantity = inventoryQuantity;
+          if (backorders) updateData.allowBackorder = allowBackorder;
+          if (description && (!existing.description || this.descriptionNeedsCleaning(existing.description))) updateData.description = description;
+          if (existing.status === 'DRAFT' && status === 'PUBLISHED') updateData.status = 'PUBLISHED';
+          if (!existing.vendorName && vendorName) updateData.vendorName = vendorName;
+          if (!existing.categoryId && categoryId) updateData.categoryId = categoryId;
+          if ((!existing.tags || existing.tags.length === 0) && tags.length > 0) updateData.tags = tags;
+          if (!existing.compareAtPrice && compareAtPrice) updateData.compareAtPrice = compareAtPrice;
 
-          await this.prisma.product.update({
-            where: { id: existing.id },
-            data: updateData,
-          });
+          if (Object.keys(updateData).length > 0) {
+            await this.prisma.product.update({ where: { id: existing.id }, data: updateData });
+            updatedProductIds.add(existing.id);
+          } else {
+            results.existingUnchanged++;
+            skippedDuplicate = true;
+          }
           productId = existing.id;
-          results.updated++;
         } else {
           // Create new product — generate handle from title
-          const handle = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
+          const handle = effectiveTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
 
           const newProduct = await this.prisma.product.create({
             data: {
-              title,
+              title: effectiveTitle,
               handle,
-              sku,
+              sku: sku || null,
               unitPrice,
               compareAtPrice,
               moq: moq > 0 ? moq : 1,
               inventoryQuantity: inventoryQuantity || 0,
+              allowBackorder,
               description: description || null,
-              status: (['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status) ? status : 'PUBLISHED') as ProductStatus,
+              // A missing price is safely imported as zero-value draft data, not
+              // accidentally published as a free product.
+              status: (!hasUnitPrice ? 'DRAFT' : ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status) ? status : 'PUBLISHED') as ProductStatus,
               vendorName: vendorName || null,
               categoryId: categoryId || null,
               tags,
+              metadata: { woocommerce: row },
             },
           });
           productId = newProduct.id;
-          results.created++;
+          createdProductIds.add(productId);
+          if (newProduct.sku) productsBySku.set(this.normalizeImportIdentity(newProduct.sku), newProduct);
+          productsByTitle.set(this.normalizeImportIdentity(newProduct.title), newProduct);
         }
+        seenProductIds.add(productId);
 
         // Process images for this product
         const localImageUrls: string[] = [];
+        const rehostedSourceUrls: string[] = [];
 
         // 1) Download image URLs from Excel column
-        for (const url of imageUrlList) {
+        // Existing products with attached images are not downloaded again just
+        // because a source file is re-uploaded. New products and products with
+        // a saved source-to-local map are synchronized normally.
+        const imagesToProcess = !existing || existing.images.length === 0 || Object.keys(imageSourceMap).length > 0
+          ? imageUrlList
+          : [];
+        const imageUrlBatches: string[][] = [];
+        for (let imageIndex = 0; imageIndex < imagesToProcess.length; imageIndex += 5) {
+          imageUrlBatches.push(imagesToProcess.slice(imageIndex, imageIndex + 5));
+        }
+        for (const imageUrlBatch of imageUrlBatches) {
+          const downloadedImages = await Promise.all(imageUrlBatch.map(async (url) => {
+            if (!url.startsWith('http://') && !url.startsWith('https://')) return { url, localUrl: null };
+            if (imageSourceMap[url]) return { url, localUrl: imageSourceMap[url] };
+            let download = imageDownloadCache.get(url);
+            if (!download) {
+              download = this.downloadImageToDisk(url);
+              imageDownloadCache.set(url, download);
+            }
+            return { url, localUrl: await download };
+          }));
+          for (const { url, localUrl } of downloadedImages) {
           if (url.startsWith('http://') || url.startsWith('https://')) {
-            const localUrl = await this.downloadImageToDisk(url);
             if (localUrl) {
               localImageUrls.push(localUrl);
+              rehostedSourceUrls.push(url);
+              imageSourceMap[url] = localUrl;
               results.imagesDownloaded++;
             } else {
               // Re-hosting locally isn't required for the product to have an image —
@@ -490,6 +663,7 @@ export class ProductsService {
             }
           } else if (url.startsWith('/uploads/')) {
             localImageUrls.push(url);
+          }
           }
         }
 
@@ -515,13 +689,23 @@ export class ProductsService {
           results.imagesUploaded++;
         }
 
-        // Attach images to product (max 5)
+        // Attach every usable image referenced by the import.
         if (localImageUrls.length > 0) {
-          const toAdd = localImageUrls.slice(0, 5);
-          if (localImageUrls.length > 5) {
-            results.imageErrors.push(`Row ${i + 2}: Only first 5 images added for SKU ${sku} (${localImageUrls.length} provided)`);
+          await this.addImages(productId, localImageUrls, rehostedSourceUrls);
+          await this.prisma.product.update({
+            where: { id: productId },
+            data: {
+              metadata: {
+                ...((existing?.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata)) ? existing.metadata as object : {}),
+                woocommerce: row,
+                importedImageSources: imageSourceMap,
+              },
+            },
+          });
+          if (skippedDuplicate) {
+            results.existingUnchanged--;
+            updatedProductIds.add(productId);
           }
-          await this.addImages(productId, toAdd);
         }
       } catch (err) {
         results.errors.push(`Row ${i + 2}: ${err.message}`);
@@ -538,6 +722,10 @@ export class ProductsService {
       }
     }
 
+    results.created = createdProductIds.size;
+    results.updated = updatedProductIds.size;
+    results.uniqueProductsAffected = new Set([...createdProductIds, ...updatedProductIds]).size;
+    results.actualUniqueProducts = await this.prisma.product.count();
     return results;
   }
 

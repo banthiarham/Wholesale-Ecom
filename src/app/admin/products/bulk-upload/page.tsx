@@ -7,15 +7,34 @@ import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
 
 interface BulkResult {
+  totalRows?: number
   created: number
   updated: number
   skipped: number
+  skippedDuplicates?: number
+  existingUnchanged?: number
+  uniqueProductsAffected?: number
+  actualUniqueProducts?: number
   categoriesCreated: string[]
   errors: string[]
   imageErrors: string[]
   imagesDownloaded: number
   imagesUploaded: number
 }
+
+const WOO_PRODUCT_HEADERS = [
+  "ID", "Type", "SKU", "GTIN, UPC, EAN, or ISBN", "Name", "Published", "Is featured?",
+  "Visibility in catalog", "Short description", "Description", "Date sale price starts",
+  "Date sale price ends", "Tax status", "Tax class", "In stock?", "Stock", "Low stock amount",
+  "Backorders allowed?", "Sold individually?", "Weight (kg)", "Length (cm)", "Width (cm)",
+  "Height (cm)", "Allow customer reviews?", "Purchase note", "Sale price", "Regular price",
+  "Categories", "Tags", "Shipping class", "Images", "Download limit", "Download expiry days",
+  "Parent", "Grouped products", "Upsells", "Cross-sells", "External URL", "Button text",
+  "Position", "Cost of goods", "Brands", "Blocksy Custom Data", "Blocksy Variation Images",
+  "B2B Users Base Price", "B2B Users Sale Price", "MD Base Price", "MD Sale Price",
+  "COMPUTER DEALER Base Price", "COMPUTER DEALER Sale Price", "Attribute 1 name",
+  "Attribute 1 value(s)", "Attribute 1 visible", "Attribute 1 global", "Attribute 1 default",
+] as const
 
 function skuFromFilename(filename: string): string {
   const name = filename.replace(/\.[^.]+$/, "") // strip extension
@@ -35,18 +54,21 @@ export default function AdminBulkProductUploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const downloadTemplate = () => {
-    const headers = ["sku", "title", "unitPrice", "moq", "inventoryQuantity", "description", "status", "compareAtPrice", "vendorName", "Category Name", "tags", "images"]
-    const exampleRow = ["WEP-NEW001", "New Product Name", "999", "5", "200", "Product description here", "PUBLISHED", "1299", "Vendor Name", "Electronics", "tag1, tag2", "https://example.com/img1.jpg, https://example.com/img2.jpg"]
-    const ws = XLSX.utils.aoa_to_sheet([headers, exampleRow])
-    ws["!cols"] = [
-      { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 8 }, { wch: 18 },
-      { wch: 30 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 36 }, { wch: 20 }, { wch: 50 },
-    ]
+    const example: Record<string, string | number> = {
+      Type: "simple", SKU: "WEP-NEW001", Name: "New Product Name", Published: 1,
+      "In stock?": 1, Stock: 200, Description: "Product description here",
+      "Regular price": 1299, "Sale price": 999, Categories: "Electronics",
+      Tags: "tag1, tag2", Images: "https://example.com/img1.jpg, https://example.com/img2.jpg",
+      Brands: "Vendor Name",
+    }
+    const exampleRow = WOO_PRODUCT_HEADERS.map((header) => example[header] ?? "")
+    const ws = XLSX.utils.aoa_to_sheet([[...WOO_PRODUCT_HEADERS], exampleRow])
+    ws["!cols"] = WOO_PRODUCT_HEADERS.map((header) => ({ wch: Math.min(Math.max(header.length + 3, 14), 36) }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Products")
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" })
     const blob = new Blob([wbout], { type: "application/octet-stream" })
-    saveAs(blob, "bulk_products_template.xlsx")
+    saveAs(blob, "woocommerce_products_template.xlsx")
   }
 
   const handleImageDrop = useCallback((e: React.DragEvent) => {
@@ -73,9 +95,6 @@ export default function AdminBulkProductUploadPage() {
         const nextP = new Map(prevP)
         for (const f of files) {
           const sku = skuFromFilename(f.name)
-          const existing = next.get(sku) || []
-          if (!next.has(sku)) next.set(sku, [])
-          next.get(sku)!.push(f)
           const existingP = nextP.get(sku) || []
           if (!nextP.has(sku)) nextP.set(sku, [])
           nextP.get(sku)!.push(URL.createObjectURL(f))
@@ -162,6 +181,10 @@ export default function AdminBulkProductUploadPage() {
           created: data.created || 0,
           updated: data.updated || 0,
           skipped: data.skipped || 0,
+          skippedDuplicates: data.skippedDuplicates || 0,
+          existingUnchanged: data.existingUnchanged || 0,
+          uniqueProductsAffected: data.uniqueProductsAffected || 0,
+          actualUniqueProducts: data.actualUniqueProducts || 0,
           categoriesCreated: data.categoriesCreated || [],
           errors: data.errors || [],
           imageErrors: data.imageErrors || [],
@@ -169,10 +192,10 @@ export default function AdminBulkProductUploadPage() {
           imagesUploaded: data.imagesUploaded || 0,
         })
       } else {
-        setResult({ created: 0, updated: 0, skipped: 0, categoriesCreated: [], errors: [data.message || "Upload failed"], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
+        setResult({ created: 0, updated: 0, skipped: 0, skippedDuplicates: 0, categoriesCreated: [], errors: [data.message || "Upload failed"], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
       }
     } catch (e) {
-      setResult({ created: 0, updated: 0, skipped: 0, categoriesCreated: [], errors: ["Network error. Please try again."], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
+      setResult({ created: 0, updated: 0, skipped: 0, skippedDuplicates: 0, categoriesCreated: [], errors: ["Network error. Please try again."], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
     }
     setUploading(false)
   }
@@ -186,7 +209,7 @@ export default function AdminBulkProductUploadPage() {
             <FileSpreadsheet size={24} className="text-primary-600 dark:text-primary-400" />
             <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Bulk Product Upload</h1>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Upload Excel to create new products or update existing ones by SKU</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Upload WooCommerce CSV or Excel to create new products or update existing ones by SKU</p>
         </div>
       </div>
 
@@ -227,7 +250,13 @@ export default function AdminBulkProductUploadPage() {
 
       {/* Template Download */}
       <div className="admin-card-static p-5">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Excel Columns Reference</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">WooCommerce Product Headers</h3>
+        <div className="mb-5 flex max-h-40 flex-wrap gap-2 overflow-y-auto rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
+          {WOO_PRODUCT_HEADERS.map((header) => (
+            <span key={header} className="rounded bg-white px-2 py-1 font-mono text-xs text-gray-700 shadow-sm dark:bg-gray-900 dark:text-gray-300">{header}</span>
+          ))}
+        </div>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Key imported field mappings</h4>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -240,18 +269,16 @@ export default function AdminBulkProductUploadPage() {
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
               {[
-                { col: "sku", req: "Yes", desc: "Unique product SKU — used to match existing products", ex: "WEP-001" },
-                { col: "title", req: "Yes", desc: "Product name", ex: "Power Bank 20000mAh" },
-                { col: "unitPrice", req: "Yes", desc: "Selling price", ex: "999" },
-                { col: "moq", req: "No", desc: "Minimum order quantity (default: 1)", ex: "5" },
-                { col: "inventoryQuantity", req: "No", desc: "Current stock (default: 0)", ex: "200" },
-                { col: "description", req: "No", desc: "Product description", ex: "High capacity..." },
-                { col: "status", req: "No", desc: "DRAFT, PUBLISHED, or ARCHIVED (default: PUBLISHED)", ex: "PUBLISHED" },
-                { col: "compareAtPrice", req: "No", desc: "Original/compare price", ex: "1299" },
-                { col: "vendorName", req: "No", desc: "Vendor/supplier name", ex: "ABC Supplies" },
-                { col: "Category Name", req: "No", desc: "Category name — matched case-insensitively; created automatically if it doesn't exist yet", ex: "Electronics" },
-                { col: "tags", req: "No", desc: "Comma-separated tags", ex: "electronics, battery" },
-                { col: "images", req: "No", desc: "Comma-separated image URLs — downloaded and stored automatically", ex: "https://img.host/a.jpg, https://img.host/b.jpg" },
+                { col: "SKU", req: "Yes", desc: "Unique product SKU — used to match existing products", ex: "WEP-001" },
+                { col: "Name", req: "Yes", desc: "Product name", ex: "Power Bank 20000mAh" },
+                { col: "Regular price / Sale price", req: "Yes", desc: "Sale price is used when present; otherwise regular price", ex: "1299 / 999" },
+                { col: "Stock", req: "No", desc: "Current inventory quantity", ex: "200" },
+                { col: "Description", req: "No", desc: "Full description; short description is used as fallback", ex: "High capacity..." },
+                { col: "Published", req: "No", desc: "1 publishes the product; 0 imports it as draft", ex: "1" },
+                { col: "Brands", req: "No", desc: "Stored as vendor/supplier name", ex: "ABC Supplies" },
+                { col: "Categories", req: "No", desc: "First category is matched or created automatically", ex: "Electronics" },
+                { col: "Tags", req: "No", desc: "Comma-separated tags", ex: "electronics, battery" },
+                { col: "Images", req: "No", desc: "Comma-separated image URLs — downloaded and stored automatically", ex: "https://img.host/a.jpg" },
               ].map((r) => (
                 <tr key={r.col} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${r.col === "images" ? "bg-amber-50/50 dark:bg-amber-900/10" : ""}`}>
                   <td className="px-3 py-2 font-mono text-xs font-medium text-gray-900 dark:text-gray-100">{r.col}</td>
@@ -272,10 +299,10 @@ export default function AdminBulkProductUploadPage() {
       <div className="admin-card-static p-6 space-y-5">
         {/* Excel File */}
         <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-8 text-center">
-          <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" id="product-excel-upload" />
+          <input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" id="product-excel-upload" />
           <label htmlFor="product-excel-upload" className="cursor-pointer">
             <Upload size={40} className="text-gray-400 dark:text-gray-500 mx-auto mb-3" />
-            <p className="text-sm text-gray-600 dark:text-gray-400">{file ? file.name : "Click to select Excel file (.xlsx)"}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{file ? file.name : "Click to select WooCommerce CSV or Excel file"}</p>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">SKU column is required — matching SKUs will update existing products</p>
           </label>
         </div>
@@ -358,11 +385,31 @@ export default function AdminBulkProductUploadPage() {
       {result && (
         <div className="admin-card-static p-6">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">Upload Results</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
             <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center">
               <CheckCircle size={20} className="text-green-500 dark:text-green-400 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-green-700 dark:text-green-400">{result.created + result.updated}</p>
-              <p className="text-xs text-green-600 dark:text-green-400">Imported ({result.created} new, {result.updated} updated)</p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-400">{result.uniqueProductsAffected ?? result.created + result.updated}</p>
+              <p className="text-xs text-green-600 dark:text-green-400">Unique Products Affected</p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center">
+              <Package size={20} className="text-blue-500 dark:text-blue-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{result.created}</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400">New Products Created</p>
+            </div>
+            <div className="bg-cyan-50 dark:bg-cyan-900/20 rounded-lg p-4 text-center">
+              <Package size={20} className="text-cyan-500 dark:text-cyan-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400">{result.updated}</p>
+              <p className="text-xs text-cyan-600 dark:text-cyan-400">Existing Products Updated</p>
+            </div>
+            <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-4 text-center">
+              <FileSpreadsheet size={20} className="text-slate-500 dark:text-slate-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-slate-700 dark:text-slate-300">{result.skippedDuplicates || 0}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Duplicate Rows Skipped</p>
+            </div>
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 text-center">
+              <Package size={20} className="text-indigo-500 dark:text-indigo-400 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">{result.actualUniqueProducts ?? "—"}</p>
+              <p className="text-xs text-indigo-600 dark:text-indigo-400">Products in Database</p>
             </div>
             <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 text-center">
               <Package size={20} className="text-purple-500 dark:text-purple-400 mx-auto mb-1" />

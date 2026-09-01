@@ -30,11 +30,9 @@ export class CcavenueService {
    * CCAvenue expects this exact algorithm for the request data.
    */
   encrypt(plainText: string): string {
-    const key = CryptoJS.MD5(this.workingKey).toString();
-    const iv = CryptoJS.lib.WordArray.create(
-      key.split('').map((c) => c.charCodeAt(0)).slice(0, 16),
-    );
-    const encrypted = CryptoJS.AES.encrypt(plainText, CryptoJS.enc.Utf8.parse(key), {
+    const key = CryptoJS.enc.Hex.parse(CryptoJS.MD5(this.workingKey).toString());
+    const iv = this.getInitializationVector();
+    const encrypted = CryptoJS.AES.encrypt(plainText, key, {
       iv,
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.Pkcs7,
@@ -46,11 +44,9 @@ export class CcavenueService {
    * Decrypt CCAvenue response using AES-128-CBC with the working key.
    */
   decrypt(cipherText: string): string {
-    const key = CryptoJS.MD5(this.workingKey).toString();
-    const iv = CryptoJS.lib.WordArray.create(
-      key.split('').map((c) => c.charCodeAt(0)).slice(0, 16),
-    );
-    const decrypted = CryptoJS.AES.decrypt(cipherText, CryptoJS.enc.Utf8.parse(key), {
+    const key = CryptoJS.enc.Hex.parse(CryptoJS.MD5(this.workingKey).toString());
+    const iv = this.getInitializationVector();
+    const decrypted = CryptoJS.AES.decrypt(cipherText, key, {
       iv,
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.Pkcs7,
@@ -85,5 +81,9 @@ export class CcavenueService {
       accessCode: this.accessCode,
       gatewayUrl: this.gatewayUrl,
     };
+  }
+
+  private getInitializationVector(): CryptoJS.lib.WordArray {
+    return CryptoJS.enc.Hex.parse('000102030405060708090a0b0c0d0e0f');
   }
 }

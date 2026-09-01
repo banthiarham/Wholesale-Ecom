@@ -154,6 +154,7 @@ export class PaymentGatewaysService {
     testMode: boolean;
     gatewayUrl: string;
     gatewayId: string;
+    webhookUrl?: string;
   }> {
     const dbRecord = await this.prisma.paymentGateway.findUnique({
       where: { provider },
@@ -168,6 +169,7 @@ export class PaymentGatewaysService {
         testMode: dbRecord.testMode,
         gatewayUrl: dbRecord.gatewayUrl || builtinUrl,
         gatewayId: dbRecord.id,
+        webhookUrl: dbRecord.webhookUrl || undefined,
       };
     }
 
@@ -186,6 +188,7 @@ export class PaymentGatewaysService {
         testMode: true,
         gatewayUrl: this.configService.get('CCAVENUE_GATEWAY_URL', 'https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction'),
         gatewayId: 'env-fallback',
+        webhookUrl: this.configService.get('CCAVENUE_CALLBACK_URL', '') || undefined,
       };
     }
 

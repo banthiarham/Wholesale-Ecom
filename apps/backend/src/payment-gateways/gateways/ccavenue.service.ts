@@ -44,7 +44,8 @@ export class CcavenueGatewayService implements PaymentGatewayProvider {
 
     return {
       redirectUrl: gatewayUrl,
-      formData: { accessCode: credentials.accessCode, encRequest },
+      // CCAvenue's hosted form expects this snake_case field name.
+      formData: { access_code: credentials.accessCode, encRequest },
     };
   }
 
@@ -96,11 +97,9 @@ export class CcavenueGatewayService implements PaymentGatewayProvider {
   }
 
   private encrypt(plainText: string, workingKey: string): string {
-    const key = CryptoJS.MD5(workingKey).toString();
-    const iv = CryptoJS.lib.WordArray.create(
-      key.split('').map((c) => c.charCodeAt(0)).slice(0, 16),
-    );
-    const encrypted = CryptoJS.AES.encrypt(plainText, CryptoJS.enc.Utf8.parse(key), {
+    const key = CryptoJS.enc.Hex.parse(CryptoJS.MD5(workingKey).toString());
+    const iv = this.getInitializationVector();
+    const encrypted = CryptoJS.AES.encrypt(plainText, key, {
       iv,
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.Pkcs7,
@@ -109,11 +108,9 @@ export class CcavenueGatewayService implements PaymentGatewayProvider {
   }
 
   private decrypt(cipherText: string, workingKey: string): string {
-    const key = CryptoJS.MD5(workingKey).toString();
-    const iv = CryptoJS.lib.WordArray.create(
-      key.split('').map((c) => c.charCodeAt(0)).slice(0, 16),
-    );
-    const decrypted = CryptoJS.AES.decrypt(cipherText, CryptoJS.enc.Utf8.parse(key), {
+    const key = CryptoJS.enc.Hex.parse(CryptoJS.MD5(workingKey).toString());
+    const iv = this.getInitializationVector();
+    const decrypted = CryptoJS.AES.decrypt(cipherText, key, {
       iv,
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.Pkcs7,
@@ -134,5 +131,14 @@ export class CcavenueGatewayService implements PaymentGatewayProvider {
       if (key) result[key] = decodeURIComponent(value || '');
     }
     return result;
+  }
+
+  /**
+   * CCAvenue's AES-128-CBC kit specifies the literal byte sequence 00..0f as
+   * the IV. CryptoJS WordArrays contain 32-bit words, so constructing one from
+   * character codes produces a different IV and unreadable CCAvenue payloads.
+   */
+  private getInitializationVector(): CryptoJS.lib.WordArray {
+    return CryptoJS.enc.Hex.parse('000102030405060708090a0b0c0d0e0f');
   }
 }

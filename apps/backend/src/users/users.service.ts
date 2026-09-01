@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../prisma/prisma.service';
 import { User, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as XLSX from 'xlsx';
@@ -74,20 +75,32 @@ export class UsersService {
     let created = 0;
     let skipped = 0;
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const coreRoles = Object.values(UserRole) as string[];
-    const validStatuses = Object.values(UserStatus) as string[];
     const roles = await this.prisma.role.findMany();
     const seenEmails = new Set<string>();
+    const buyerRole = roles.find((role) => role.name === UserRole.BUYER);
 
     for (const [index, raw] of rows.entries()) {
       const rowNumber = index + 2;
-      const get = (key: string) => String(raw[key] ?? raw[key.toLowerCase()] ?? '').trim();
-      const email = get('email').toLowerCase();
-      const firstName = get('firstName') || get('firstname');
-      const lastName = get('lastName') || get('lastname');
-      const password = get('password');
-      const requestedRole = (get('role') || 'BUYER').toUpperCase();
-      const status = (get('status') || 'ACTIVE').toUpperCase();
+      const normalized = new Map(
+        Object.entries(raw).map(([key, value]) => [key.toLowerCase().replace(/[^a-z0-9]/g, ''), value]),
+      );
+      const get = (key: string) => String(normalized.get(key.toLowerCase().replace(/[^a-z0-9]/g, '')) ?? '').trim();
+      const email = (get('Email') || (emailPattern.test(get('Username')) ? get('Username') : '')).toLowerCase();
+      const fullName = get('Name');
+      const nameParts = fullName.split(/\s+/).filter(Boolean);
+      const firstName = nameParts.shift() || '';
+      const lastName = nameParts.join(' ');
+      const city = get('City');
+      const region = get('Region');
+      const postalCode = get('Postal Code');
+      const country = get('Country / Region');
+      const signUp = get('Sign Up');
+      const lastActive = get('Last Active');
+      const parseDate = (value: string): Date | undefined => {
+        if (!value) return undefined;
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? undefined : date;
+      };
 
       if (!email || !emailPattern.test(email)) {
         errors.push(`Row ${rowNumber}: valid email is required`); skipped++; continue;
@@ -96,21 +109,8 @@ export class UsersService {
         errors.push(`Row ${rowNumber}: duplicate email in file (${email})`); skipped++; continue;
       }
       seenEmails.add(email);
-      if (!firstName || !lastName) {
-        errors.push(`Row ${rowNumber}: firstName and lastName are required`); skipped++; continue;
-      }
-      if (password.length < 6) {
-        errors.push(`Row ${rowNumber}: password must be at least 6 characters`); skipped++; continue;
-      }
-      if (!validStatuses.includes(status)) {
-        errors.push(`Row ${rowNumber}: invalid status "${status}"`); skipped++; continue;
-      }
-
-      const roleRecord = roles.find((role) =>
-        role.name.toUpperCase() === requestedRole || role.label.toUpperCase() === requestedRole,
-      );
-      if (!roleRecord && !coreRoles.includes(requestedRole)) {
-        errors.push(`Row ${rowNumber}: invalid role "${requestedRole}"`); skipped++; continue;
+      if (!firstName) {
+        errors.push(`Row ${rowNumber}: Name is required`); skipped++; continue;
       }
 
       const exists = await this.prisma.user.findUnique({ where: { email }, select: { id: true } });
@@ -118,25 +118,25 @@ export class UsersService {
         errors.push(`Row ${rowNumber}: email already exists (${email})`); skipped++; continue;
       }
 
-      const enumRole = roleRecord && coreRoles.includes(roleRecord.name)
-        ? roleRecord.name as UserRole
-        : coreRoles.includes(requestedRole) ? requestedRole as UserRole : UserRole.BUYER;
-
       try {
         await this.prisma.user.create({
           data: {
             email,
             firstName,
             lastName,
-            password: await bcrypt.hash(password, 10),
-            phone: get('phone') || null,
-            role: enumRole,
-            roleId: roleRecord?.id || null,
-            status: status as UserStatus,
+            // WooCommerce exports do not contain passwords. Generate an unknowable
+            // credential; imported customers can use the existing Forgot Password flow.
+            password: await bcrypt.hash(crypto.randomBytes(24).toString('base64url'), 10),
+            role: UserRole.BUYER,
+            roleId: buyerRole?.id || null,
+            status: UserStatus.ACTIVE,
             emailVerified: true,
-            companyName: get('companyName') || get('companyname') || null,
-            companyAddress: get('companyAddress') || get('companyaddress') || null,
-            taxId: get('taxId') || get('taxid') || null,
+            city: city || null,
+            state: region || null,
+            pincode: postalCode || null,
+            companyAddress: [city, region, postalCode, country].filter(Boolean).join(', ') || null,
+            createdAt: parseDate(signUp),
+            lastLoginAt: parseDate(lastActive),
           },
         });
         created++;

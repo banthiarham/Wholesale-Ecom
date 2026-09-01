@@ -185,11 +185,13 @@ export class PaymentsController {
   async initiateCcavenue(
     @Param('orderId') orderId: string,
     @Query('returnUrl') returnUrl?: string,
+    @CurrentUser() user?: any,
   ) {
     const defaultReturnUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/orders/${orderId}`;
     const result = await this.paymentsService.initiateCcavenue(
       orderId,
       returnUrl || defaultReturnUrl,
+      user,
     );
     return result;
   }

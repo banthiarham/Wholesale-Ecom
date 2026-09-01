@@ -7,12 +7,18 @@ import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
 
 interface PreviewRow {
-  email?: string
-  firstName?: string
-  lastName?: string
-  role?: string
-  status?: string
-  companyName?: string
+  Name?: string
+  Username?: string
+  "Last Active"?: string
+  "Sign Up"?: string
+  Email?: string
+  Orders?: number | string
+  "Total Spend"?: number | string
+  AOV?: number | string
+  "Country / Region"?: string
+  City?: string
+  Region?: string
+  "Postal Code"?: string
 }
 
 interface ImportResult {
@@ -30,8 +36,8 @@ export default function BulkUserUploadPage() {
   const [result, setResult] = useState<ImportResult | null>(null)
 
   const downloadTemplate = () => {
-    const headers = ["email", "firstName", "lastName", "password", "phone", "role", "status", "companyName", "companyAddress", "taxId"]
-    const sample = ["buyer@example.com", "Amit", "Sharma", "ChangeMe123", "+919876543210", "BUYER", "ACTIVE", "Amit Electronics", "Delhi, India", "GSTIN12345"]
+    const headers = ["Name", "Username", "Last Active", "Sign Up", "Email", "Orders", "Total Spend", "AOV", "Country / Region", "City", "Region", "Postal Code"]
+    const sample = ["Amit Sharma", "amit.sharma", "2026-08-17T08:13:10", "2026-08-17T13:43:08", "buyer@example.com", 0, 0, 0, "IN", "Delhi", "DL", "110001"]
     const sheet = XLSX.utils.aoa_to_sheet([headers, sample])
     sheet["!cols"] = headers.map((header) => ({ wch: Math.max(header.length + 3, 18) }))
     const workbook = XLSX.utils.book_new()
@@ -101,17 +107,17 @@ export default function BulkUserUploadPage() {
 
       <div className="grid gap-4 rounded-xl border border-blue-100 bg-blue-50 p-5 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 md:grid-cols-3">
         <div><strong>1. Download template</strong><p className="mt-1 text-xs opacity-80">Keep the column headings unchanged.</p></div>
-        <div><strong>2. Add user details</strong><p className="mt-1 text-xs opacity-80">Email, firstName, lastName, and password are required.</p></div>
+        <div><strong>2. Add customer details</strong><p className="mt-1 text-xs opacity-80">Name and Email are required. Keep the reference headers unchanged.</p></div>
         <div><strong>3. Review and import</strong><p className="mt-1 text-xs opacity-80">Invalid and duplicate rows are reported without stopping valid rows.</p></div>
       </div>
 
       <div className="admin-card-static p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="font-semibold text-gray-900 dark:text-gray-100">User import template</h2><p className="text-sm text-gray-500 dark:text-gray-400">Roles may be core roles or dynamic role names configured in Admin.</p></div>
+          <div><h2 className="font-semibold text-gray-900 dark:text-gray-100">Customer import template</h2><p className="text-sm text-gray-500 dark:text-gray-400">Matches the WooCommerce customer report export format.</p></div>
           <button onClick={downloadTemplate} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"><Download size={16} /> Download Excel Template</button>
         </div>
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
-          {['email*','firstName*','lastName*','password*','phone','role','status','companyName','companyAddress','taxId'].map((column) => <span key={column} className="rounded bg-gray-100 px-2 py-1 font-mono text-gray-700 dark:bg-gray-800 dark:text-gray-300">{column}</span>)}
+          {['Name*','Username','Last Active','Sign Up','Email*','Orders','Total Spend','AOV','Country / Region','City','Region','Postal Code'].map((column) => <span key={column} className="rounded bg-gray-100 px-2 py-1 font-mono text-gray-700 dark:bg-gray-800 dark:text-gray-300">{column}</span>)}
         </div>
       </div>
 
@@ -122,7 +128,7 @@ export default function BulkUserUploadPage() {
         </div>
         {fileError && <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400"><AlertTriangle size={16} />{fileError}</div>}
 
-        {preview.length > 0 && <div><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Preview</h3><span className="text-xs text-gray-500">{rowCount} rows detected</span></div><div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700"><table className="w-full text-sm"><thead className="bg-gray-50 dark:bg-gray-800"><tr>{['Email','First name','Last name','Role','Status','Company'].map((heading) => <th key={heading} className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300">{heading}</th>)}</tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-800">{preview.map((row, index) => <tr key={index}><td className="px-3 py-2">{row.email}</td><td className="px-3 py-2">{row.firstName}</td><td className="px-3 py-2">{row.lastName}</td><td className="px-3 py-2">{row.role || 'BUYER'}</td><td className="px-3 py-2">{row.status || 'ACTIVE'}</td><td className="px-3 py-2">{row.companyName}</td></tr>)}</tbody></table></div>{rowCount > 10 && <p className="mt-2 text-xs text-gray-400">Showing the first 10 rows.</p>}</div>}
+        {preview.length > 0 && <div><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Preview</h3><span className="text-xs text-gray-500">{rowCount} rows detected</span></div><div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700"><table className="w-full text-sm"><thead className="bg-gray-50 dark:bg-gray-800"><tr>{['Name','Username','Last Active','Sign Up','Email','Orders','Total Spend','AOV','Country / Region','City','Region','Postal Code'].map((heading) => <th key={heading} className="whitespace-nowrap px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300">{heading}</th>)}</tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-800">{preview.map((row, index) => <tr key={index}><td className="whitespace-nowrap px-3 py-2">{row.Name}</td><td className="whitespace-nowrap px-3 py-2">{row.Username}</td><td className="whitespace-nowrap px-3 py-2">{row["Last Active"]}</td><td className="whitespace-nowrap px-3 py-2">{row["Sign Up"]}</td><td className="whitespace-nowrap px-3 py-2">{row.Email}</td><td className="px-3 py-2">{row.Orders}</td><td className="px-3 py-2">{row["Total Spend"]}</td><td className="px-3 py-2">{row.AOV}</td><td className="px-3 py-2">{row["Country / Region"]}</td><td className="px-3 py-2">{row.City}</td><td className="px-3 py-2">{row.Region}</td><td className="px-3 py-2">{row["Postal Code"]}</td></tr>)}</tbody></table></div>{rowCount > 10 && <p className="mt-2 text-xs text-gray-400">Showing the first 10 rows.</p>}</div>}
 
         <button onClick={upload} disabled={!file || uploading} className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"><Upload size={16} />{uploading ? "Importing users..." : `Import ${rowCount || ''} Users`}</button>
       </div>
