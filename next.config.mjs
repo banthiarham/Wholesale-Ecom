@@ -1,14 +1,16 @@
 /** @type {import('next').NextConfig} */
+const apiOrigin = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+
 const nextConfig = {
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:3000/api/v1/:path*",
+        destination: `${apiOrigin}/api/v1/:path*`,
       },
       {
         source: "/uploads/:path*",
-        destination: "http://localhost:3000/uploads/:path*",
+        destination: `${apiOrigin}/uploads/:path*`,
       },
     ]
   },
