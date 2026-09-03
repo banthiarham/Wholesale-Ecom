@@ -27,7 +27,22 @@ import { NotificationsModule } from '../notifications/notifications.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy, GoogleStrategy],
+  providers: [
+    AuthService,
+    LocalStrategy,
+    JwtStrategy,
+    // passport-google-oauth20 throws at construction without a clientID, which
+    // would stop the whole API from booting on deployments that don't use
+    // Google sign-in. Only register the strategy when it is configured.
+    {
+      provide: GoogleStrategy,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        configService.get<string>('GOOGLE_CLIENT_ID')
+          ? new GoogleStrategy(configService)
+          : null,
+    },
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}
