@@ -76,12 +76,20 @@ async function bootstrap() {
     .setVersion('1.0')
     .addBearerAuth()
     .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger documents every route, including admin ones, and is unauthenticated.
+  // That is useful while developing but is not something to publish from a live
+  // storefront, so it is served everywhere except production.
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
   console.log(`Application is running on: http://localhost:${port}/api/v1`);
-  console.log(`Swagger docs: http://localhost:${port}/api/docs`);
+  if (!isProduction) {
+    console.log(`Swagger docs: http://localhost:${port}/api/docs`);
+  }
 }
 bootstrap();

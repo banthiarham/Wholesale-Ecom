@@ -1,0 +1,21 @@
+# Caddy obtains and renews Let's Encrypt certificates automatically for both
+# names, so nothing here needs a certificate path. Both domains must already
+# resolve to this server before the first start, or issuance fails.
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:3001
+}
+
+# The API is a separate hostname rather than a path on the site: next.config.mjs
+# rewrites /api/* to NEXT_PUBLIC_API_URL, so pointing that at the site itself
+# would make the rewrite match its own output and loop.
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Product images and bulk-import uploads are immutable once written.
+	@uploads path /uploads/*
+	header @uploads Cache-Control "public, max-age=31536000, immutable"
+
+	reverse_proxy backend:3000
+}
