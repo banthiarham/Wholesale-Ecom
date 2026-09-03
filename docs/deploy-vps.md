@@ -185,6 +185,11 @@ git pull
 docker compose up -d --build
 ```
 
+If `Caddyfile` changed, also run `docker compose up -d --force-recreate caddy`.
+It is bind-mounted as a single file, and `git pull` replaces the file rather
+than editing it in place, so the running container keeps seeing the old copy
+until it is recreated — `caddy reload` alone is not enough.
+
 Rebuilding the frontend is CPU-intensive for a few minutes. If that proves a
 problem on this server, move image builds to GitHub Actions and have the server
 pull prebuilt images instead of building locally.
