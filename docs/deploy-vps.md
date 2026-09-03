@@ -4,9 +4,13 @@ The whole stack runs on one server as four containers:
 
 ```text
 Caddy (:80/:443)
-  ├── example.com      -> frontend  (Next.js, :3001)
-  └── api.example.com  -> backend   (NestJS, :3000) -> postgres (:5432, internal)
+  ├── /api/v1/*, /uploads/*  -> backend   (NestJS, :3000) -> postgres (:5432, internal)
+  └── everything else        -> frontend  (Next.js, :3001)
 ```
+
+The API shares the site's origin. Caddy sends the API paths straight to the
+backend so they never reach Next.js, whose own `/api/*` rewrite targets that
+same origin and would otherwise loop.
 
 Only Caddy publishes ports. Postgres is reachable only from inside the Docker
 network — it is never exposed to the internet.
@@ -51,13 +55,18 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ## 2. DNS
 
-Point both names at the server's IP **before** the first start — Caddy requests
-certificates on startup and fails if the names do not resolve yet.
+Point the site name at the server's IP **before** the first start — Caddy
+requests a certificate on startup and fails if the name does not resolve yet.
 
 | Record | Type | Value |
 | --- | --- | --- |
 | `example.com` | A | server IP |
-| `api.example.com` | A | server IP |
+| `www.example.com` | A | server IP (optional) |
+
+To run before DNS exists, set `SITE_ADDRESS=http://<server-ip>` and
+`SITE_URL=http://<server-ip>` in `.env` instead. Caddy then serves plain HTTP
+on the IP. Switching to the domain later is a `.env` change plus a frontend
+rebuild (the site URL is compiled into the frontend bundle).
 
 Cloudflare's free tier is worth putting in front for CDN caching of images and
 static assets, plus DDoS protection. If you use it, set the records to **DNS
@@ -165,7 +174,7 @@ gunzip -c backups/db-YYYY-MM-DD.sql.gz \
 ## 6. Monitoring
 
 Point UptimeRobot or Better Stack (both free) at `https://example.com` and
-`https://api.example.com/api/v1`, alerting by email or SMS.
+`https://example.com/api/v1`, alerting by email or SMS.
 
 Container logs are capped at 3 × 10 MB per service, so they cannot fill the disk.
 
@@ -190,7 +199,7 @@ pull prebuilt images instead of building locally.
    and confirm it still renders — this proves the uploads volume works.
 6. Upload a banner and a bulk-order attachment (these exercise the two upload
    paths that depend on the directories pre-created in the backend image).
-7. `curl https://api.example.com/api/docs` returns 404 — Swagger is disabled in
+7. `curl https://example.com/api/docs` returns 404 — Swagger is disabled in
    production.
 8. `nmap -p 5432 <server-ip>` shows the port closed.
 9. Run `~/backup.sh`, then restore the dump into a scratch database and compare
