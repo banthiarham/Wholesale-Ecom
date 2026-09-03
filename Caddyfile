@@ -7,6 +7,10 @@
 	reverse_proxy frontend:3001
 }
 
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
+
 # The API is a separate hostname rather than a path on the site: next.config.mjs
 # rewrites /api/* to NEXT_PUBLIC_API_URL, so pointing that at the site itself
 # would make the rewrite match its own output and loop.
