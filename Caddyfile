@@ -8,7 +8,8 @@
 	# The API shares the site's origin. These paths go straight to the backend
 	# so they never reach Next.js — whose own /api/* rewrite targets this same
 	# origin and would otherwise loop.
-	handle /api/v1/* {
+	@api path /api/v1 /api/v1/*
+	handle @api {
 		reverse_proxy backend:3000
 	}
 
