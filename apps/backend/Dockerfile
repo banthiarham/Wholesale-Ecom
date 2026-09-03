@@ -2,6 +2,14 @@ FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
 
+# Prisma's query/schema engines link against libssl and pick which build to
+# download by probing the openssl binary. The slim image ships neither, so
+# without this Prisma falls back to an openssl-1.1 engine that cannot load on
+# bookworm and migrate deploy fails at startup.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 RUN npm ci
 
@@ -16,6 +24,11 @@ FROM node:20-bookworm-slim AS production
 
 ENV NODE_ENV=production
 WORKDIR /app
+
+# Same reason as the build stage: the runtime engine needs libssl too.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 RUN npm ci --omit=dev
