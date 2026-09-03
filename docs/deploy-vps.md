@@ -96,11 +96,24 @@ Run only the reference seeds. **Never run `prisma/seed.ts` against production** 
 it deletes existing users, products, categories and banners before recreating
 demo data.
 
+The seeds are TypeScript and `ts-node` is a dev dependency, so they cannot run
+inside the production image. Run them from a development checkout, tunnelling
+to the server's Postgres (which is not published on any host port — forward to
+the container's address on the Docker network instead):
+
 ```bash
-docker compose exec backend npx ts-node prisma/seed-roles.ts
-docker compose exec backend npx ts-node prisma/seed-settings.ts
-docker compose exec backend npx ts-node prisma/seed-delivery-partners.ts
+# On the server: find the Postgres container address
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' wholesale-ecom-postgres-1
+
+# Locally, from apps/backend
+ssh -N -L 15432:<container-ip>:5432 deploy@<server> &
+export DATABASE_URL="postgresql://wholesalex:<POSTGRES_PASSWORD>@127.0.0.1:15432/wholesalex?schema=public"
+npx ts-node prisma/seed-roles.ts
+npx ts-node prisma/seed-settings.ts
+npx ts-node prisma/seed-delivery-partners.ts
 ```
+
+All three are upserts and safe to re-run.
 
 Real catalog data goes in through the admin UI. To move an existing local
 catalog instead, see *Restoring* below and `rsync` the uploads alongside it —
