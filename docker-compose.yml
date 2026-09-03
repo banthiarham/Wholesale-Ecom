@@ -1,0 +1,104 @@
+# Production stack for a single VPS. Values come from a .env file sitting next
+# to this one — copy .env.production.example to .env on the server and fill it in.
+#
+# Only Caddy publishes ports; Postgres and both apps stay on the internal
+# network and are reachable from the outside only through the proxy.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./apps/backend
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
+      FRONTEND_URL: ${SITE_URL}
+      ADMIN_URL: ${SITE_URL}
+      PUBLIC_API_URL: ${API_PUBLIC_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${API_PUBLIC_URL}/api/v1/auth/google/callback
+      SMTP_CREDENTIALS_KEY: ${SMTP_CREDENTIALS_KEY}
+      GATEWAY_CREDENTIALS_KEY: ${GATEWAY_CREDENTIALS_KEY}
+    volumes:
+      # Product/banner/settings images and bulk-order attachments are written to
+      # disk by the API, so they must outlive the container.
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: .
+      args:
+        # Inlined into the client bundle at build time — see Dockerfile.
+        NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL}
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL}
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
+        NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: ${NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION:-}
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Server-side fetches (e.g. the packages page) stay inside the Docker
+      # network rather than hairpinning back out through the proxy.
+      API_URL: http://backend:3000
+      NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL}
+      NEXT_PUBLIC_SITE_URL: ${SITE_URL}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persisting these keeps Let's Encrypt certificates across restarts, which
+      # matters because the ACME issuance rate limit is low.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:
