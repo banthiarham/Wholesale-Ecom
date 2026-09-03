@@ -1,52 +1,51 @@
--- AlterEnum
-BEGIN;
-CREATE TYPE "BulkOrderStatus_new" AS ENUM ('NEW', 'CONTACTED', 'QUOTATION_SENT', 'NEGOTIATION', 'CONFIRMED', 'CANCELLED');
-ALTER TABLE "BulkOrder" ALTER COLUMN "status" DROP DEFAULT;
-ALTER TABLE "BulkOrder" ALTER COLUMN "status" TYPE "BulkOrderStatus_new" USING ("status"::text::"BulkOrderStatus_new");
-ALTER TYPE "BulkOrderStatus" RENAME TO "BulkOrderStatus_old";
-ALTER TYPE "BulkOrderStatus_new" RENAME TO "BulkOrderStatus";
-DROP TYPE "BulkOrderStatus_old";
-ALTER TABLE "BulkOrder" ALTER COLUMN "status" SET DEFAULT 'NEW';
-COMMIT;
+-- The BulkOrder table, BulkOrderItem table and BulkOrderStatus enum were never
+-- created by a migration; they existed in the development database only via
+-- `prisma db push`. The original version of this migration ALTERed them into
+-- the redesigned shape, which fails on any database built from the migration
+-- history alone. It has been rewritten to create BulkOrder directly in the
+-- shape the schema defines, so a fresh database ends up identical to one that
+-- followed the db-push history.
 
--- DropForeignKey
-ALTER TABLE "BulkOrder" DROP CONSTRAINT "BulkOrder_orderId_fkey";
+-- CreateEnum
+CREATE TYPE "BulkOrderStatus" AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
 
--- DropForeignKey
-ALTER TABLE "BulkOrder" DROP CONSTRAINT "BulkOrder_userId_fkey";
+-- CreateTable
+CREATE TABLE "BulkOrder" (
+    "id" TEXT NOT NULL,
+    "bulkOrderNumber" TEXT NOT NULL,
+    "userId" TEXT,
+    "status" "BulkOrderStatus" NOT NULL DEFAULT 'PENDING',
+    "adminComment" TEXT,
+    "companyName" TEXT NOT NULL,
+    "contactPerson" TEXT NOT NULL,
+    "mobileNumber" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "gstNumber" TEXT,
+    "businessAddress" TEXT NOT NULL,
+    "productId" TEXT,
+    "products" TEXT NOT NULL,
+    "quantity" TEXT NOT NULL,
+    "budget" TEXT NOT NULL,
+    "expectedDeliveryDate" TIMESTAMP(3) NOT NULL,
+    "message" TEXT NOT NULL,
+    "attachmentUrl" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
--- DropForeignKey
-ALTER TABLE "BulkOrderItem" DROP CONSTRAINT "BulkOrderItem_bulkOrderId_fkey";
+    CONSTRAINT "BulkOrder_pkey" PRIMARY KEY ("id")
+);
 
--- DropForeignKey
-ALTER TABLE "BulkOrderItem" DROP CONSTRAINT "BulkOrderItem_productId_fkey";
+-- CreateIndex
+CREATE UNIQUE INDEX "BulkOrder_bulkOrderNumber_key" ON "BulkOrder"("bulkOrderNumber");
 
--- DropIndex
-DROP INDEX "BulkOrder_orderId_key";
+-- CreateIndex
+CREATE INDEX "BulkOrder_userId_idx" ON "BulkOrder"("userId");
 
--- AlterTable
-ALTER TABLE "BulkOrder" DROP COLUMN "notes",
-DROP COLUMN "orderId",
-DROP COLUMN "shippingAddress",
-DROP COLUMN "totalAmount",
-ADD COLUMN     "attachmentUrl" TEXT,
-ADD COLUMN     "budget" TEXT NOT NULL,
-ADD COLUMN     "businessAddress" TEXT NOT NULL,
-ADD COLUMN     "companyName" TEXT NOT NULL,
-ADD COLUMN     "contactPerson" TEXT NOT NULL,
-ADD COLUMN     "email" TEXT NOT NULL,
-ADD COLUMN     "expectedDeliveryDate" TIMESTAMP(3) NOT NULL,
-ADD COLUMN     "gstNumber" TEXT,
-ADD COLUMN     "message" TEXT NOT NULL,
-ADD COLUMN     "mobileNumber" TEXT NOT NULL,
-ADD COLUMN     "productId" TEXT,
-ADD COLUMN     "products" TEXT NOT NULL,
-ADD COLUMN     "quantity" TEXT NOT NULL,
-ALTER COLUMN "userId" DROP NOT NULL,
-ALTER COLUMN "status" SET DEFAULT 'NEW';
+-- CreateIndex
+CREATE INDEX "BulkOrder_status_idx" ON "BulkOrder"("status");
 
--- DropTable
-DROP TABLE "BulkOrderItem";
+-- CreateIndex
+CREATE INDEX "BulkOrder_bulkOrderNumber_idx" ON "BulkOrder"("bulkOrderNumber");
 
 -- AddForeignKey
 ALTER TABLE "BulkOrder" ADD CONSTRAINT "BulkOrder_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
