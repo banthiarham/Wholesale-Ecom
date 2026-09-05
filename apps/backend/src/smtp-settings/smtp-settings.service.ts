@@ -7,6 +7,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpsertSmtpSettingsDto } from './dto/upsert-smtp-settings.dto';
 import { TestSmtpSettingsDto } from './dto/test-smtp-settings.dto';
 
+/**
+ * Google (and some other providers) display app passwords as "xxxx xxxx xxxx
+ * xxxx" for readability, but the real credential has no spaces — the SMTP
+ * server compares it byte-for-byte, so a pasted display-formatted secret
+ * authenticates as an entirely different, invalid password. Stripping all
+ * whitespace here, at the single point every stored or freshly-typed password
+ * passes through before use, fixes both already-saved bad values and any
+ * future paste without needing the admin to notice and re-enter anything.
+ */
+function stripPasswordWhitespace(value: string): string {
+  return value.replace(/\s/g, '');
+}
+
 export interface DecryptedSmtpConfig {
   host: string;
   port: number;
@@ -42,7 +55,7 @@ export class SmtpSettingsService {
       const bytes = CryptoJS.AES.decrypt(value, this.encryptionKey);
       const plain = bytes.toString(CryptoJS.enc.Utf8);
       if (!plain) throw new Error('empty');
-      return plain;
+      return stripPasswordWhitespace(plain);
     } catch {
       throw new BadRequestException('Failed to decrypt SMTP password. Check SMTP_CREDENTIALS_KEY.');
     }
@@ -115,7 +128,7 @@ export class SmtpSettingsService {
    * the field blank to reuse whatever is already stored.
    */
   private async resolveTestPassword(providedPassword?: string): Promise<string> {
-    if (providedPassword && providedPassword.trim()) return providedPassword.trim();
+    if (providedPassword && providedPassword.trim()) return stripPasswordWhitespace(providedPassword);
     const existing = await this.getRow();
     if (existing?.passwordEncrypted) return this.decrypt(existing.passwordEncrypted);
     throw new BadRequestException('SMTP password is required to send a test email');
