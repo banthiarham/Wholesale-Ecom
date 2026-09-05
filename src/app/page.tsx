@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import { ArrowRight, Zap, Clock } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
-import { useCategories } from "@/lib/categories/CategoriesProvider"
 import { getCartSessionId } from "@/lib/utils"
 import { SeasonalDiscount, fetchSeasonalDiscounts, getProductDiscount } from "@/lib/pricing"
 import { useAuth } from "@/lib/auth"
@@ -15,7 +14,6 @@ import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
 import { ProductCard } from "@/components/ui/ProductCard"
 import { ProductCarousel } from "@/components/ui/ProductCarousel"
-import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 
 // Home section components
 import AnnouncementBar from "@/components/home/AnnouncementBar"
@@ -155,7 +153,6 @@ export default function Home() {
   const siteName = useSetting("siteName", "WholesaleX Pro")
 
   const [products, setProducts] = useState<Product[]>([])
-  const { categories } = useCategories()
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
   const [homeSections, setHomeSections] = useState<HomeSection[]>([])
   const [sectionsLoaded, setSectionsLoaded] = useState(false)
@@ -270,57 +267,6 @@ export default function Home() {
 
             {/* ── Hero Banner Carousel (or fallback hero) ── */}
             <HeroBannerCarousel />
-            {!sectionsLoaded ? (
-              <section className="section-padding-tight">
-                <div className="section-container">
-                  <ProductGridSkeleton count={8} />
-                </div>
-              </section>
-            ) : (
-              <DefaultHeroFallback
-                products={products}
-                visibleProducts={visibleProducts}
-                discounts={discounts}
-                hiddenPriceProductIds={hiddenPriceProductIds}
-                nonPurchasableProducts={nonPurchasableProducts}
-                ruleDiscountMap={ruleDiscountMap}
-                bogoMap={bogoMap}
-                qtyDiscountMap={qtyDiscountMap}
-                rolePricingMap={rolePricingMap}
-                customBadges={customBadges}
-                addingId={addingId}
-                handleAddToCart={handleAddToCart}
-              />
-            )}
-
-            {/* ── Deals of the Day ── */}
-            {sectionsLoaded && (
-              <DealsOfTheDaySection
-                products={visibleProducts}
-                discounts={discounts}
-                hiddenPriceProductIds={hiddenPriceProductIds}
-                nonPurchasableProducts={nonPurchasableProducts}
-                ruleDiscountMap={ruleDiscountMap}
-                bogoMap={bogoMap}
-                qtyDiscountMap={qtyDiscountMap}
-                rolePricingMap={rolePricingMap}
-                customBadges={customBadges}
-                addingId={addingId}
-                handleAddToCart={handleAddToCart}
-              />
-            )}
-
-            {/* ── Top Selling per category ── */}
-            {categories.map((cat) => (
-              <TopSellingSection
-                key={cat.id}
-                sectionId={`default-${cat.id}`}
-                title={`Top Selling ${cat.name}`}
-                categoryId={cat.id}
-                categoryHandle={cat.handle}
-                limit={8}
-              />
-            ))}
 
             {/* ── Shop by Category ── */}
             <ShopByCategoryGrid />
@@ -364,191 +310,4 @@ function HomepageTopSelling({ products, discounts, hiddenPriceProductIds, nonPur
     <div className="section-header pr-24"><div><h2 className="heading-lg">Top Selling Products</h2><p className="body-sm mt-1.5">High-demand products trusted by businesses nationwide.</p></div><Link href="/products" className="hidden items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 lg:inline-flex">View All Products <ArrowRight size={16}/></Link></div>
     <ProductCarousel items={products.slice(0,12).map(product=><ProductCard key={product.id} product={{...product,thumbnail:product.thumbnail||product.images?.[0]||null}} view="grid" isPriceHidden={hiddenPriceProductIds.has(product.id)} isNonPurchasable={nonPurchasableProducts.has(product.id)} nonPurchasableMsg={nonPurchasableProducts.get(product.id)||""} rolePricing={rolePricingMap[product.id]} ruleDiscount={ruleDiscountMap.get(product.id)} bogo={bogoMap.get(product.id)} quantityDiscount={qtyDiscountMap.get(product.id)} customBadges={customBadges} seasonalDiscount={getProductDiscount(discounts,product.id,product.categoryId)} isAdding={addingId===product.id} onAddToCart={handleAddToCart}/>)}/>
   </div></section>
-}
-
-/* ------------------------------------------------------------------ */
-/*  Default Hero Fallback                                              */
-/*  Shown only when no hero banners exist in the carousel             */
-/* ------------------------------------------------------------------ */
-
-function DefaultHeroFallback({
-  products,
-  visibleProducts,
-  discounts,
-  hiddenPriceProductIds,
-  nonPurchasableProducts,
-  ruleDiscountMap,
-  bogoMap,
-  qtyDiscountMap,
-  rolePricingMap,
-  customBadges,
-  addingId,
-  handleAddToCart,
-}: {
-  products: Product[]
-  visibleProducts: Product[]
-  discounts: SeasonalDiscount[]
-  hiddenPriceProductIds: Set<string>
-  nonPurchasableProducts: Map<string, string>
-  ruleDiscountMap: Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>
-  bogoMap: Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>
-  qtyDiscountMap: Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>
-  rolePricingMap: Record<string, { rolePrice: number; appliedRoleName: string | null; savings: number; savingsPercent: number; finalPrice: number }>
-  customBadges: { productId: string; badgeLabel: string; badgeColor: string | null; ruleName: string }[]
-  addingId: string | null
-  handleAddToCart: (id: string, qty: number) => void
-}) {
-  const heroHeadline = useSetting("heroHeadline", "Bulk Orders. Best Prices. Delivered.")
-  const heroSubtext = useSetting("heroSubtext", "Connect with top vendors, get tier pricing, request quotes, and manage your wholesale procurement — all in one platform.")
-  const heroCtaText = useSetting("heroCtaText", "Browse Products")
-
-  if (visibleProducts.length === 0) return null
-
-  return (
-    <section className="section-padding-tight">
-      <div className="section-container">
-        {/* Section header */}
-        <div className="section-header">
-          <div>
-            <span className="eyebrow">Featured</span>
-            <h2 className="heading-lg">{heroHeadline}</h2>
-            <p className="body-sm mt-1.5">{heroSubtext}</p>
-          </div>
-          <Link href="/products" className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-primary-600 hover:text-primary-700 hover:bg-primary-50 transition-all duration-200">
-            View All <ArrowRight size={16} />
-          </Link>
-        </div>
-
-        {/* Product grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-          {visibleProducts.slice(0, 12).map((product) => (
-            <ProductCard
-              key={product.id}
-              product={{ ...product, thumbnail: product.thumbnail || product.images?.[0] || null }}
-              view="grid"
-              isPriceHidden={hiddenPriceProductIds.has(product.id)}
-              isNonPurchasable={nonPurchasableProducts.has(product.id)}
-              nonPurchasableMsg={nonPurchasableProducts.get(product.id) || ""}
-              rolePricing={rolePricingMap[product.id]}
-              ruleDiscount={ruleDiscountMap.get(product.id)}
-              bogo={bogoMap.get(product.id)}
-              quantityDiscount={qtyDiscountMap.get(product.id)}
-              customBadges={customBadges}
-              seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || undefined)}
-              isAdding={addingId === product.id}
-              onAddToCart={handleAddToCart}
-            />
-          ))}
-        </div>
-
-        <Link href="/products" className="sm:hidden flex items-center justify-center gap-1.5 text-primary-600 font-semibold mt-5 text-sm">
-          View All Products <ArrowRight size={16} />
-        </Link>
-      </div>
-    </section>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  Deals of the Day                                                   */
-/*  Top-discounted products with a live countdown, Flipkart-style      */
-/* ------------------------------------------------------------------ */
-
-function DealsOfTheDaySection({
-  products,
-  discounts,
-  hiddenPriceProductIds,
-  nonPurchasableProducts,
-  ruleDiscountMap,
-  bogoMap,
-  qtyDiscountMap,
-  rolePricingMap,
-  customBadges,
-  addingId,
-  handleAddToCart,
-}: {
-  products: Product[]
-  discounts: SeasonalDiscount[]
-  hiddenPriceProductIds: Set<string>
-  nonPurchasableProducts: Map<string, string>
-  ruleDiscountMap: Map<string, { discountPercent: number; discountAmount: number; ruleName: string }>
-  bogoMap: Map<string, { buyQuantity: number; freeProductId: string; freeQuantity: number; ruleName: string }[]>
-  qtyDiscountMap: Map<string, { tiers: { minQty: number; discountType: string; discountValue: number }[]; ruleName: string }>
-  rolePricingMap: Record<string, { rolePrice: number; appliedRoleName: string | null; savings: number; savingsPercent: number; finalPrice: number }>
-  customBadges: { productId: string; badgeLabel: string; badgeColor: string | null; ruleName: string }[]
-  addingId: string | null
-  handleAddToCart: (id: string, qty: number) => void
-}) {
-  const [timeLeft, setTimeLeft] = useState("")
-
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date()
-      const midnight = new Date(now)
-      midnight.setHours(24, 0, 0, 0)
-      const diff = midnight.getTime() - now.getTime()
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setTimeLeft(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`)
-    }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [])
-
-  const dealProducts = useMemo(() => {
-    return products
-      .filter((p) => p.compareAtPrice && Number(p.compareAtPrice) > Number(p.unitPrice))
-      .sort((a, b) => {
-        const da = (Number(a.compareAtPrice) - Number(a.unitPrice)) / Number(a.compareAtPrice)
-        const db = (Number(b.compareAtPrice) - Number(b.unitPrice)) / Number(b.compareAtPrice)
-        return db - da
-      })
-      .slice(0, 10)
-  }, [products])
-
-  if (dealProducts.length === 0) return null
-
-  return (
-    <section className="section-padding-tight bg-gradient-to-b from-amber-50/70 to-transparent">
-      <div className="section-container">
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-400 text-amber-900 shadow-sm shrink-0">
-              <Zap size={20} fill="currentColor" />
-            </span>
-            <div>
-              <h2 className="heading-lg">Deals of the Day</h2>
-              <p className="body-sm mt-0.5">Grab these offers before they&apos;re gone</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl font-mono text-sm font-bold tracking-wider shadow-sm">
-            <Clock size={15} className="text-amber-400" />
-            {timeLeft || "--:--:--"} <span className="text-white/60 font-sans font-normal">left</span>
-          </div>
-        </div>
-        <ProductCarousel
-          items={dealProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={{ ...product, thumbnail: product.thumbnail || product.images?.[0] || null }}
-              view="grid"
-              isPriceHidden={hiddenPriceProductIds.has(product.id)}
-              isNonPurchasable={nonPurchasableProducts.has(product.id)}
-              nonPurchasableMsg={nonPurchasableProducts.get(product.id) || ""}
-              rolePricing={rolePricingMap[product.id]}
-              ruleDiscount={ruleDiscountMap.get(product.id)}
-              bogo={bogoMap.get(product.id)}
-              quantityDiscount={qtyDiscountMap.get(product.id)}
-              customBadges={customBadges}
-              seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || undefined)}
-              isAdding={addingId === product.id}
-              onAddToCart={handleAddToCart}
-            />
-          ))}
-        />
-      </div>
-    </section>
-  )
 }
