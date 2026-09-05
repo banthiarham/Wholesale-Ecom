@@ -162,6 +162,30 @@ export class EmailService {
     await this.sendEmail(to, 'Your OTP Code', html, text);
   }
 
+  async sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <h2 style="color:#2563eb;">Reset Your Password</h2>
+        <p>We received a request to reset the password for your WholesaleX Pro account.</p>
+        <p style="text-align:center;margin:24px 0;">
+          <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">Reset Password</a>
+        </p>
+        <p>Or copy and paste this link into your browser:</p>
+        <p style="word-break:break-all;color:#2563eb;">${resetUrl}</p>
+        <p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+        <hr/>
+        <p style="font-size:12px;color:#666;">${BRAND_FOOTER}</p>
+      </div>
+    `;
+    const text =
+      `Reset Your Password\n\n` +
+      `We received a request to reset the password for your WholesaleX Pro account.\n\n` +
+      `${resetUrl}\n\n` +
+      `This link expires in 1 hour. If you didn't request this, you can safely ignore this email.\n\n` +
+      `${BRAND_FOOTER}`;
+    await this.sendEmail(to, 'Reset Your Password', html, text);
+  }
+
   async isConfigured(): Promise<boolean> {
     return (await this.resolveConfig()) !== null;
   }

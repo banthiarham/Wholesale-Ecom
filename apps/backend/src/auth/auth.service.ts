@@ -325,6 +325,18 @@ export class AuthService {
           expiresAt,
         },
       });
+
+      if (await this.emailService.isConfigured()) {
+        try {
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+          const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+          await this.emailService.sendPasswordResetEmail(user.email, resetUrl);
+        } catch (err) {
+          console.error('Failed to send password reset email:', err.message);
+        }
+      } else {
+        console.warn(`SMTP not configured — password reset link for ${user.email} was not emailed.`);
+      }
     }
 
     return { message: 'If your email is registered, you will receive a reset link' };
