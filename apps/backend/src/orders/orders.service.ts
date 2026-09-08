@@ -256,6 +256,31 @@ export class OrdersService {
 
     await this.prisma.cartItem.deleteMany({ where: { cartId } });
 
+    // First order for this customer: save the shipping address they entered
+    // as their default, so it pre-fills automatically at checkout next time,
+    // rather than only via the separate account/addresses management page.
+    // Only when they have no saved address yet — a later order shipped
+    // somewhere else shouldn't silently overwrite whatever they've since set
+    // as their default.
+    try {
+      const hasSavedAddress = (await this.prisma.address.count({ where: { userId } })) > 0;
+      if (!hasSavedAddress && data.shippingAddress?.street) {
+        await this.prisma.address.create({
+          data: {
+            userId,
+            street: data.shippingAddress.street,
+            city: data.shippingAddress.city,
+            state: data.shippingAddress.state,
+            zip: data.shippingAddress.zip,
+            country: data.shippingAddress.country || 'India',
+            isDefault: true,
+          },
+        });
+      }
+    } catch (err) {
+      console.error('Failed to auto-save address from first order:', err.message);
+    }
+
     // Reserve inventory for each order item
     for (const item of order.items) {
       try {
