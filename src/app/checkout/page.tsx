@@ -7,6 +7,7 @@ import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, 
 import { formatPrice, getCartSessionId, COUNTRIES } from "@/lib/utils"
 import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
 import { useStorefrontRules } from "@/lib/rules"
+import { useAuth } from "@/lib/auth"
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { useToast } from "@/components/ui/Toast"
 import { EmptyState } from "@/components/ui/EmptyState"
@@ -53,6 +54,16 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
 
 type PaymentMethod = "COD" | "ONLINE" | "WALLET"
 
+interface SavedAddress {
+  id: string
+  street: string
+  city: string
+  state: string
+  zip: string
+  country: string
+  isDefault: boolean
+}
+
 interface WalletCreditInfo {
   walletId: string
   balance: number
@@ -86,6 +97,7 @@ function StepBadge({ n }: { n: number }) {
 
 export default function CheckoutPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const roundOffEnabled = useSetting("roundOffEnabled", "false") === "true"
   const [cart, setCart] = useState<CartData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -197,6 +209,38 @@ export default function CheckoutPage() {
       formRef.current.submit()
     }
   }, [redirectData])
+
+  // Default both shipping and billing to the customer's saved address (their
+  // default one, or their first if none is marked default) plus their profile
+  // contact info. Every field stays editable afterwards — this only sets the
+  // starting values, it doesn't lock anything in.
+  useEffect(() => {
+    if (!user) return
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    if (!token) return
+    fetch("/api/addresses", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const list: SavedAddress[] = data?.addresses ?? []
+        if (list.length === 0) return
+        const def = list.find((a) => a.isDefault) ?? list[0]
+        const filled = {
+          fullName: [user.firstName, user.lastName].filter(Boolean).join(" "),
+          phone: user.phone || "",
+          email: user.email || "",
+          street: def.street,
+          apartment: "",
+          landmark: "",
+          city: def.city,
+          state: def.state,
+          zip: def.zip,
+          country: def.country || "India",
+        }
+        setAddress(filled)
+        setBillingAddress(filled)
+      })
+      .catch(() => {})
+  }, [user])
 
   const applyCoupon = async () => {
     if (!couponCode || !cart) return
