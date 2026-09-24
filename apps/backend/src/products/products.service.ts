@@ -534,6 +534,9 @@ export class ProductsService {
           || (salePriceStr ? regularPriceStr : '')
           || (Number.isFinite(childRegularPrice) ? String(childRegularPrice) : '');
         const compareAtPrice = compareAtPriceStr ? this.parseNumericField(compareAtPriceStr) || null : null;
+        const wholesalePriceStr = this.getField(r, 'wholesalePrice', 'Wholesale price');
+        const parsedWholesalePrice = wholesalePriceStr ? this.parseNumericField(wholesalePriceStr) : NaN;
+        const wholesalePrice = Number.isFinite(parsedWholesalePrice) && parsedWholesalePrice >= 0 ? parsedWholesalePrice : null;
         const imagesStr = this.getField(r, 'images', 'imageUrls', 'imageUrl', 'image', 'imageLink', 'imageLinks', 'productImage', 'productImages');
         const imageUrlList = imagesStr ? imagesStr.split(',').map((u: string) => u.trim()).filter(Boolean) : [];
         const backorders = this.getField(r, 'Backorders allowed?').toLowerCase();
@@ -580,6 +583,7 @@ export class ProductsService {
           if (!existing.categoryId && categoryId) updateData.categoryId = categoryId;
           if ((!existing.tags || existing.tags.length === 0) && tags.length > 0) updateData.tags = tags;
           if (!existing.compareAtPrice && compareAtPrice) updateData.compareAtPrice = compareAtPrice;
+          if (wholesalePrice !== null) updateData.wholesalePrice = wholesalePrice;
 
           if (Object.keys(updateData).length > 0) {
             await this.prisma.product.update({ where: { id: existing.id }, data: updateData });
@@ -600,6 +604,7 @@ export class ProductsService {
               sku: sku || null,
               unitPrice,
               compareAtPrice,
+              wholesalePrice,
               moq: moq > 0 ? moq : 1,
               inventoryQuantity: inventoryQuantity || 0,
               allowBackorder,

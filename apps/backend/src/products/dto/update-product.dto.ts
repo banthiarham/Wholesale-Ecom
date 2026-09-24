@@ -31,6 +31,10 @@ export class UpdateProductDto {
   compareAtPrice?: number;
 
   @IsOptional()
+  @IsNumber()
+  wholesalePrice?: number;
+
+  @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
 
