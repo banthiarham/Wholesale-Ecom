@@ -27,6 +27,10 @@ export class CreateProductDto {
   compareAtPrice?: number;
 
   @IsOptional()
+  @IsNumber()
+  wholesalePrice?: number;
+
+  @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
 
