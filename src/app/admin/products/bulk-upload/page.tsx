@@ -25,7 +25,7 @@ interface BulkResult {
 const WOO_PRODUCT_HEADERS = [
   "ID", "Type", "SKU", "GTIN, UPC, EAN, or ISBN", "Name", "Published", "Is featured?",
   "Visibility in catalog", "Short description", "Description", "Date sale price starts",
-  "Date sale price ends", "Wholesale price", "Tax status", "Tax class", "In stock?", "Stock", "Low stock amount",
+  "Date sale price ends", "Tax status", "Tax class", "In stock?", "Stock", "Low stock amount",
   "Backorders allowed?", "Sold individually?", "Weight (kg)", "Length (cm)", "Width (cm)",
   "Height (cm)", "Allow customer reviews?", "Purchase note", "Sale price", "Regular price",
   "Categories", "Tags", "Shipping class", "Images", "Download limit", "Download expiry days",
@@ -57,7 +57,7 @@ export default function AdminBulkProductUploadPage() {
     const example: Record<string, string | number> = {
       Type: "simple", SKU: "WEP-NEW001", Name: "New Product Name", Published: 1,
       "In stock?": 1, Stock: 200, Description: "Product description here",
-      "Regular price": 1299, "Sale price": 999, "Wholesale price": 899, Categories: "Electronics",
+      "Regular price": 1299, "Sale price": 999, Categories: "Electronics",
       Tags: "tag1, tag2", Images: "https://example.com/img1.jpg, https://example.com/img2.jpg",
       Brands: "Vendor Name",
     }
@@ -272,7 +272,6 @@ export default function AdminBulkProductUploadPage() {
                 { col: "SKU", req: "Yes", desc: "Unique product SKU — used to match existing products", ex: "WEP-001" },
                 { col: "Name", req: "Yes", desc: "Product name", ex: "Power Bank 20000mAh" },
                 { col: "Regular price / Sale price", req: "Yes", desc: "Sale price is used when present; otherwise regular price", ex: "1299 / 999" },
-                { col: "Wholesale price", req: "No", desc: "Wholesale price of the product", ex: "899" },
                 { col: "Stock", req: "No", desc: "Current inventory quantity", ex: "200" },
                 { col: "Description", req: "No", desc: "Full description; short description is used as fallback", ex: "High capacity..." },
                 { col: "Published", req: "No", desc: "1 publishes the product; 0 imports it as draft", ex: "1" },

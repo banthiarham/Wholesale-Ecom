@@ -258,7 +258,6 @@ model Product {
   moq               Int           @default(1)
   unitPrice         Decimal       @db.Decimal(12, 2)
   compareAtPrice    Decimal?      @db.Decimal(12, 2)
-  wholesalePrice    Decimal?      @db.Decimal(12, 2)
   status            ProductStatus @default(DRAFT)
   inventoryQuantity Int           @default(0)
   reservedQuantity  Int           @default(0)

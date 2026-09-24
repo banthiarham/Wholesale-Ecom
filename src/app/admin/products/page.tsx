@@ -17,7 +17,6 @@ interface Product {
   description: string | null
   unitPrice: number
   compareAtPrice: number | null
-  wholesalePrice?: number | null
   moq: number
   inventoryQuantity: number
   reservedQuantity: number
@@ -67,7 +66,6 @@ function AdminProductsContent() {
     sku: "",
     unitPrice: "",
     compareAtPrice: "",
-    wholesalePrice: "",
     moq: "1",
     inventoryQuantity: "0",
     categoryId: "",
@@ -135,7 +133,6 @@ function AdminProductsContent() {
       ...form,
       unitPrice: Number(form.unitPrice),
       compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : undefined,
-      wholesalePrice: form.wholesalePrice ? Number(form.wholesalePrice) : undefined,
       moq: Number(form.moq),
       inventoryQuantity: Number(form.inventoryQuantity),
       tierPrices: tierRows
@@ -143,7 +140,6 @@ function AdminProductsContent() {
         .map((r) => ({ minQty: Number(r.minQty), maxQty: r.maxQty ? Number(r.maxQty) : null, price: Number(r.price) })),
     }
     if (!body.compareAtPrice) delete body.compareAtPrice
-    if (body.wholesalePrice === undefined) delete body.wholesalePrice
     if (!body.categoryId) delete body.categoryId
     if (!body.sku) delete body.sku
     if (!body.description) delete body.description
@@ -243,7 +239,6 @@ function AdminProductsContent() {
       sku: p.sku || "",
       unitPrice: String(p.unitPrice),
       compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "",
-      wholesalePrice: p.wholesalePrice ? String(p.wholesalePrice) : "",
       moq: String(p.moq),
       inventoryQuantity: String(p.inventoryQuantity),
       categoryId: p.categoryId || "",
@@ -432,7 +427,7 @@ function AdminProductsContent() {
               <option value="DRAFT">Draft</option>
               <option value="ARCHIVED">Archived</option>
             </select>
-            <input type="number" step="0.01" min="0" placeholder="Wholesale Price" value={form.wholesalePrice} onChange={(e) => setForm({ ...form, wholesalePrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <div></div>
             <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="sm:col-span-2 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
 
             {/* Tier Pricing */}
