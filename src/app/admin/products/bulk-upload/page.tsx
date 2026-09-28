@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import Link from "next/link"
 import { ArrowLeft, Upload, Download, FileSpreadsheet, CheckCircle, AlertTriangle, XCircle, Package, ImagePlus, X, ImageIcon } from "lucide-react"
 import * as XLSX from "xlsx"
@@ -20,7 +20,19 @@ interface BulkResult {
   imageErrors: string[]
   imagesDownloaded: number
   imagesUploaded: number
+  rolePricesSet?: number
+  rolePriceWarnings?: string[]
 }
+
+interface PricingRole {
+  id: string
+  name: string
+  label: string
+}
+
+// Per-role pricing columns: "Min Quantity - <Role>" and "Wholesale Price - <Role>".
+const roleQtyHeader = (role: PricingRole) => `Min Quantity - ${role.label}`
+const rolePriceHeader = (role: PricingRole) => `Wholesale Price - ${role.label}`
 
 const WOO_PRODUCT_HEADERS = [
   "ID", "Type", "SKU", "GTIN, UPC, EAN, or ISBN", "Name", "Published", "Is featured?",
@@ -53,6 +65,24 @@ export default function AdminBulkProductUploadPage() {
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Roles that can have role-based prices — same list as Admin → Role Pricing (ADMIN is staff).
+  const [roles, setRoles] = useState<PricingRole[]>([])
+  const [rolesError, setRolesError] = useState(false)
+
+  useEffect(() => {
+    const token = localStorage.getItem("token") || ""
+    fetch("/api/roles", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("roles request failed"))))
+      .then((data) => {
+        const list: PricingRole[] = Array.isArray(data) ? data : data.roles ?? []
+        setRoles(list.filter((r) => r.name?.toUpperCase() !== "ADMIN"))
+      })
+      .catch(() => setRolesError(true))
+  }, [])
+
+  const roleHeaders = roles.flatMap((role) => [roleQtyHeader(role), rolePriceHeader(role)])
+  const allHeaders: string[] = [...WOO_PRODUCT_HEADERS, ...roleHeaders]
+
   const downloadTemplate = () => {
     const example: Record<string, string | number> = {
       Type: "simple", SKU: "WEP-NEW001", Name: "New Product Name", Published: 1,
@@ -61,9 +91,14 @@ export default function AdminBulkProductUploadPage() {
       Tags: "tag1, tag2", Images: "https://example.com/img1.jpg, https://example.com/img2.jpg",
       Brands: "Vendor Name",
     }
-    const exampleRow = WOO_PRODUCT_HEADERS.map((header) => example[header] ?? "")
-    const ws = XLSX.utils.aoa_to_sheet([[...WOO_PRODUCT_HEADERS], exampleRow])
-    ws["!cols"] = WOO_PRODUCT_HEADERS.map((header) => ({ wch: Math.min(Math.max(header.length + 3, 14), 36) }))
+    // Sample role price on the first role only, so it is clear both cells go together.
+    if (roles.length > 0) {
+      example[roleQtyHeader(roles[0])] = 20
+      example[rolePriceHeader(roles[0])] = 899
+    }
+    const exampleRow = allHeaders.map((header) => example[header] ?? "")
+    const ws = XLSX.utils.aoa_to_sheet([allHeaders, exampleRow])
+    ws["!cols"] = allHeaders.map((header) => ({ wch: Math.min(Math.max(header.length + 3, 14), 36) }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Products")
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" })
@@ -190,6 +225,8 @@ export default function AdminBulkProductUploadPage() {
           imageErrors: data.imageErrors || [],
           imagesDownloaded: data.imagesDownloaded || 0,
           imagesUploaded: data.imagesUploaded || 0,
+          rolePricesSet: data.rolePricesSet || 0,
+          rolePriceWarnings: data.rolePriceWarnings || [],
         })
       } else {
         setResult({ created: 0, updated: 0, skipped: 0, skippedDuplicates: 0, categoriesCreated: [], errors: [data.message || "Upload failed"], imageErrors: [], imagesDownloaded: 0, imagesUploaded: 0 })
@@ -252,9 +289,19 @@ export default function AdminBulkProductUploadPage() {
       <div className="admin-card-static p-5">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">WooCommerce Product Headers</h3>
         <div className="mb-5 flex max-h-40 flex-wrap gap-2 overflow-y-auto rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
-          {WOO_PRODUCT_HEADERS.map((header) => (
+          {allHeaders.map((header) => (
             <span key={header} className="rounded bg-white px-2 py-1 font-mono text-xs text-gray-700 shadow-sm dark:bg-gray-900 dark:text-gray-300">{header}</span>
           ))}
+        </div>
+        <div className="mb-5 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+          <p className="font-semibold mb-1">Role pricing columns</p>
+          <p>
+            Each role has two columns: <span className="font-mono">Min Quantity - Role</span> and <span className="font-mono">Wholesale Price - Role</span>.
+            Fill <b>both</b> to add that price to the product in Role Pricing: buyers with that role pay the wholesale price once their quantity reaches the minimum.
+            Leave both empty to keep the product&apos;s current role prices. Filling them replaces that role&apos;s existing price tier for the product.
+          </p>
+          {rolesError && <p className="mt-1 text-red-600 dark:text-red-400">Could not load roles, so the template has no role columns. Log in as admin and reload.</p>}
+          {!rolesError && roles.length === 0 && <p className="mt-1">No roles found. Add roles under Admin → Roles to get role columns.</p>}
         </div>
         <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Key imported field mappings</h4>
         <div className="overflow-x-auto">
@@ -272,6 +319,7 @@ export default function AdminBulkProductUploadPage() {
                 { col: "SKU", req: "Yes", desc: "Unique product SKU — used to match existing products", ex: "WEP-001" },
                 { col: "Name", req: "Yes", desc: "Product name", ex: "Power Bank 20000mAh" },
                 { col: "Regular price / Sale price", req: "Yes", desc: "Sale price is used when present; otherwise regular price", ex: "1299 / 999" },
+                { col: "Min Quantity - Role / Wholesale Price - Role", req: "No", desc: "Role price tier: minimum quantity to unlock it, and the price per unit. Fill both cells for a role", ex: "20 / 899" },
                 { col: "Stock", req: "No", desc: "Current inventory quantity", ex: "200" },
                 { col: "Description", req: "No", desc: "Full description; short description is used as fallback", ex: "High capacity..." },
                 { col: "Published", req: "No", desc: "1 publishes the product; 0 imports it as draft", ex: "1" },
@@ -441,6 +489,27 @@ export default function AdminBulkProductUploadPage() {
               </>
             )}
           </div>
+
+          {(result.rolePricesSet ?? 0) > 0 && (
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-lg p-4 mb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={16} className="text-emerald-500 dark:text-emerald-400" />
+                <p className="text-sm font-medium text-emerald-800 dark:text-emerald-400">{result.rolePricesSet} role price{result.rolePricesSet === 1 ? "" : "s"} saved to Role Pricing</p>
+              </div>
+            </div>
+          )}
+
+          {result.rolePriceWarnings && result.rolePriceWarnings.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-lg p-4 mb-3">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={16} className="text-amber-500 dark:text-amber-400" />
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-400">Role Pricing Warnings ({result.rolePriceWarnings.length})</p>
+              </div>
+              <ul className="text-sm text-amber-700 dark:text-amber-400 list-disc list-inside max-h-40 overflow-y-auto">
+                {result.rolePriceWarnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            </div>
+          )}
 
           {result.categoriesCreated.length > 0 && (
             <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-lg p-4 mb-3">

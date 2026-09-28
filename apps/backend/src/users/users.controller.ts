@@ -60,15 +60,21 @@ export class UsersController {
   @ApiQuery({ name: 'status', enum: UserStatus, required: false })
   @ApiQuery({ name: 'skip', type: Number, required: false })
   @ApiQuery({ name: 'take', type: Number, required: false })
+  @ApiQuery({ name: 'search', type: String, required: false, description: 'Matches name, email, phone, company or role across all users' })
+  @ApiQuery({ name: 'sortBy', type: String, required: false, description: 'firstName | lastName | email | role | status | createdAt (default createdAt)' })
+  @ApiQuery({ name: 'sortDir', enum: ['asc', 'desc'], required: false })
   findAll(
     @Query('role') role?: UserRole,
     @Query('status') status?: UserStatus,
     @Query('skip') skipRaw?: string,
     @Query('take') takeRaw?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
   ) {
     const skip = skipRaw !== undefined ? parseInt(skipRaw, 10) : undefined;
     const take = takeRaw !== undefined ? parseInt(takeRaw, 10) : undefined;
-    return this.usersService.findAll({ role, status, skip, take });
+    return this.usersService.findAll({ role, status, skip, take, search, sortBy, sortDir });
   }
 
   @Get('me')
