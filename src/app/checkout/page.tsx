@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { PaymentOffer, fetchPaymentOffers, checkOfferEligibility, calcOfferDiscount, calcLineTotal } from "@/lib/pricing"
 import { BankOfferCard, OfferVerifyModal } from "@/components/ui/BankOffers"
+import RoleMinQtyNotice from "@/components/cart/RoleMinQtyNotice"
 
 interface CartItem {
   id: string; quantity: number; unitPrice: number;
@@ -1148,6 +1149,7 @@ export default function CheckoutPage() {
                 <span className="text-xl font-bold text-gray-900">Total</span>
                 <span className="text-2xl font-bold text-primary-700">{formatPrice(finalTotal)}</span>
               </div>
+              <RoleMinQtyNotice items={cart.cart.items.map((i) => ({ quantity: i.quantity, product: { title: i.product.title }, metadata: (i as any).metadata }))} />
               <button
                 onClick={placeOrder}
                 disabled={placing || redirectData !== null || isCheckoutBlocked}

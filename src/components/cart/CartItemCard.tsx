@@ -99,7 +99,7 @@ export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleP
             <div>
               <Link href={`/products/${item.product.handle}`} className="font-semibold text-gray-900 hover:text-primary-600 transition-colors">{item.product.title}</Link>
               {item.product.sku && <p className="text-xs text-gray-400 mt-0.5">SKU: {item.product.sku}</p>}
-              <p className="text-xs text-gray-400">MOQ: {item.product.moq}</p>
+              <p className="text-xs text-gray-400">MOQ: {pricingMetadata?.roleMinQty ?? item.product.moq}</p>
             </div>
             <button onClick={() => onRemove(item.id)} disabled={updating} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition" title="Remove"><Trash2 size={16} /></button>
           </div>

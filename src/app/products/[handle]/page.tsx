@@ -330,6 +330,17 @@ export default function ProductDetailPage() {
   const totalSavings = savingsPerUnit * quantity
   const priceLabel = pricingIsCurrent && (pricing!.appliedRule === "role" || pricing!.appliedRule === "contract") ? pricing!.appliedRoleName : null
 
+  // A buyer whose role has a wholesale price for this product always sees that price in the
+  // headline, with its min quantity underneath — even while `quantity` is below the minimum.
+  // (displayPrice above stays the price actually charged: retail until the minimum is reached.)
+  const roleHeadline =
+    pricingProductId === product.id && pricing?.roleDisplayPrice != null && pricing.appliedRule !== "contract"
+      ? pricing
+      : null
+  const headlinePrice = roleHeadline ? roleHeadline.roleDisplayPrice! : displayPrice
+  const headlineLabel = roleHeadline ? roleHeadline.appliedRoleName : priceLabel
+  const roleBelowMin = !!roleHeadline && roleHeadline.roleQtyReached === false
+
   if (pricingIsCurrent) {
     console.log("[PricingEngine:ProductDetails]", {
       productId: product?.id,
@@ -675,28 +686,39 @@ export default function ProductDetailPage() {
                       <span className="text-xl text-gray-500 italic">Contact us for pricing</span>
                     ) : (
                       <>
-                        <span className="text-3xl font-bold text-primary-700">{formatPrice(Number(ruleDiscount ? product.unitPrice - ruleDiscount.discountAmount : displayPrice))}</span>
-                        {priceLabel && (
-                          <span className="text-sm font-medium px-2.5 py-0.5 rounded-full" style={{ backgroundColor: role?.color || "#7c3aed", color: getContrastTextColor(role?.color || "#7c3aed") }}>{priceLabel} Price</span>
+                        <span className="text-3xl font-bold text-primary-700">{formatPrice(Number(ruleDiscount ? product.unitPrice - ruleDiscount.discountAmount : headlinePrice))}</span>
+                        {headlineLabel && (
+                          <span className="text-sm font-medium px-2.5 py-0.5 rounded-full" style={{ backgroundColor: role?.color || "#7c3aed", color: getContrastTextColor(role?.color || "#7c3aed") }}>{headlineLabel} Price</span>
                         )}
                         {ruleDiscount && Number(product.unitPrice) > (Number(product.unitPrice) - ruleDiscount.discountAmount) && (
                           <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
                         )}
-                        {!ruleDiscount && Number(product.unitPrice) > Number(displayPrice) && (
+                        {!ruleDiscount && Number(product.unitPrice) > Number(headlinePrice) && (
                           <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
                         )}
                         {ruleDiscount && <span className="badge badge-success">{ruleDiscount.discountPercent}% off</span>}
-                        {!ruleDiscount && product.compareAtPrice && Number(displayPrice) < Number(product.compareAtPrice) && (
-                          <span className="badge badge-success">{discountPercent}% off</span>
+                        {!ruleDiscount && product.compareAtPrice && Number(headlinePrice) < Number(product.compareAtPrice) && (
+                          <span className="badge badge-success">{Math.round(((Number(product.compareAtPrice) - Number(headlinePrice)) / Number(product.compareAtPrice)) * 100)}% off</span>
                         )}
                       </>
                     )}
                   </div>
 
+                  {!isPriceHidden && roleHeadline?.roleMinQty != null && (
+                    <div className="-mt-2">
+                      <p className="text-xs text-gray-500">Min quantity - {roleHeadline.roleMinQty}</p>
+                      {roleBelowMin && (
+                        <p className="text-xs text-amber-600 mt-0.5">
+                          Below {roleHeadline.roleMinQty} units you are charged the retail price of {formatPrice(Number(product.unitPrice))}/unit.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {/* MOQ — front-loaded near price (B2B/Alibaba-style hierarchy) */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-lg">
-                      <Package size={13} className="text-gray-400" /> MOQ: {product.moq} units
+                      <Package size={13} className="text-gray-400" /> MOQ: {roleHeadline?.roleMinQty ?? product.moq} units
                     </span>
                   </div>
 
