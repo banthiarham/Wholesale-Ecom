@@ -35,6 +35,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "yearly",
       priority: 0.3,
     },
+    ...["about", "shipping", "terms", "privacy"].map((slug) => ({
+      url: `${siteUrl}/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: "yearly" as const,
+      priority: 0.4,
+    })),
   ]
 
   let products: MetadataRoute.Sitemap = []

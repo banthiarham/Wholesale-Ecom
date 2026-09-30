@@ -16,6 +16,7 @@ const supportLinks = [
   { label: "Contact Us", href: "/contact" },
   { label: "Shipping Policy", href: "/shipping" },
   { label: "FAQs", href: "/faq" },
+  { label: "About Us", href: "/about" },
 ]
 
 const policyLinks = [
