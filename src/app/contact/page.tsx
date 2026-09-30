@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { Phone, Mail, MapPin, ArrowRight, HelpCircle, Truck } from "lucide-react"
+import { Phone, Mail, MapPin, HelpCircle, Truck } from "lucide-react"
 import { contactDetails } from "@/content/contact"
 
 export const metadata: Metadata = {
@@ -83,10 +83,6 @@ export default function ContactPage() {
                 </span>
               </li>
             </ul>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a href={contactDetails.phoneHref} className="btn-primary text-sm py-2.5 px-5 inline-flex items-center gap-2"><Phone size={15} /> Call now</a>
-              <a href={contactDetails.emailHref} className="btn-outline text-sm py-2.5 px-5 inline-flex items-center gap-2"><Mail size={15} /> Send an email <ArrowRight size={14} /></a>
-            </div>
           </div>
         </div>
       </main>
