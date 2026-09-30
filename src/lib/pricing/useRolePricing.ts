@@ -10,6 +10,8 @@ interface RolePricingInfo {
   savings: number
   savingsPercent: number
   finalPrice: number
+  /** Quantity the buyer's role must reach to get rolePrice; shown under the price as "Min quantity - N". */
+  minQty?: number | null
 }
 
 type RolePricingMap = Record<string, RolePricingInfo>
@@ -70,6 +72,23 @@ export function useRolePricing(
                 savings: result.basePrice - result.finalPrice,
                 savingsPercent: result.discountPercent,
                 finalPrice: result.finalPrice,
+                minQty: result.appliedRule === "role" ? result.roleMinQty ?? null : null,
+              } as RolePricingInfo,
+            }
+          }
+          // The buyer's role has a wholesale price for this product but the quantity hasn't reached
+          // its minimum yet: still show the wholesale price (with its min quantity) instead of the
+          // retail price. What is actually charged below the minimum is decided by the backend.
+          if (result.roleDisplayPrice != null && result.roleQtyReached === false) {
+            return {
+              productId: p.id,
+              info: {
+                rolePrice: result.roleDisplayPrice,
+                appliedRoleName: result.appliedRoleName,
+                savings: result.basePrice - result.roleDisplayPrice,
+                savingsPercent: result.basePrice > 0 ? Math.round(((result.basePrice - result.roleDisplayPrice) / result.basePrice) * 100) : 0,
+                finalPrice: result.roleDisplayPrice,
+                minQty: result.roleMinQty ?? null,
               } as RolePricingInfo,
             }
           }

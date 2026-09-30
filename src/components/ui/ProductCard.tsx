@@ -233,7 +233,7 @@ export function ProductCard({
           </div>
           <div className="flex items-end justify-between gap-3 mt-2.5 flex-wrap">
             {priceDisplay("md")}
-            <span className="text-xs font-bold text-gray-600 bg-gray-50 border border-gray-100 px-2 py-1 rounded-lg">MOQ {product.moq}</span>
+            <span className="text-xs font-bold text-gray-600 bg-gray-50 border border-gray-100 px-2 py-1 rounded-lg">MOQ {rolePricing?.minQty ?? product.moq}</span>
           </div>
           <div className="flex flex-wrap gap-1.5 mt-2.5">{ruleBadge("md")}</div>
           <div className="mt-auto pt-4 flex items-center gap-4 flex-wrap">
@@ -295,7 +295,7 @@ export function ProductCard({
         </div>
         <div className="flex items-end justify-between gap-2 mt-2">
           <div className="min-w-0">{priceDisplay("sm")}</div>
-          <span className="shrink-0 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-100 px-1.5 py-1 rounded-md">MOQ {product.moq}</span>
+          <span className="shrink-0 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-100 px-1.5 py-1 rounded-md">MOQ {rolePricing?.minQty ?? product.moq}</span>
         </div>
         <div className="flex flex-wrap gap-1 mt-1.5">{ruleBadge("sm")}</div>
         <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-semibold">

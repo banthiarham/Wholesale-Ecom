@@ -321,7 +321,7 @@ export default function CartPage() {
               taxes={taxes} shippingOverride={shipping} bogoFreeItems={bogoFreeItems}
               checkoutRestrictions={checkoutRestrictions} minimumOrderQuantities={minimumOrderQuantities}
               maximumOrderQuantities={maximumOrderQuantities}
-              cartItems={(data?.cart.items ?? []).map(i => ({ id: i.id, quantity: i.quantity, product: { id: i.product.id, title: i.product.title } }))}
+              cartItems={(data?.cart.items ?? []).map(i => ({ id: i.id, quantity: i.quantity, product: { id: i.product.id, title: i.product.title }, metadata: (i as any).metadata }))}
               discountLabels={[...discountBreakdown.labels, ...ruleDiscountLabels]}
               packageSavings={packageSavings} onApplyCoupon={handleApplyCoupon}
               onRemoveCoupon={handleRemoveCoupon} couponLoading={couponLoading} couponError={couponError}

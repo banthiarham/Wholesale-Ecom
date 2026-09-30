@@ -4,6 +4,7 @@ import { useState, Fragment } from "react"
 import { ShoppingCart, ArrowRight, Tag, TrendingDown, Truck, ShieldCheck, Gift, AlertTriangle, Percent, Layers } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import Link from "next/link"
+import RoleMinQtyNotice from "./RoleMinQtyNotice"
 
 interface CartSummaryProps {
   subtotal: number
@@ -31,7 +32,7 @@ interface CartSummaryProps {
   checkoutRestrictions?: { restricted: boolean; message: string; ruleName: string }[]
   minimumOrderQuantities?: { productId?: string; minQty: number; ruleName: string }[]
   maximumOrderQuantities?: { productId?: string; maxQty: number; ruleName: string }[]
-  cartItems?: { id: string; quantity: number; product: { id: string; title: string } }[]
+  cartItems?: { id: string; quantity: number; product: { id: string; title: string }; metadata?: any }[]
   discountLabels?: string[]
   packageSavings?: number
   onApplyCoupon?: (code: string) => void
@@ -244,6 +245,7 @@ export default function CartSummary({
           <span className="text-xl font-bold text-gray-900">Total</span>
           <span className="text-2xl font-bold text-primary-700">{formatPrice(total)}</span>
         </div>
+        <RoleMinQtyNotice items={cartItems} />
         <Link
           href="/checkout"
           className={`mt-5 w-full ${
