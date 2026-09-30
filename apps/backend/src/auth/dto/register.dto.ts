@@ -65,9 +65,8 @@ export class RegisterDto {
   accountCategory?: 'CUSTOMER' | 'DEALER';
 
   @ApiPropertyOptional({ example: 'Acme Traders Pvt Ltd' })
-  @ValidateIf((o) => o.accountCategory === 'DEALER')
   @IsString()
-  @IsNotEmpty({ message: 'Company Name is required for Dealer / B2B signup' })
+  @IsOptional()
   companyName?: string;
 
   @ApiPropertyOptional({ example: 'Acme Traders' })
@@ -76,16 +75,15 @@ export class RegisterDto {
   organizationName?: string;
 
   @ApiPropertyOptional({ example: '27ABCDE1234F1Z5' })
-  @ValidateIf((o) => o.accountCategory === 'DEALER')
-  @IsNotEmpty({ message: 'GSTIN is required for Dealer / B2B signup' })
+  // Optional — but if one is supplied it must be well-formed.
+  @ValidateIf((o) => !!o.gstin)
   @Matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, {
     message: 'Enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5)',
   })
   gstin?: string;
 
   @ApiPropertyOptional({ example: 'ABCDE1234F' })
-  @ValidateIf((o) => o.accountCategory === 'DEALER')
-  @IsNotEmpty({ message: 'PAN Number is required for Dealer / B2B signup' })
+  @ValidateIf((o) => !!o.panNumber)
   @Matches(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, { message: 'Enter a valid 10-character PAN (e.g. ABCDE1234F)' })
   panNumber?: string;
 
