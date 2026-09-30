@@ -26,7 +26,7 @@ const openSans = Open_Sans({
   display: "swap",
 })
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wholesalex.com"
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wholesalecenter.in"
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

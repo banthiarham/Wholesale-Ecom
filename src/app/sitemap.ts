@@ -1,7 +1,10 @@
 import { MetadataRoute } from "next"
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wholesalex.com"
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || ""
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wholesalecenter.in"
+// Metadata routes run outside an inbound request, so a relative fetch path
+// has no base to resolve against — always fall back to an absolute origin
+// that still goes through Next's own /api/* rewrite (see next.config.mjs).
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === "production" ? siteUrl : "http://localhost:3001")
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [

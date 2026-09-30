@@ -348,7 +348,7 @@ export default function ProductDetailPage() {
     description: product.description || `${product.title} — wholesale pricing from MOQ ${product.moq}`,
     image: product.thumbnail || (product.images?.[0] ?? undefined), sku: product.sku || undefined,
     brand: product.vendorName ? { "@type": "Brand", name: product.vendorName } : undefined,
-    offers: { "@type": "Offer", priceCurrency: "INR", price: product.unitPrice, availability: product.inventoryQuantity > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock", url: typeof window !== "undefined" ? `${window.location.origin}/products/${product.handle}` : undefined },
+    offers: { "@type": "Offer", priceCurrency: "INR", price: product.unitPrice, availability: product.inventoryQuantity > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock", url: `${process.env.NEXT_PUBLIC_SITE_URL || "https://wholesalecenter.in"}/products/${product.handle}` },
     aggregateRating: product.reviewCount > 0 ? { "@type": "AggregateRating", ratingValue: product.rating, reviewCount: product.reviewCount } : undefined,
   } : null
 
