@@ -100,7 +100,7 @@ function CartDrawerRow({
         <p className="text-xs text-gray-400 mt-0.5">{formatPrice(item.unitPrice)} / unit</p>
         {unitsToWholesale > 0 && (
           <p className="text-xs text-amber-600 mt-0.5">
-            Add {unitsToWholesale} more {unitsToWholesale === 1 ? "product" : "products"} to get at {formatPrice(Number(pricing.roleDisplayPrice))}/unit (wholesale price)
+            Add {unitsToWholesale} more {unitsToWholesale === 1 ? "product" : "products"} to get at {formatPrice(Number(pricing.roleDisplayPrice))}/unit
           </p>
         )}
         <div className="flex items-center justify-between mt-2">
