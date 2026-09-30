@@ -90,9 +90,9 @@ export default function RegisterPage() {
   // Only runs for the Dealer / B2B form — the Customer flow never touches these fields,
   // so it can't be affected by this validation.
   const validateDealerFields = (): string | null => {
-    if (!form.companyName.trim()) return "Company Name is required"
-    if (!GSTIN_REGEX.test(form.gstin.trim().toUpperCase())) return "Enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5)"
-    if (!PAN_REGEX.test(form.panNumber.trim().toUpperCase())) return "Enter a valid 10-character PAN (e.g. ABCDE1234F)"
+    // Company Name, GSTIN and PAN are optional — but if given, GSTIN/PAN must be well-formed.
+    if (form.gstin.trim() && !GSTIN_REGEX.test(form.gstin.trim().toUpperCase())) return "Enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5)"
+    if (form.panNumber.trim() && !PAN_REGEX.test(form.panNumber.trim().toUpperCase())) return "Enter a valid 10-character PAN (e.g. ABCDE1234F)"
     if (!form.contactPersonName.trim()) return "Contact Person Name is required"
     if (!MOBILE_REGEX.test(form.phone.trim())) return "Enter a valid 10-digit mobile number"
     if (!form.companyAddress.trim()) return "Full Address is required"
@@ -136,9 +136,9 @@ export default function RegisterPage() {
           roleId: form.roleId,
           accountCategory: signupType === "b2b" ? "DEALER" : "CUSTOMER",
           ...(signupType === "b2b" && {
-            companyName: form.companyName.trim(),
-            gstin: form.gstin.trim().toUpperCase(),
-            panNumber: form.panNumber.trim().toUpperCase(),
+            companyName: form.companyName.trim() || undefined,
+            gstin: form.gstin.trim().toUpperCase() || undefined,
+            panNumber: form.panNumber.trim().toUpperCase() || undefined,
             contactPersonName: form.contactPersonName.trim(),
             companyAddress: form.companyAddress.trim(),
             pincode: form.pincode.trim(),
@@ -292,19 +292,18 @@ export default function RegisterPage() {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Business Details</p>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Company Name</label>
-                  <input type="text" name="companyName" value={form.companyName} onChange={handleChange} required className="input-base" placeholder="Acme Traders Pvt Ltd" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Company Name <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <input type="text" name="companyName" value={form.companyName} onChange={handleChange} className="input-base" placeholder="Acme Traders Pvt Ltd" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">GSTIN</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">GSTIN <span className="text-gray-400 font-normal">(optional)</span></label>
                     <input
                       type="text"
                       name="gstin"
                       value={form.gstin}
                       onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
-                      required
                       maxLength={15}
                       pattern="[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}"
                       title="Enter a valid 15-character GSTIN"
@@ -313,13 +312,12 @@ export default function RegisterPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">PAN Number</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">PAN Number <span className="text-gray-400 font-normal">(optional)</span></label>
                     <input
                       type="text"
                       name="panNumber"
                       value={form.panNumber}
                       onChange={(e) => setForm({ ...form, panNumber: e.target.value.toUpperCase() })}
-                      required
                       maxLength={10}
                       pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
                       title="Enter a valid 10-character PAN"
