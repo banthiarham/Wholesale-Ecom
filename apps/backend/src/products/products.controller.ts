@@ -45,7 +45,7 @@ export class ProductsController {
   @ApiQuery({ name: 'in_stock', required: false, description: 'Filter in-stock items only', type: Boolean })
   @ApiQuery({ name: 'tags', required: false, description: 'Comma-separated tags' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status (PUBLISHED, DRAFT, ARCHIVED). Leave empty for published only.' })
-  @ApiQuery({ name: 'sort', required: false, description: 'Sort order: popularity, newest, price_asc, price_desc' })
+  @ApiQuery({ name: 'sort', required: false, description: 'Sort order: bestselling, popularity, newest, price_asc, price_desc' })
   @ApiQuery({ name: 'limit', required: false, description: 'Max products to return (default 100, max 2000 — admin tooling that needs the full catalog, e.g. rule/product pickers, should pass a high explicit limit)', type: Number })
   @ApiQuery({ name: 'ids', required: false, description: 'Comma-separated product IDs to fetch specific products' })
   async findAll(
