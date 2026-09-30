@@ -72,7 +72,9 @@ export default function RegisterPage() {
   useEffect(() => {
     if (!roles.length || !signupType) return
     const targetRoleName = signupType === "buyer" ? "BUYER" : "DEALER"
-    const targetRole = roles.find((r) => r.name === targetRoleName) || roles.find((r) => r.name === "BUYER")
+    // Role names differ in case between databases (BUYER vs buyer), so compare case-insensitively.
+    const byName = (name: string) => roles.find((r) => r.name.toUpperCase() === name)
+    const targetRole = byName(targetRoleName) || byName("BUYER")
     if (targetRole) setForm((prev) => ({ ...prev, roleId: targetRole.id }))
   }, [roles, signupType])
 
