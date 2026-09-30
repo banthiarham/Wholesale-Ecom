@@ -143,16 +143,21 @@ function AdminProductsContent() {
     if (!body.categoryId) delete body.categoryId
     if (!body.sku) delete body.sku
     if (!body.description) delete body.description
-    if (body.tierPrices.length === 0) delete body.tierPrices
+    // On edit, an empty list must still be sent so removing every tier row actually clears them.
+    if (body.tierPrices.length === 0 && !editingProduct) delete body.tierPrices
 
     try {
       let productId = editingProduct?.id
       if (editingProduct) {
-        await fetch(`/api/products/${editingProduct.id}`, {
+        const res = await fetch(`/api/products/${editingProduct.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify(body),
         })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(Array.isArray(err.message) ? err.message.join(", ") : err.message || `Server returned ${res.status}`)
+        }
       } else {
         const res = await fetch("/api/products", {
           method: "POST",
@@ -160,6 +165,7 @@ function AdminProductsContent() {
           body: JSON.stringify(body),
         })
         const data = await res.json()
+        if (!res.ok) throw new Error(Array.isArray(data.message) ? data.message.join(", ") : data.message || `Server returned ${res.status}`)
         productId = data.product?.id || data.id
       }
 
@@ -182,7 +188,7 @@ function AdminProductsContent() {
       loadProducts()
     } catch (err) {
       console.error(err)
-      alert(editingProduct ? "Failed to update product" : "Failed to add product")
+      alert(`${editingProduct ? "Failed to update product" : "Failed to add product"}: ${err instanceof Error ? err.message : "unknown error"}`)
     } finally {
       setUploading(false)
     }
