@@ -82,7 +82,7 @@ const FALLBACK_HEROES = [
   },
 ]
 
-export default function HeroBannerCarousel() {
+export default function HeroBannerCarousel({ heightClass = "h-[430px] sm:h-[500px] lg:h-[560px]" }: { heightClass?: string } = {}) {
   const [banners, setBanners] = useState<Banner[]>([])
   const [current, setCurrent] = useState(0)
   const autoplay = useSetting("heroCarouselAutoplay", "true") === "true"
@@ -122,7 +122,7 @@ export default function HeroBannerCarousel() {
   if (banners.length === 0) {
     return (
       <section className="relative overflow-hidden">
-        <div className="relative h-[430px] sm:h-[500px] lg:h-[560px]">
+        <div className={`relative ${heightClass}`}>
           {FALLBACK_HEROES.map((hero, index) => {
             const Icon = hero.icon
             return (
@@ -202,7 +202,7 @@ export default function HeroBannerCarousel() {
 
   return (
     <section className="relative overflow-hidden">
-      <div className="relative h-[430px] sm:h-[500px] lg:h-[560px]">
+      <div className={`relative ${heightClass}`}>
         {banners.map((banner, index) => (
           <a
             key={banner.id}
