@@ -8,6 +8,7 @@ export interface CategoryNode {
   handle: string
   image?: string | null
   description?: string | null
+  createdAt?: string
   _count?: { products: number }
   children?: CategoryNode[]
 }
