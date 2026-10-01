@@ -17,7 +17,7 @@ import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { FilterSidebar } from "@/components/storefront/FilterSidebar"
 import { ListingToolbar, SortOption, ViewMode } from "@/components/storefront/ListingToolbar"
-import { Pagination } from "@/components/storefront/Pagination"
+import { useInfiniteScroll, ScrollSentinel } from "@/lib/useInfiniteScroll"
 
 interface Product {
   id: string
@@ -37,8 +37,8 @@ interface Product {
   category?: { id: string; name: string; handle: string }
 }
 
-// Five cards per row on desktop, four rows per page.
-const PRODUCTS_PER_PAGE = 20
+// Five cards per row on desktop; the list scrolls and loads 20 more at a time (no pagination).
+const BATCH_SIZE = 20
 
 export default function ProductsPageInner() {
   const [products, setProducts] = useState<Product[]>([])
@@ -57,7 +57,6 @@ export default function ProductsPageInner() {
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
   const [sort, setSort] = useState<SortOption>("newest")
   const [view, setView] = useState<ViewMode>("grid")
-  const [page, setPage] = useState(1)
   const { t } = useTranslation()
   const { user } = useAuth()
   const { showToast } = useToast()
@@ -131,13 +130,13 @@ export default function ProductsPageInner() {
     if (f.minPrice) params.set("min_price", f.minPrice)
     if (f.maxPrice) params.set("max_price", f.maxPrice)
     if (f.inStock) params.set("in_stock", "true")
+    params.set("limit", "2000") // whole catalogue — the list reveals it as you scroll
 
     fetch(`/api/products?${params.toString()}`)
       .then((res) => res.json())
       .then((data) => {
         setProducts(data.products || [])
         setLoading(false)
-        setPage(1)
       })
   }
 
@@ -207,8 +206,8 @@ export default function ProductsPageInner() {
     return filtered
   }, [products, hiddenProductIds, sort])
 
-  const totalPages = Math.max(1, Math.ceil(visibleProducts.length / PRODUCTS_PER_PAGE))
-  const paginatedProducts = visibleProducts.slice((page - 1) * PRODUCTS_PER_PAGE, page * PRODUCTS_PER_PAGE)
+  const { visibleCount, hasMore, sentinelRef } = useInfiniteScroll(visibleProducts.length, visibleProducts, BATCH_SIZE)
+  const shownProducts = visibleProducts.slice(0, visibleCount)
 
   const clearFilters = () => {
     const r = { category: "", minPrice: "", maxPrice: "", inStock: false }
@@ -236,7 +235,7 @@ export default function ProductsPageInner() {
               onSearchSubmit={() => loadProducts()}
               searchPlaceholder={t("products.search")}
               sort={sort}
-              onSortChange={(s) => { setSort(s); setPage(1) }}
+              onSortChange={setSort}
               view={view}
               onViewChange={setView}
               hasActiveFilters={!!hasActiveFilters}
@@ -260,7 +259,7 @@ export default function ProductsPageInner() {
 
         <div className="min-w-0">
           {loading ? (
-            <ProductGridSkeleton view={view} count={PRODUCTS_PER_PAGE} />
+            <ProductGridSkeleton view={view} count={BATCH_SIZE} />
           ) : visibleProducts.length === 0 ? (
             <EmptyState
               icon={Search}
@@ -272,7 +271,7 @@ export default function ProductsPageInner() {
             <>
               {/* Product grid (5 per row, same compact cards as the home page) / list */}
               <div className={view === "grid" ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4" : "space-y-3"}>
-                {paginatedProducts.map((product) => (
+                {shownProducts.map((product) => (
                   <ProductCard
                     key={product.id}
                     product={product}
@@ -299,7 +298,7 @@ export default function ProductsPageInner() {
                 ))}
               </div>
 
-              <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+              <ScrollSentinel hasMore={hasMore} sentinelRef={sentinelRef} />
             </>
           )}
         </div>

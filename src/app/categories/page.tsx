@@ -1,171 +1,226 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
-  ChevronRight,
-  Cpu,
-  Shirt,
-  Wrench,
-  Package,
-  Sparkles,
-  Utensils,
-  Heart,
-  BookOpen,
-  Dumbbell,
-  Paintbrush,
-  Search,
+  ChevronRight, Cpu, Shirt, Wrench, Package, Sparkles, Utensils, Heart, BookOpen, Dumbbell, Paintbrush,
+  Search, SlidersHorizontal, ArrowUpDown, Grid3X3, List, X,
 } from "lucide-react"
 import { EmptyState } from "@/components/ui/EmptyState"
-import Image from "next/image"
-import { useCategories } from "@/lib/categories/CategoriesProvider"
+import { useCategories, type CategoryNode } from "@/lib/categories/CategoriesProvider"
+import { useInfiniteScroll, ScrollSentinel } from "@/lib/useInfiniteScroll"
 
-const categoryMeta: Record<string, { icon: any; gradient: string; accent: string }> = {
-  electronics: { icon: Cpu, gradient: "from-blue-600 to-cyan-500", accent: "bg-blue-500/20" },
-  fashion: { icon: Shirt, gradient: "from-pink-500 to-rose-400", accent: "bg-pink-500/20" },
-  industrial: { icon: Wrench, gradient: "from-amber-600 to-orange-500", accent: "bg-amber-500/20" },
-  "home-kitchen": { icon: Utensils, gradient: "from-green-600 to-emerald-500", accent: "bg-green-500/20" },
-  "health-beauty": { icon: Sparkles, gradient: "from-purple-500 to-pink-400", accent: "bg-purple-500/20" },
-  food: { icon: Utensils, gradient: "from-green-600 to-emerald-500", accent: "bg-green-500/20" },
-  health: { icon: Heart, gradient: "from-red-500 to-pink-500", accent: "bg-red-500/20" },
-  books: { icon: BookOpen, gradient: "from-indigo-600 to-violet-500", accent: "bg-indigo-500/20" },
-  sports: { icon: Dumbbell, gradient: "from-teal-500 to-cyan-500", accent: "bg-teal-500/20" },
-  art: { icon: Paintbrush, gradient: "from-fuchsia-500 to-purple-500", accent: "bg-fuchsia-500/20" },
-  beauty: { icon: Sparkles, gradient: "from-purple-500 to-pink-400", accent: "bg-purple-500/20" },
+// Icon shown when a category has no image (matched by handle, falls back to a box).
+const categoryIcons: Record<string, any> = {
+  electronics: Cpu, fashion: Shirt, industrial: Wrench, "home-kitchen": Utensils, "health-beauty": Sparkles,
+  food: Utensils, health: Heart, books: BookOpen, sports: Dumbbell, art: Paintbrush, beauty: Sparkles,
 }
 
-const defaultMeta = { icon: Package, gradient: "from-gray-600 to-slate-500", accent: "bg-gray-500/20" }
+// Soft pastel backdrops that cycle across the cards, like the reference design.
+const TINTS = ["bg-sky-100", "bg-violet-100", "bg-emerald-100", "bg-amber-100", "bg-rose-100"]
 
-function getMeta(handle: string) {
-  return categoryMeta[handle.toLowerCase()] || defaultMeta
+type SortKey = "newest" | "name" | "products"
+type ViewMode = "grid" | "list"
+const BATCH_SIZE = 20
+
+function CategoryVisual({ cat, tint, size }: { cat: CategoryNode; tint: string; size: "card" | "row" }) {
+  const Icon = categoryIcons[cat.handle.toLowerCase()] || Package
+  const count = cat._count?.products ?? 0
+  return (
+    <div className={`relative overflow-hidden ${tint} ${size === "card" ? "h-40 sm:h-44" : "h-28 w-28 sm:w-36 shrink-0"} flex items-center justify-center`}>
+      {cat.image ? (
+        <Image src={cat.image} alt={cat.name} fill className="object-contain p-5 transition-transform duration-300 group-hover:scale-105" sizes="(max-width: 640px) 50vw, 20vw" />
+      ) : (
+        <Icon size={size === "card" ? 56 : 40} className="text-gray-900/15 transition-transform duration-300 group-hover:scale-110" strokeWidth={1.5} />
+      )}
+      <span className="absolute top-3 left-3 w-9 h-9 rounded-full bg-white/85 flex items-center justify-center shadow-sm">
+        <Package size={16} className="text-primary-600" />
+      </span>
+      {size === "card" && (
+        <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/90 text-[11px] font-semibold text-gray-700 shadow-sm">
+          {count} {count === 1 ? "Product" : "Products"}
+        </span>
+      )}
+    </div>
+  )
 }
 
 export default function CategoriesPage() {
   const { categories, loaded, error } = useCategories()
   const loading = !loaded
   const [search, setSearch] = useState("")
+  const [sort, setSort] = useState<SortKey>("newest")
+  const [view, setView] = useState<ViewMode>("grid")
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filters, setFilters] = useState({ onlyWithProducts: false, minProducts: "" })
+  const [draft, setDraft] = useState(filters)
 
-  const filtered = search.trim()
-    ? categories.filter((c) =>
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        (c.description && c.description.toLowerCase().includes(search.toLowerCase()))
-      )
-    : categories
-
+  const hasActiveFilters = filters.onlyWithProducts || !!filters.minProducts
   const totalProducts = categories.reduce((sum, c) => sum + (c._count?.products || 0), 0)
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let list = categories.filter((c) => {
+      if (q && !(c.name.toLowerCase().includes(q) || (c.description && c.description.toLowerCase().includes(q)))) return false
+      const n = c._count?.products ?? 0
+      if (filters.onlyWithProducts && n === 0) return false
+      if (filters.minProducts && n < Number(filters.minProducts)) return false
+      return true
+    })
+    list = [...list]
+    if (sort === "name") list.sort((a, b) => a.name.localeCompare(b.name))
+    else if (sort === "products") list.sort((a, b) => (b._count?.products ?? 0) - (a._count?.products ?? 0))
+    else list.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+    return list
+  }, [categories, search, sort, filters])
+
+  // No pagination: the list scrolls and reveals 20 more categories at a time.
+  const { visibleCount, hasMore, sentinelRef } = useInfiniteScroll(visible.length, visible, BATCH_SIZE)
+  const shown = visible.slice(0, visibleCount)
+
+  // Esc closes the filter popup
+  useEffect(() => {
+    if (!filtersOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFiltersOpen(false) }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [filtersOpen])
+
+  const openFilters = () => { setDraft(filters); setFiltersOpen(true) }
+  const applyFilters = () => { setFilters(draft); setFiltersOpen(false) }
+  const clearFilters = () => { const r = { onlyWithProducts: false, minProducts: "" }; setDraft(r); setFilters(r); setFiltersOpen(false) }
 
   return (
     <div className="min-h-screen bg-gray-50/50">
-      <main className="section-container py-10">
-        {/* Page header */}
-        <div className="mb-10">
-          <span className="eyebrow">Browse</span>
-          <h1 className="heading-xl mb-2">Shop by Category</h1>
-          <p className="body-lg">Browse {totalProducts} products across {categories.length} categories</p>
-        </div>
-
-        {/* Search / Filter bar */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="relative flex-1 max-w-md">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search categories..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition"
-            />
+      <main className="section-container py-8">
+        {/* Header: title left; Filters button, search, sort and view toggle right */}
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="heading-lg">Shop by Category</h1>
+            <p className="body-sm mt-1">Browse {totalProducts} products across {categories.length} categories</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={openFilters}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shrink-0 ${
+                hasActiveFilters ? "border-primary-400 text-primary-700 bg-primary-50" : "border-primary-200 text-primary-700 bg-white hover:bg-primary-50"
+              }`}
+            >
+              <SlidersHorizontal size={16} /> Filters
+              {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-primary-600" aria-label="Filters applied" />}
+            </button>
+            <div className="relative flex-1 sm:flex-initial">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search categories..."
+                className="pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm w-full sm:w-56 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+              />
+            </div>
+            <div className="relative">
+              <ArrowUpDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                aria-label="Sort categories"
+                className="pl-8 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+              >
+                <option value="newest">Newest</option>
+                <option value="name">Name A–Z</option>
+                <option value="products">Most products</option>
+              </select>
+            </div>
+            <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white">
+              <button onClick={() => setView("grid")} aria-label="Grid view" className={`p-2.5 transition-all ${view === "grid" ? "bg-primary-50 text-primary-600" : "text-gray-400 hover:text-gray-600"}`}><Grid3X3 size={18} /></button>
+              <button onClick={() => setView("list")} aria-label="List view" className={`p-2.5 transition-all ${view === "list" ? "bg-primary-50 text-primary-600" : "text-gray-400 hover:text-gray-600"}`}><List size={18} /></button>
+            </div>
           </div>
         </div>
+
+        {/* Filters popup */}
+        {filtersOpen && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24 sm:pt-28" role="dialog" aria-modal="true" aria-label="Category filters">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setFiltersOpen(false)} />
+            <div className="relative w-full max-w-sm card-base-static p-5 shadow-[var(--shadow-elevated)]">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2"><SlidersHorizontal size={16} className="text-primary-600" /><h3 className="heading-sm">Filters</h3></div>
+                <button onClick={() => setFiltersOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition" aria-label="Close filters"><X size={18} /></button>
+              </div>
+              <div className="space-y-5">
+                <div>
+                  <label className="body-sm font-medium text-gray-700 mb-1.5 block">Minimum products in category</label>
+                  <input type="number" min={0} value={draft.minProducts} onChange={(e) => setDraft({ ...draft, minProducts: e.target.value })} className="input-base" placeholder="e.g. 10" />
+                </div>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={draft.onlyWithProducts} onChange={(e) => setDraft({ ...draft, onlyWithProducts: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                  <span className="body-sm">Only categories that have products</span>
+                </label>
+                <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+                  <button onClick={applyFilters} className="btn-primary w-full">Apply Filters</button>
+                  {(hasActiveFilters || draft.onlyWithProducts || draft.minProducts) && <button onClick={clearFilters} className="btn-outline w-full">Clear All</button>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-56 lg:h-60 rounded-2xl bg-gray-100 animate-pulse" />
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            {Array.from({ length: 10 }).map((_, i) => <div key={i} className="h-64 rounded-2xl bg-gray-100 animate-pulse" />)}
           </div>
         ) : error ? (
+          <EmptyState icon={Package} title="Couldn't load categories" description="Something went wrong while fetching categories. Please try again." action={{ label: "Retry", onClick: () => window.location.reload() }} />
+        ) : visible.length === 0 ? (
           <EmptyState
             icon={Package}
-            title="Couldn't load categories"
-            description="Something went wrong while fetching categories. Please try again."
-            action={{ label: "Retry", onClick: () => window.location.reload() }}
-          />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={Package}
-            title={search ? "No categories match your search" : "No categories available"}
-            action={search ? { label: "Clear search", onClick: () => setSearch("") } : undefined}
+            title={search || hasActiveFilters ? "No categories match your search" : "No categories available"}
+            action={search || hasActiveFilters ? { label: "Clear search & filters", onClick: () => { setSearch(""); clearFilters() } } : undefined}
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((cat) => {
-              const meta = getMeta(cat.handle)
-              const Icon = meta.icon
-              const productCount = cat._count?.products || 0
-
-              return (
-                <Link
-                  key={cat.id}
-                  href={`/categories/${cat.handle}`}
-                  className="card-base group relative overflow-hidden block"
-                >
-                  {/* Card body */}
-                  <div className={`relative h-56 lg:h-60 bg-gradient-to-br ${meta.gradient} p-6 flex flex-col justify-between overflow-hidden`}>
-                    {/* Decorative circles */}
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-8 translate-x-8" />
-                    <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-6 -translate-x-6" />
-
-                    {/* Top row: icon + product count */}
-                    <div className="relative flex items-start justify-between">
-                      <div className={`relative w-14 h-14 ${meta.accent} backdrop-blur-sm rounded-2xl flex items-center justify-center overflow-hidden`}>
-                        {cat.image ? (
-                          <Image src={cat.image} alt={cat.name} fill className="img-zoom object-cover" sizes="56px" />
-                        ) : (
-                          <Icon size={26} className="text-white" />
-                        )}
+          <>
+            {view === "grid" ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+                {shown.map((cat, i) => (
+                  <Link key={cat.id} href={`/categories/${cat.handle}`} className="card-base group block overflow-hidden">
+                    <CategoryVisual cat={cat} tint={TINTS[i % TINTS.length]} size="card" />
+                    <div className="p-4">
+                      <h3 className="text-sm sm:text-[15px] font-bold uppercase tracking-wide text-gray-900 line-clamp-2 min-h-[2.5rem]">{cat.name}</h3>
+                      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                        <span className="text-sm font-semibold text-primary-600">Browse Collection</span>
+                        <ChevronRight size={16} className="text-primary-600 transition-transform duration-200 group-hover:translate-x-1" />
                       </div>
-                      <span className="px-3 py-1 bg-white/20 backdrop-blur-sm text-white text-xs font-semibold rounded-full">
-                        {productCount} {productCount === 1 ? "Product" : "Products"}
-                      </span>
                     </div>
-
-                    {/* Bottom: name + description */}
-                    <div className="relative">
-                      <h3 className="text-xl lg:text-2xl font-bold text-white mb-1 tracking-tight">{cat.name}</h3>
-                      {cat.description && (
-                        <p className="text-sm text-white/70 line-clamp-2">{cat.description}</p>
-                      )}
-                    </div>
-
-                    {/* Sub-categories */}
-                    {cat.children && cat.children.length > 0 && (
-                      <div className="absolute bottom-16 left-6 right-6 flex flex-wrap gap-1.5">
-                        {cat.children.slice(0, 3).map((child) => (
-                          <span key={child.id} className="text-[11px] px-2.5 py-1 bg-white/20 backdrop-blur-sm text-white rounded-full font-medium">
-                            {child.name}
-                          </span>
-                        ))}
-                        {cat.children.length > 3 && (
-                          <span className="text-[11px] px-2.5 py-1 bg-white/20 backdrop-blur-sm text-white rounded-full font-medium">
-                            +{cat.children.length - 3} more
-                          </span>
-                        )}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {shown.map((cat, i) => {
+                  const n = cat._count?.products ?? 0
+                  return (
+                    <Link key={cat.id} href={`/categories/${cat.handle}`} className="card-base group flex overflow-hidden">
+                      <CategoryVisual cat={cat} tint={TINTS[i % TINTS.length]} size="row" />
+                      <div className="flex-1 min-w-0 p-4 flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <h3 className="text-[15px] font-bold uppercase tracking-wide text-gray-900">{cat.name}</h3>
+                          <p className="text-xs text-gray-500 mt-1">{n} {n === 1 ? "Product" : "Products"}</p>
+                          {cat.description && <p className="text-sm text-gray-500 mt-1 line-clamp-1 hidden sm:block">{cat.description}</p>}
+                        </div>
+                        <span className="shrink-0 inline-flex items-center gap-1 text-sm font-semibold text-primary-600">
+                          <span className="hidden sm:inline">Browse Collection</span> <ChevronRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
+                        </span>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Footer strip */}
-                  <div className="bg-white px-6 py-4 flex items-center justify-between group-hover:bg-gray-50 transition-colors duration-200">
-                    <span className="text-sm font-semibold text-gray-600 group-hover:text-primary-600 transition-colors">
-                      Browse collection
-                    </span>
-                    <ChevronRight size={16} className="text-gray-300 group-hover:text-primary-600 group-hover:translate-x-1 transition-all duration-200" />
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+            <ScrollSentinel hasMore={hasMore} sentinelRef={sentinelRef} />
+          </>
         )}
       </main>
     </div>
