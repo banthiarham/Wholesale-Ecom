@@ -69,6 +69,8 @@ export interface ProductCardProps {
   addingLabel?: string
   /** Grid view only: show a quantity box (− 1 +) next to the Add to Cart button. */
   showQuantity?: boolean
+  /** Grid view only: shorter image area, for dense 5-per-row listings. */
+  compact?: boolean
 }
 
 export function ProductCard({
@@ -92,6 +94,7 @@ export function ProductCard({
   outOfStockLabel = "Out of Stock",
   addingLabel = "Adding...",
   showQuantity = false,
+  compact = false,
 }: ProductCardProps) {
   const [qty, setQty] = useState<number>(Math.max(1, product.moq || 1))
   const maxQty = product.inventoryQuantity && product.inventoryQuantity > 0 ? product.inventoryQuantity : Infinity
@@ -291,7 +294,7 @@ export function ProductCard({
 
   return (
     <Link href={`/products/${product.handle}`} className="card-interactive group flex flex-col h-full">
-      <div className="relative aspect-square bg-gray-50 overflow-hidden">
+      <div className={`relative bg-gray-50 overflow-hidden ${compact ? "h-36 sm:h-40" : "aspect-square"}`}>
         {product.thumbnail ? (
           <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-cover" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
         ) : (

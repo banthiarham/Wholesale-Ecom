@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { X, SlidersHorizontal } from "lucide-react"
 
 export interface FilterValues {
@@ -19,6 +20,12 @@ interface FilterSidebarProps {
   /** Mobile slide-over open state — desktop rendering ignores this and is always visible. */
   mobileOpen: boolean
   onMobileClose: () => void
+  /**
+   * "sidebar" (default): permanent rail on desktop + slide-over on mobile.
+   * "popup": no rail anywhere — the same fields open in a centred dialog (mobileOpen /
+   * onMobileClose control it) at every screen size.
+   */
+  variant?: "sidebar" | "popup"
 }
 
 /**
@@ -28,7 +35,15 @@ interface FilterSidebarProps {
  * reports value changes via onChange and Apply/Clear intent via callbacks,
  * preserving the existing explicit "Apply Filters" flow rather than live-filtering.
  */
-export function FilterSidebar({ filters, onChange, onApply, onClear, hasActiveFilters, categories, mobileOpen, onMobileClose }: FilterSidebarProps) {
+export function FilterSidebar({ filters, onChange, onApply, onClear, hasActiveFilters, categories, mobileOpen, onMobileClose, variant = "sidebar" }: FilterSidebarProps) {
+  // Popup mode: Esc closes the dialog.
+  useEffect(() => {
+    if (variant !== "popup" || !mobileOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onMobileClose() }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [variant, mobileOpen, onMobileClose])
+
   const fields = (
     <div className="space-y-5">
       {categories && (
@@ -86,6 +101,25 @@ export function FilterSidebar({ filters, onChange, onApply, onClear, hasActiveFi
       </div>
     </div>
   )
+
+  if (variant === "popup") {
+    if (!mobileOpen) return null
+    return (
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24 sm:pt-28" role="dialog" aria-modal="true" aria-label="Filters">
+        <div className="absolute inset-0 bg-black/50" onClick={onMobileClose} />
+        <div className="relative w-full max-w-sm card-base-static p-5 shadow-[var(--shadow-elevated)]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal size={16} className="text-primary-600" />
+              <h3 className="heading-sm">Filters</h3>
+            </div>
+            <button onClick={onMobileClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition" aria-label="Close filters"><X size={18} /></button>
+          </div>
+          {fields}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
