@@ -144,6 +144,7 @@ export default function HomeProductsSection({ title, subtitle, query, viewAllHre
                     product={{ ...product, thumbnail: product.thumbnail || product.images?.[0] || null }}
                     view="grid"
                     showQuantity
+                    compact
                     isPriceHidden={hiddenPriceProductIds.has(product.id)}
                     isNonPurchasable={nonPurchasableProducts.has(product.id)}
                     rolePricing={rolePricingMap[product.id]}
