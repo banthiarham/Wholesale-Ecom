@@ -15,6 +15,13 @@ export class PricingService {
     rolePrice: number | null;
     appliedRoleName: string | null;
     roleTiers: { minQty: number; price: number }[];
+    /** The role's price to *display*: the tier currently reached, or (below the first tier)
+     *  the lowest tier's price. Display only — finalPrice is what is actually charged. */
+    roleDisplayPrice: number | null;
+    /** Min quantity of the tier shown in roleDisplayPrice. */
+    roleMinQty: number | null;
+    /** false while the buyer is below roleMinQty, i.e. finalPrice is still the retail price. */
+    roleQtyReached: boolean;
     contractPrice: number | null;
     seasonalDiscount: number;
     finalPrice: number;
@@ -50,6 +57,9 @@ export class PricingService {
     let rolePrice: number | null = null;
     let appliedRoleName: string | null = null;
     let roleTiers: { minQty: number; price: number }[] = [];
+    let roleDisplayPrice: number | null = null;
+    let roleMinQty: number | null = null;
+    let roleQtyReached = false;
     let loggedInRole: string | null = null;
     if (userId) {
       const user = await this.prisma.user.findUnique({
@@ -69,6 +79,16 @@ export class PricingService {
         if (applicableRoleTier) {
           rolePrice = Number(applicableRoleTier.price);
           appliedRoleName = user.roleRel?.label || user.roleRel?.name || null;
+        }
+        // Display only: below the first tier the buyer still sees their wholesale price and its
+        // min quantity (records are sorted by minQty asc, so [0] is the lowest tier). The
+        // charged price is unchanged — below the min quantity it stays the retail price.
+        const displayTier = applicableRoleTier ?? roleTierRecords[0];
+        if (displayTier) {
+          roleDisplayPrice = Number(displayTier.price);
+          roleMinQty = displayTier.minQty;
+          roleQtyReached = !!applicableRoleTier;
+          appliedRoleName = appliedRoleName ?? loggedInRole;
         }
       }
     }
@@ -170,6 +190,9 @@ export class PricingService {
       rolePrice,
       appliedRoleName,
       roleTiers,
+      roleDisplayPrice,
+      roleMinQty,
+      roleQtyReached,
       contractPrice,
       seasonalDiscount,
       finalPrice,

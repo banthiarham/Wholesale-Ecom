@@ -66,6 +66,11 @@ export interface PricingBreakdown {
    *  Pricing), if any — e.g. [{minQty:1,price:100},{minQty:10,price:90}]. Empty when the
    *  buyer isn't logged in or their role has no tiers configured for this product. */
   roleTiers?: { minQty: number; price: number }[]
+  /** Role price to display (the reached tier, or the lowest tier while below it) and its min quantity. */
+  roleDisplayPrice?: number | null
+  roleMinQty?: number | null
+  /** false while the buyer is below roleMinQty — finalPrice is then still the retail price. */
+  roleQtyReached?: boolean
   contractPrice: number | null
   seasonalDiscount: number
   finalPrice: number

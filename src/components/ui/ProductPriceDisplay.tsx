@@ -4,6 +4,7 @@ export interface RolePricingInfo {
   rolePrice: number
   savingsPercent?: number
   appliedRoleName?: string | null
+  minQty?: number | null
 }
 
 export interface RuleDiscountInfo {
@@ -40,11 +41,16 @@ export function ProductPriceDisplay({
 
   if (rolePricing) {
     return (
-      <div className="flex items-baseline gap-1.5 flex-wrap">
-        <span className={`${priceClass} text-primary-700`}>{formatPrice(rolePricing.rolePrice)}</span>
-        <span className="text-xs text-gray-400 line-through">{formatPrice(unitPrice)}</span>
-        {rolePricing.savingsPercent !== undefined && (
-          <span className="badge badge-success">{rolePricing.savingsPercent}% off</span>
+      <div>
+        <div className="flex items-baseline gap-1.5 flex-wrap">
+          <span className={`${priceClass} text-primary-700`}>{formatPrice(rolePricing.rolePrice)}</span>
+          <span className="text-xs text-gray-400 line-through">{formatPrice(unitPrice)}</span>
+          {rolePricing.savingsPercent !== undefined && (
+            <span className="badge badge-success">{rolePricing.savingsPercent}% off</span>
+          )}
+        </div>
+        {rolePricing.minQty != null && (
+          <p className="text-[11px] text-gray-500 mt-0.5">Min quantity - {rolePricing.minQty}</p>
         )}
       </div>
     )

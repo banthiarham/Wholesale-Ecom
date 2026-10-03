@@ -22,6 +22,7 @@ interface DrawerCartItem {
     moq: number
     inventoryQuantity: number
   }
+  metadata?: any
 }
 
 interface DrawerCartData {
@@ -63,9 +64,18 @@ function CartDrawerRow({
 }) {
   // Shared stepper: reseeds from the server-confirmed item.quantity whenever it changes,
   // steps by exactly 1 via functional state updates, and debounces the commit.
-  const { qty, increment, decrement, atMin } = useQuantityStepper(
+  const { qty, increment, decrement, setTyped, flush, atMin } = useQuantityStepper(
     item.quantity, item.quantity, item.product.moq, item.product.inventoryQuantity, onCommitQty
   )
+
+  // The buyer's role has a wholesale price for this product but the quantity is still below
+  // its minimum. Compared against the live `qty` (not item.quantity) so the hint reacts as the
+  // buyer types; the charged unit price above only changes once the new quantity is saved.
+  const pricing = item.metadata?.pricing
+  const unitsToWholesale =
+    pricing && pricing.roleQtyReached === false && pricing.roleDisplayPrice != null && pricing.roleMinQty != null
+      ? Number(pricing.roleMinQty) - qty
+      : 0
 
   return (
     <div className="flex gap-3 p-4 hover:bg-gray-50/60 transition-colors">
@@ -88,6 +98,11 @@ function CartDrawerRow({
           </button>
         </div>
         <p className="text-xs text-gray-400 mt-0.5">{formatPrice(item.unitPrice)} / unit</p>
+        {unitsToWholesale > 0 && (
+          <p className="text-xs text-amber-600 mt-0.5">
+            Add {unitsToWholesale} more {unitsToWholesale === 1 ? "product" : "products"} to get at {formatPrice(Number(pricing.roleDisplayPrice))}/unit
+          </p>
+        )}
         <div className="flex items-center justify-between mt-2">
           <div className="flex items-center gap-1.5">
             <button
@@ -98,7 +113,15 @@ function CartDrawerRow({
             >
               <Minus size={12} />
             </button>
-            <span className="w-7 text-center text-sm font-medium tabular-nums">{qty}</span>
+            <input
+              type="number" min={item.product.moq} max={item.product.inventoryQuantity} value={qty}
+              onChange={(e) => setTyped(Number(e.target.value))}
+              onBlur={flush}
+              onKeyDown={(e) => { if (e.key === "Enter") flush() }}
+              disabled={updating}
+              aria-label="Quantity"
+              className="w-14 h-7 text-center text-sm font-medium tabular-nums rounded-lg border border-gray-200 focus:outline-none focus:border-primary-400 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
             <button
               onClick={increment}
               disabled={updating}
