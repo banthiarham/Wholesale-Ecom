@@ -124,6 +124,12 @@ export default function Header() {
       dashboard: "Dashboard",
       inventory: "Inventory",
       bulk: "Bulk",
+      about: "About Us",
+      contact: "Contact Us",
+      faq: "FAQs",
+      privacy: "Privacy Policy",
+      terms: "Terms & Conditions",
+      shipping: "Shipping Information",
     }
     let currentPath = ""
     for (let i = 0; i < segments.length; i++) {
