@@ -17,7 +17,7 @@ import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { FilterSidebar } from "@/components/storefront/FilterSidebar"
 import { ListingToolbar, SortOption, ViewMode } from "@/components/storefront/ListingToolbar"
-import { Pagination } from "@/components/storefront/Pagination"
+import { useInfiniteScroll, ScrollSentinel } from "@/lib/useInfiniteScroll"
 
 interface Product {
   id: string
@@ -37,7 +37,8 @@ interface Product {
   category?: { id: string; name: string; handle: string }
 }
 
-const PRODUCTS_PER_PAGE = 12
+// Five cards per row on desktop; the list scrolls and loads 20 more at a time (no pagination).
+const BATCH_SIZE = 20
 
 export default function ProductsPageInner() {
   const [products, setProducts] = useState<Product[]>([])
@@ -56,7 +57,6 @@ export default function ProductsPageInner() {
   const [paymentOffers, setPaymentOffers] = useState<PaymentOffer[]>([])
   const [sort, setSort] = useState<SortOption>("newest")
   const [view, setView] = useState<ViewMode>("grid")
-  const [page, setPage] = useState(1)
   const { t } = useTranslation()
   const { user } = useAuth()
   const { showToast } = useToast()
@@ -130,13 +130,13 @@ export default function ProductsPageInner() {
     if (f.minPrice) params.set("min_price", f.minPrice)
     if (f.maxPrice) params.set("max_price", f.maxPrice)
     if (f.inStock) params.set("in_stock", "true")
+    params.set("limit", "2000") // whole catalogue — the list reveals it as you scroll
 
     fetch(`/api/products?${params.toString()}`)
       .then((res) => res.json())
       .then((data) => {
         setProducts(data.products || [])
         setLoading(false)
-        setPage(1)
       })
   }
 
@@ -206,8 +206,8 @@ export default function ProductsPageInner() {
     return filtered
   }, [products, hiddenProductIds, sort])
 
-  const totalPages = Math.max(1, Math.ceil(visibleProducts.length / PRODUCTS_PER_PAGE))
-  const paginatedProducts = visibleProducts.slice((page - 1) * PRODUCTS_PER_PAGE, page * PRODUCTS_PER_PAGE)
+  const { visibleCount, hasMore, sentinelRef } = useInfiniteScroll(visibleProducts.length, visibleProducts, BATCH_SIZE)
+  const shownProducts = visibleProducts.slice(0, visibleCount)
 
   const clearFilters = () => {
     const r = { category: "", minPrice: "", maxPrice: "", inStock: false }
@@ -218,79 +218,89 @@ export default function ProductsPageInner() {
   return (
     <div className="min-h-screen bg-gray-50/50">
       <main className="section-container py-8">
-        <h1 className="heading-lg mb-6">{t("products.title")}</h1>
-
-        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-8 items-start">
-          <FilterSidebar
-            filters={filters}
-            onChange={(f) => setFilters({ ...f, category: f.category ?? "" })}
-            onApply={() => { loadProducts(); setMobileFiltersOpen(false) }}
-            onClear={() => { clearFilters(); setMobileFiltersOpen(false) }}
-            hasActiveFilters={!!hasActiveFilters}
-            categories={categories}
-            mobileOpen={mobileFiltersOpen}
-            onMobileClose={() => setMobileFiltersOpen(false)}
-          />
-
-          <div className="min-w-0">
+        {/* Header: title on the left; Filters button, search, sort and view toggle on the right */}
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="heading-lg">{t("products.title")}</h1>
+            <p className="body-sm mt-1">Explore our wide range of quality products</p>
+          </div>
+          <div className="flex flex-col lg:items-end gap-2">
+            <p className="body-sm lg:text-right">{visibleProducts.length} products found</p>
             <ListingToolbar
               resultCount={visibleProducts.length}
+              showResultCount={false}
+              filterButton
               search={search}
               onSearchChange={setSearch}
               onSearchSubmit={() => loadProducts()}
               searchPlaceholder={t("products.search")}
               sort={sort}
-              onSortChange={(s) => { setSort(s); setPage(1) }}
+              onSortChange={setSort}
               view={view}
               onViewChange={setView}
               hasActiveFilters={!!hasActiveFilters}
               onToggleMobileFilters={() => setMobileFiltersOpen(true)}
             />
-
-            <div className="pt-6">
-              {loading ? (
-                <ProductGridSkeleton view={view} count={PRODUCTS_PER_PAGE} />
-              ) : visibleProducts.length === 0 ? (
-                <EmptyState
-                  icon={Search}
-                  title="No products found"
-                  description="Try adjusting your search or filter criteria"
-                  action={hasActiveFilters ? { label: "Clear All Filters", onClick: clearFilters } : undefined}
-                />
-              ) : (
-                <>
-                  {/* Product grid / list */}
-                  <div className={view === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5" : "space-y-3"}>
-                    {paginatedProducts.map((product) => (
-                      <ProductCard
-                        key={product.id}
-                        product={product}
-                        view={view}
-                        isPriceHidden={hiddenPriceProductIds.has(product.id)}
-                        isNonPurchasable={nonPurchasableProducts.has(product.id)}
-                        nonPurchasableMsg={nonPurchasableProducts.get(product.id) || ""}
-                        rolePricing={rolePricingMap[product.id]}
-                        ruleDiscount={ruleDiscountMap.get(product.id)}
-                        bogo={bogoMap.get(product.id)}
-                        quantityDiscount={qtyDiscountMap.get(product.id)}
-                        customBadges={customBadges}
-                        seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)}
-                        paymentOffers={paymentOffers}
-                        isWishlisted={wishlistIds.has(product.id)}
-                        onToggleWishlist={toggleWishlist}
-                        isAdding={addingId === product.id}
-                        onAddToCart={handleAddToCart}
-                        addToCartLabel={t("product.addToCart")}
-                        outOfStockLabel={t("product.outOfStock")}
-                      />
-                    ))}
-                  </div>
-
-                  <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-                </>
-              )}
-            </div>
           </div>
+        </div>
+
+        {/* The same filter fields, now in a popup opened by the Filters button */}
+        <FilterSidebar
+          variant="popup"
+          filters={filters}
+          onChange={(f) => setFilters({ ...f, category: f.category ?? "" })}
+          onApply={() => { loadProducts(); setMobileFiltersOpen(false) }}
+          onClear={() => { clearFilters(); setMobileFiltersOpen(false) }}
+          hasActiveFilters={!!hasActiveFilters}
+          categories={categories}
+          mobileOpen={mobileFiltersOpen}
+          onMobileClose={() => setMobileFiltersOpen(false)}
+        />
+
+        <div className="min-w-0">
+          {loading ? (
+            <ProductGridSkeleton view={view} count={BATCH_SIZE} />
+          ) : visibleProducts.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title="No products found"
+              description="Try adjusting your search or filter criteria"
+              action={hasActiveFilters ? { label: "Clear All Filters", onClick: clearFilters } : undefined}
+            />
+          ) : (
+            <>
+              {/* Product grid (5 per row, same compact cards as the home page) / list */}
+              <div className={view === "grid" ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4" : "space-y-3"}>
+                {shownProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    view={view}
+                    showQuantity={view === "grid"}
+                    compact={view === "grid"}
+                    isPriceHidden={hiddenPriceProductIds.has(product.id)}
+                    isNonPurchasable={nonPurchasableProducts.has(product.id)}
+                    nonPurchasableMsg={nonPurchasableProducts.get(product.id) || ""}
+                    rolePricing={rolePricingMap[product.id]}
+                    ruleDiscount={ruleDiscountMap.get(product.id)}
+                    bogo={bogoMap.get(product.id)}
+                    quantityDiscount={qtyDiscountMap.get(product.id)}
+                    customBadges={customBadges}
+                    seasonalDiscount={getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)}
+                    paymentOffers={paymentOffers}
+                    isWishlisted={wishlistIds.has(product.id)}
+                    onToggleWishlist={toggleWishlist}
+                    isAdding={addingId === product.id}
+                    onAddToCart={handleAddToCart}
+                    addToCartLabel={t("product.addToCart")}
+                    outOfStockLabel={t("product.outOfStock")}
+                  />
+                ))}
+              </div>
+
+              <ScrollSentinel hasMore={hasMore} sentinelRef={sentinelRef} />
+            </>
+          )}
         </div>
       </main>
     </div>

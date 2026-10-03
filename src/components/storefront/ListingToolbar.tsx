@@ -18,6 +18,10 @@ interface ListingToolbarProps {
   onViewChange: (view: ViewMode) => void
   hasActiveFilters: boolean
   onToggleMobileFilters: () => void
+  /** Show a labelled "Filters" button (left of the search box) at every screen size. */
+  filterButton?: boolean
+  /** Set false when the caller renders the result count itself. */
+  showResultCount?: boolean
 }
 
 /**
@@ -40,11 +44,25 @@ export function ListingToolbar({
   onViewChange,
   hasActiveFilters,
   onToggleMobileFilters,
+  filterButton = false,
+  showResultCount = true,
 }: ListingToolbarProps) {
   return (
-    <div className="sticky-toolbar flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <p className="body-sm shrink-0">{resultCount} {resultLabel}</p>
+    <div className={filterButton ? "flex flex-col sm:flex-row sm:items-center justify-end gap-3" : "sticky-toolbar flex flex-col sm:flex-row sm:items-center justify-between gap-3"}>
+      {showResultCount && <p className="body-sm shrink-0">{resultCount} {resultLabel}</p>}
       <div className="flex items-center gap-2 sm:gap-3">
+        {filterButton && (
+          <button
+            type="button"
+            onClick={onToggleMobileFilters}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shrink-0 ${
+              hasActiveFilters ? "border-primary-400 text-primary-700 bg-primary-50" : "border-primary-200 text-primary-700 bg-white hover:bg-primary-50"
+            }`}
+          >
+            <SlidersHorizontal size={16} /> Filters
+            {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-primary-600" aria-label="Filters applied" />}
+          </button>
+        )}
         {/* Search */}
         <div className="relative flex-1 sm:flex-initial">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -75,7 +93,7 @@ export function ListingToolbar({
         {/* Mobile filter toggle — desktop uses the permanent FilterSidebar rail instead */}
         <button
           onClick={onToggleMobileFilters}
-          className={`lg:hidden p-2.5 rounded-xl border transition-all ${
+          className={`${filterButton ? "hidden" : "lg:hidden"} p-2.5 rounded-xl border transition-all ${
             hasActiveFilters ? "border-primary-300 text-primary-600 bg-primary-50" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
           }`}
         >

@@ -53,6 +53,38 @@ export class ProductsService {
       return products.sort((a: any, b: any) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
     }
 
+    // "Best selling": most units sold first (cancelled/refunded orders don't count). Products
+    // with no sales yet are appended by rating, so a brand-new store still gets a sensible list.
+    if (filters?.sort === 'bestselling') {
+      const take = filters?.limit || 100;
+      const include = {
+        category: { select: { id: true, name: true, handle: true } },
+        tierPrices: { orderBy: { minQty: 'asc' as const } },
+        _count: { select: { reviews: true } },
+      };
+      const sales = await this.prisma.orderItem.groupBy({
+        by: ['productId'],
+        where: { product: where, order: { status: { notIn: ['CANCELLED', 'REFUNDED'] } } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take,
+      });
+      const soldIds = sales.map((s) => s.productId);
+      const sold = soldIds.length
+        ? await this.prisma.product.findMany({ where: { ...where, id: { in: soldIds } }, include })
+        : [];
+      const rank = new Map<string, number>(soldIds.map((id, i) => [id, i]));
+      sold.sort((a: any, b: any) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+      if (sold.length >= take) return sold.slice(0, take);
+      const rest = await this.prisma.product.findMany({
+        where: { ...where, id: { notIn: soldIds } },
+        include,
+        orderBy: [{ rating: 'desc' }, { createdAt: 'desc' }],
+        take: take - sold.length,
+      });
+      return [...sold, ...rest];
+    }
+
     // Sort order
     let orderBy: any = { createdAt: 'desc' };
     if (filters?.sort === 'popularity') orderBy = { rating: 'desc' };

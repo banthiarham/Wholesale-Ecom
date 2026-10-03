@@ -1,8 +1,9 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { Heart, Star, Package, ShoppingCart, Sparkles } from "lucide-react"
+import { Heart, Star, Package, ShoppingCart, Sparkles, Minus, Plus } from "lucide-react"
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 import { SeasonalDiscount, PaymentOffer, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
 import { getContrastTextColor, isExternalImageUrl } from "@/lib/utils"
@@ -66,6 +67,10 @@ export interface ProductCardProps {
   addToCartLabel?: string
   outOfStockLabel?: string
   addingLabel?: string
+  /** Grid view only: show a quantity box (− 1 +) next to the Add to Cart button. */
+  showQuantity?: boolean
+  /** Grid view only: shorter image area, for dense 5-per-row listings. */
+  compact?: boolean
 }
 
 export function ProductCard({
@@ -88,7 +93,12 @@ export function ProductCard({
   addToCartLabel = "Add to Cart",
   outOfStockLabel = "Out of Stock",
   addingLabel = "Adding...",
+  showQuantity = false,
+  compact = false,
 }: ProductCardProps) {
+  const [qty, setQty] = useState<number>(Math.max(1, product.moq || 1))
+  const maxQty = product.inventoryQuantity && product.inventoryQuantity > 0 ? product.inventoryQuantity : Infinity
+  const clampQty = (n: number) => Math.min(maxQty, Math.max(Math.max(1, product.moq || 1), Math.floor(Number.isFinite(n) ? n : 1)))
   const isOutOfStock = (product.inventoryQuantity ?? Infinity) <= 0
   const compareAtNum = product.compareAtPrice != null ? Number(product.compareAtPrice) : null
   const discountPct = compareAtNum && compareAtNum > Number(product.unitPrice)
@@ -162,6 +172,32 @@ export function ProductCard({
         >
           {label}
         </button>
+      )
+    }
+    if (showQuantity) {
+      const stop = (e: React.SyntheticEvent) => { e.preventDefault(); e.stopPropagation() }
+      return (
+        <div className="mt-3 flex items-center gap-2" onClick={stop}>
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden shrink-0">
+            <button type="button" onClick={(e) => { stop(e); setQty((q) => clampQty(q - 1)) }} disabled={disabled || qty <= Math.max(1, product.moq || 1)} className="w-7 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease quantity"><Minus size={12} /></button>
+            <input
+              type="number" min={Math.max(1, product.moq || 1)} value={qty} disabled={disabled} aria-label="Quantity"
+              onChange={(e) => setQty(Number(e.target.value))}
+              onBlur={() => setQty((q) => clampQty(q))}
+              onKeyDown={(e) => { if (e.key === "Enter") { stop(e); setQty((q) => clampQty(q)) } }}
+              className="w-10 h-8 text-center text-xs font-semibold border-x border-gray-200 focus:outline-none focus:bg-gray-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <button type="button" onClick={(e) => { stop(e); setQty((q) => clampQty(q + 1)) }} disabled={disabled} className="w-7 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Increase quantity"><Plus size={12} /></button>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => { stop(e); onAddToCart(product.id, clampQty(qty)) }}
+            disabled={disabled}
+            className="flex-1 min-w-0 h-8 bg-primary-600 text-white rounded-lg text-xs font-bold hover:bg-primary-700 active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
+          >
+            <ShoppingCart size={13} className="shrink-0" /> <span className="truncate">{label}</span>
+          </button>
+        </div>
       )
     }
     return (
@@ -258,7 +294,7 @@ export function ProductCard({
 
   return (
     <Link href={`/products/${product.handle}`} className="card-interactive group flex flex-col h-full">
-      <div className="relative aspect-square bg-gray-50 overflow-hidden">
+      <div className={`relative bg-gray-50 overflow-hidden ${compact ? "h-36 sm:h-40" : "aspect-square"}`}>
         {product.thumbnail ? (
           <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-cover" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
         ) : (

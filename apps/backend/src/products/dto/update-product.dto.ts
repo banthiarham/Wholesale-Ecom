@@ -61,4 +61,9 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  /** Replaces the product's tier (bulk) prices; an empty array removes them all. */
+  @IsOptional()
+  @IsArray()
+  tierPrices?: { minQty: number; maxQty?: number | null; price: number }[];
 }

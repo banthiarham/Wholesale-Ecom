@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, Zap } from "lucide-react"
+import { ArrowRight, CheckCircle2, Truck } from "lucide-react"
 
 interface CTABannerSectionProps {
   headline?: string
@@ -12,40 +12,48 @@ interface CTABannerSectionProps {
   ctaLink2?: string
 }
 
+const HIGHLIGHTS = [
+  { icon: CheckCircle2, label: "Bulk Pricing" },
+  { icon: CheckCircle2, label: "Verified Suppliers" },
+  { icon: Truck, label: "Reliable Delivery" },
+]
+
 export default function CTABannerSection({
-  headline = "Ready to buy in bulk?",
-  subtext = "Sign up for free and get access to exclusive wholesale pricing, tier discounts, and priority shipping.",
-  ctaText = "Get Started Free",
-  ctaLink = "/register",
+  headline = "Ready to Buy in Bulk?",
+  subtext = "Get the best wholesale prices with tier discounts and reliable delivery.",
+  ctaText = "Browse Products",
+  ctaLink = "/products",
   ctaText2 = "Request a Quote",
   ctaLink2 = "/rfqs/new",
 }: CTABannerSectionProps) {
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-secondary-600 py-9 lg:py-11 shadow-[0_16px_40px_-24px_rgba(15,23,42,.7)]">
-      {/* Subtle background pattern */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-primary-400/10 rounded-full blur-3xl" />
-      </div>
+    <section className="relative overflow-hidden rounded-3xl border border-primary-100 bg-gradient-to-r from-primary-50 via-primary-100/60 to-primary-50 px-6 py-8 sm:px-10 sm:py-10">
+      {/* soft decorative blobs, theme-coloured */}
+      <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-primary-200/50 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-primary-300/30 blur-3xl" />
 
-      <div className="relative px-6 sm:px-8 lg:px-10">
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-16">
-          <div className="lg:max-w-xl text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 mb-4 px-3.5 py-1.5 bg-primary-600/20 rounded-full border border-primary-500/30">
-              <Zap size={14} className="text-primary-400" />
-              <span className="text-xs font-semibold text-primary-400 uppercase tracking-wider">Wholesale Platform</span>
-            </div>
-            <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2 leading-tight tracking-tight">{headline}</h2>
-            <p className="text-gray-400 text-base leading-relaxed">{subtext}</p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Link href={ctaLink} className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-all duration-200 shadow-lg shadow-primary-600/20 text-sm">
+      <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+        <div className="lg:max-w-xl">
+          <span className="eyebrow">Wholesale Platform</span>
+          <h2 className="text-3xl lg:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">{headline}</h2>
+          <p className="mt-2 text-base text-gray-600 leading-relaxed">{subtext}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href={ctaLink} className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-colors shadow-sm">
               {ctaText} <ArrowRight size={16} />
             </Link>
-            <Link href={ctaLink2} className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-white/10 backdrop-blur text-white font-semibold rounded-xl border border-white/20 hover:bg-white/20 transition-all duration-200 text-sm">
+            <Link href={ctaLink2} className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-primary-700 font-semibold rounded-xl border border-primary-300 hover:bg-primary-50 transition-colors">
               {ctaText2}
             </Link>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:w-64">
+          {HIGHLIGHTS.map(({ icon: Icon, label }) => (
+            <div key={label} className="flex items-center gap-3 rounded-xl bg-white/90 border border-primary-100 px-4 py-3 shadow-sm">
+              <Icon size={18} className="text-primary-600 shrink-0" />
+              <span className="text-sm font-semibold text-gray-800">{label}</span>
+            </div>
+          ))}
         </div>
       </div>
     </section>
