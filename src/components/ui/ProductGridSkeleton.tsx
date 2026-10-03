@@ -37,7 +37,7 @@ export function ProductGridSkeleton({ count = 8, view = "grid", className }: Pro
 
   if (view === "list") {
     return (
-      <div className={`space-y-4 ${className ?? ""}`}>
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-4 ${className ?? ""}`}>
         {items.map((_, i) => (
           <ProductCardSkeleton key={i} view="list" />
         ))}

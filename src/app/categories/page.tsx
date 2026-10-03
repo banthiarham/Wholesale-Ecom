@@ -30,7 +30,7 @@ function CategoryVisual({ cat, tint, size }: { cat: CategoryNode; tint: string; 
   return (
     <div className={`relative overflow-hidden ${tint} ${size === "card" ? "h-40 sm:h-44" : "h-28 w-28 sm:w-36 shrink-0"} flex items-center justify-center`}>
       {cat.image ? (
-        <Image src={cat.image} alt={cat.name} fill className="object-contain p-5 transition-transform duration-300 group-hover:scale-105" sizes="(max-width: 640px) 50vw, 20vw" />
+        <Image src={cat.image} alt={cat.name} fill className="object-cover transition-transform duration-300 group-hover:scale-105" sizes="(max-width: 640px) 50vw, 20vw" />
       ) : (
         <Icon size={size === "card" ? 56 : 40} className="text-gray-900/15 transition-transform duration-300 group-hover:scale-110" strokeWidth={1.5} />
       )}

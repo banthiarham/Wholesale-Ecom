@@ -7,12 +7,19 @@ import {
   Body,
   Param,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { mkdirSync } from 'fs';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody } from '@nestjs/swagger';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { AdjustCategoryPriceDto } from './dto/adjust-category-price.dto';
+import { AdjustCategoryRolePriceDto } from './dto/adjust-category-role-price.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -67,17 +74,47 @@ export class CategoriesController {
     return { category };
   }
 
-  @Post(':id/adjust-price')
+  @Post('upload')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk-adjust the price of every product in a category by a percentage (Admin only)' })
-  @ApiResponse({ status: 200, description: 'Product prices adjusted' })
-  @ApiResponse({ status: 404, description: 'Category not found' })
+  @ApiOperation({ summary: 'Upload a category image (Admin only); returns its URL to save on the category' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req: any, file: any, cb: any) => {
+        if (/^image\/(jpe?g|png|webp|gif|avif)$/i.test(file.mimetype)) cb(null, true);
+        else cb(new BadRequestException('Only JPG, PNG, WebP, GIF or AVIF images are allowed'), false);
+      },
+      storage: diskStorage({
+        destination: (_req: any, _file: any, cb: any) => {
+          const dir = join(process.cwd(), 'uploads', 'categories');
+          mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req: any, file: any, cb: any) => {
+          cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extname(file.originalname).toLowerCase()}`);
+        },
+      }),
+    }),
+  )
+  uploadImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No image file received');
+    return { url: `/uploads/categories/${file.filename}` };
+  }
+
+  @Post(':id/role-price-adjust')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Adjust existing role prices for every product in a category by a % or flat amount (Admin only)" })
+  @ApiResponse({ status: 200, description: 'Role prices adjusted' })
+  @ApiResponse({ status: 400, description: 'Invalid change, or it would bring a price to zero or below' })
+  @ApiResponse({ status: 404, description: 'Category or role not found' })
   @ApiParam({ name: 'id', description: 'Category UUID' })
-  @ApiBody({ type: AdjustCategoryPriceDto })
-  async adjustPrice(@Param('id') id: string, @Body() dto: AdjustCategoryPriceDto) {
-    return this.categoriesService.adjustProductPrices(id, dto.percentage);
+  @ApiBody({ type: AdjustCategoryRolePriceDto })
+  async adjustRolePrices(@Param('id') id: string, @Body() dto: AdjustCategoryRolePriceDto) {
+    return this.categoriesService.adjustRolePrices(id, dto);
   }
 
   @Delete(':id')
