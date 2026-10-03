@@ -148,7 +148,7 @@ export class RolePricesService {
               roleId: entry.roleId,
               price: entry.price,
               minQty: entry.minQty ?? 1,
-              isActive: true,
+              isActive: entry.isActive ?? true,
             })),
           });
         }

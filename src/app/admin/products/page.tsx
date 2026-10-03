@@ -8,6 +8,7 @@ import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import RolePriceTable from "@/components/admin/RolePriceTable"
 
 interface Product {
   id: string
@@ -459,6 +460,16 @@ function AdminProductsContent() {
               )}
               <p className="text-xs text-gray-400 dark:text-gray-500">Add quantity-based pricing tiers. Buyers ordering in bulk get discounted rates.</p>
             </div>
+
+            {/* Role Pricing (edit only — shares data with the Role Pricing page) */}
+            {editingProduct && (
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role Pricing</label>
+                <RolePriceTable
+                  product={{ id: editingProduct.id, title: editingProduct.title, sku: editingProduct.sku || undefined, unitPrice: Number(editingProduct.unitPrice) }}
+                />
+              </div>
+            )}
 
             {/* Images */}
             <div className="sm:col-span-2">

@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Trash2, Edit, X, ChevronRight, ChevronDown, Folder } from "lucide-react"
+import { Plus, Trash2, Edit, X, ChevronRight, ChevronDown, Folder, Tag, ImagePlus } from "lucide-react"
+import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 
 interface CategoryNode {
@@ -9,9 +10,28 @@ interface CategoryNode {
   name: string
   handle: string
   description: string | null
+  image?: string | null
   parentId: string | null
   children?: CategoryNode[]
   _count?: { products: number }
+}
+
+interface RoleLite {
+  id: string
+  name: string
+  label: string
+  color: string
+}
+
+interface CategoryProduct {
+  id: string
+  title: string
+  unitPrice: number
+  compareAtPrice?: number | null
+  inventoryQuantity: number
+  reservedQuantity?: number
+  status: string
+  tierPrices?: unknown[]
 }
 
 export default function AdminCategoriesPage() {
@@ -23,10 +43,15 @@ export default function AdminCategoriesPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
-  const emptyForm = { name: "", handle: "", description: "", parentId: "" }
+  const emptyForm = { name: "", handle: "", description: "", parentId: "", image: "" }
   const [form, setForm] = useState(emptyForm)
-  const [bulkPercent, setBulkPercent] = useState("")
-  const [applyingPrice, setApplyingPrice] = useState(false)
+  // Role pricing for the category being edited: one % / Rs. pair per role (only one of the two may be filled).
+  const [roles, setRoles] = useState<RoleLite[]>([])
+  const [adjust, setAdjust] = useState<Record<string, { pct: string; amt: string }>>({})
+  const [savingRoles, setSavingRoles] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [catProducts, setCatProducts] = useState<CategoryProduct[]>([])
+  const [loadingProducts, setLoadingProducts] = useState(false)
 
   useEffect(() => {
     loadCategories()
@@ -57,7 +82,7 @@ export default function AdminCategoriesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const body = { ...form, description: form.description || null, parentId: form.parentId || null }
+    const body = { ...form, description: form.description || null, parentId: form.parentId || null, image: form.image }
     try {
       if (editingCategory) {
         await fetch(`/api/categories/${editingCategory.id}`, {
@@ -103,37 +128,113 @@ export default function AdminCategoriesPage() {
       handle: c.handle,
       description: c.description || "",
       parentId: c.parentId || "",
+      image: c.image || "",
     })
-    setBulkPercent("")
+    setAdjust({})
     setShowForm(true)
+    loadRoles()
+    loadCategoryProducts(c.id)
   }
 
-  const handleAdjustPrice = async () => {
-    if (!editingCategory) return
-    const percentage = parseFloat(bulkPercent)
-    if (Number.isNaN(percentage) || percentage === 0) {
-      alert("Enter a non-zero percentage, e.g. 10 or -15")
-      return
-    }
-    const direction = percentage > 0 ? "increase" : "decrease"
-    if (!confirm(`This will ${direction} the price of every product in "${editingCategory.name.trim()}" by ${Math.abs(percentage)}%. This cannot be undone. Continue?`)) return
-
-    setApplyingPrice(true)
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    if (!file.type.startsWith("image/")) { alert("Please choose an image file (JPG, PNG, WebP).") ; return }
+    if (file.size > 5 * 1024 * 1024) { alert("Image must be 5 MB or smaller."); return }
+    setUploadingImage(true)
     try {
-      const res = await fetch(`/api/categories/${editingCategory.id}/adjust-price`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ percentage }),
-      })
-      if (!res.ok) throw new Error("Request failed")
-      const data = await res.json()
-      alert(`Updated price for ${data.updatedCount} product(s).`)
-      setBulkPercent("")
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/categories/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.url) throw new Error(Array.isArray(data.message) ? data.message.join(", ") : data.message || "Upload failed")
+      setForm((f) => ({ ...f, image: data.url }))
     } catch (err) {
       console.error(err)
-      alert("Failed to adjust product prices")
+      alert(err instanceof Error ? err.message : "Failed to upload image")
     } finally {
-      setApplyingPrice(false)
+      setUploadingImage(false)
+    }
+  }
+
+  const loadRoles = async () => {
+    try {
+      const res = await fetch("/api/roles", { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      const list: RoleLite[] = Array.isArray(data) ? data : data.roles ?? []
+      // Role pricing is for buyer-side roles only — ADMIN is staff.
+      setRoles(list.filter((r) => r.name !== "ADMIN"))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const loadCategoryProducts = async (categoryId: string) => {
+    setLoadingProducts(true)
+    setCatProducts([])
+    try {
+      const res = await fetch(`/api/products?category=${categoryId}&status=PUBLISHED,DRAFT,ARCHIVED&limit=2000`, { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      setCatProducts(Array.isArray(data) ? data : data.products || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingProducts(false)
+    }
+  }
+
+  const setAdjustField = (roleId: string, field: "pct" | "amt", value: string) =>
+    setAdjust((prev) => ({ ...prev, [roleId]: { ...(prev[roleId] || { pct: "", amt: "" }), [field]: value } }))
+
+  // One Save for the whole table: every role with a value filled in is sent together and applied
+  // all-or-nothing by the backend.
+  const handleSaveRoleAdjust = async () => {
+    if (!editingCategory) return
+    const entries = roles
+      .map((role) => {
+        const e = adjust[role.id] || { pct: "", amt: "" }
+        const usingPct = e.pct.trim() !== ""
+        const raw = usingPct ? e.pct : e.amt
+        if (raw.trim() === "") return null
+        return { role, usingPct, value: parseFloat(raw) }
+      })
+      .filter((x): x is { role: RoleLite; usingPct: boolean; value: number } => x !== null)
+
+    if (entries.length === 0) {
+      alert("Enter a percentage or amount for at least one role.")
+      return
+    }
+    if (entries.some((x) => Number.isNaN(x.value) || x.value === 0)) {
+      alert("Each change must be a non-zero number, e.g. 10 or -15.")
+      return
+    }
+    const summary = entries
+      .map((x) => `${x.role.label || x.role.name}: ${x.value > 0 ? "+" : "-"}${x.usingPct ? `${Math.abs(x.value)}%` : `₹${Math.abs(x.value)}`}`)
+      .join("\n")
+    if (!confirm(`Apply these changes to the existing role prices (every quantity tier) of all products in "${editingCategory.name.trim()}"?\n\n${summary}`)) return
+
+    setSavingRoles(true)
+    try {
+      const res = await fetch(`/api/categories/${editingCategory.id}/role-price-adjust`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          adjustments: entries.map((x) => ({ roleId: x.role.id, ...(x.usingPct ? { percentage: x.value } : { amount: x.value }) })),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(Array.isArray(data.message) ? data.message.join(", ") : data.message || "Failed to update role prices")
+        return
+      }
+      alert(`Updated ${data.updatedCount} price(s) across ${data.productCount} product(s).`)
+      setAdjust({})
+    } catch (err) {
+      console.error(err)
+      alert("Failed to update role prices")
+    } finally {
+      setSavingRoles(false)
     }
   }
 
@@ -210,6 +311,24 @@ export default function AdminCategoriesPage() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category Image</label>
+              <div className="flex items-center gap-3">
+                {form.image ? (
+                  <div className="relative w-24 h-24 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden group bg-gray-50 dark:bg-gray-800">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={form.image} alt="Category" className="w-full h-full object-contain" />
+                    <button type="button" onClick={() => setForm({ ...form, image: "" })} className="absolute top-0.5 right-0.5 bg-white dark:bg-gray-800 rounded-full p-0.5 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition shadow-sm" aria-label="Remove image"><X size={12} /></button>
+                  </div>
+                ) : null}
+                <label className={`w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center gap-1 text-xs text-gray-400 dark:text-gray-500 cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition ${uploadingImage ? "opacity-50 pointer-events-none" : ""}`}>
+                  <ImagePlus size={20} />
+                  {uploadingImage ? "Uploading..." : form.image ? "Replace" : "Add image"}
+                  <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Shown to all users on the Categories page and in the home page category widgets. JPG, PNG or WebP, up to 5 MB. Click Save to apply.</p>
+            </div>
             <div className="sm:col-span-2 flex justify-end gap-3">
               <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">Save</button>
@@ -218,29 +337,70 @@ export default function AdminCategoriesPage() {
 
           {editingCategory && (
             <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100 mb-1">Bulk Price Adjustment</h4>
+              <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100 mb-1">Role Pricing</h4>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                Adjust the price of every product in this category by a percentage. This updates product prices immediately and cannot be undone.
+                Raise or lower a role&apos;s existing prices for every product in this category, by a percentage or a flat amount (use a minus sign to decrease). Fill only one of the two fields per role.
               </p>
-              <div className="flex items-center gap-3">
-                <div className="relative w-40">
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="e.g. 10 or -15"
-                    value={bulkPercent}
-                    onChange={(e) => setBulkPercent(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm pr-7"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
-                </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Role</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Price Change (%)</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Price Change (Rs.)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                    {roles.map((role) => {
+                      const entry = adjust[role.id] || { pct: "", amt: "" }
+                      const inputCls = "w-36 px-3 py-1.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                      return (
+                        <tr key={role.id}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: role.color || "#6b7280" }} />
+                              <span className="font-medium text-gray-900 dark:text-gray-100">{role.label || role.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="e.g. 10 or -15"
+                              value={entry.pct}
+                              disabled={entry.amt.trim() !== ""}
+                              onChange={(e) => setAdjustField(role.id, "pct", e.target.value)}
+                              className={inputCls}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="e.g. 100 or -50"
+                              value={entry.amt}
+                              disabled={entry.pct.trim() !== ""}
+                              onChange={(e) => setAdjustField(role.id, "amt", e.target.value)}
+                              className={inputCls}
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {roles.length === 0 && (
+                      <tr><td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-400 dark:text-gray-500">No buyer roles found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end mt-4">
                 <button
                   type="button"
-                  onClick={handleAdjustPrice}
-                  disabled={applyingPrice || !bulkPercent}
-                  className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  onClick={handleSaveRoleAdjust}
+                  disabled={savingRoles || roles.length === 0 || roles.every((r) => !(adjust[r.id]?.pct.trim() || adjust[r.id]?.amt.trim()))}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
-                  {applyingPrice ? "Applying..." : "Apply to all products"}
+                  {savingRoles ? "Saving..." : "Save"}
                 </button>
               </div>
             </div>
@@ -248,7 +408,63 @@ export default function AdminCategoriesPage() {
         </div>
       )}
 
-      {loading ? (
+      {showForm && editingCategory ? (
+        <div className="admin-card-static overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100">
+            Products in {editingCategory.name.trim()} {!loadingProducts && <span className="text-gray-400 dark:text-gray-500 font-normal">({catProducts.length})</span>}
+            <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">To change a product, use the Products module.</span>
+          </div>
+          {loadingProducts ? (
+            <p className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading products...</p>
+          ) : catProducts.length === 0 ? (
+            <p className="p-6 text-sm text-gray-500 dark:text-gray-400">No products in this category.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Product</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Price</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Stock</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Tiers</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                  {catProducts.map((p) => (
+                    <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{p.title}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{formatPrice(p.unitPrice)}</span>
+                        {p.compareAtPrice ? <span className="text-xs text-gray-400 dark:text-gray-500 line-through ml-1">{formatPrice(p.compareAtPrice)}</span> : null}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{p.inventoryQuantity - (p.reservedQuantity || 0)}/{p.inventoryQuantity}</td>
+                      <td className="px-4 py-3">
+                        {p.tierPrices && p.tierPrices.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded text-xs font-medium">
+                            <Tag size={12} /> {p.tierPrices.length}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">None</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                          p.status === "PUBLISHED" || p.status === "ACTIVE" ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400" :
+                          p.status === "DRAFT" ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
+                          "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                        }`}>
+                          {p.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : loading ? (
         <SkeletonTable />
       ) : (
         <div className="admin-card-static">
