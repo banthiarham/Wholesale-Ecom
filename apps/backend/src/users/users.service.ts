@@ -153,20 +153,57 @@ export class UsersService {
     status?: UserStatus;
     skip?: number;
     take?: number;
+    search?: string;
+    sortBy?: string;
+    sortDir?: string;
   }): Promise<{ users: Omit<User, 'password'>[]; total: number }> {
-    const { role, status, skip = 0, take = 20 } = params || {};
+    const { role, status, search, sortBy, sortDir } = params || {};
+    // Guard against NaN / negative values from malformed query strings.
+    const skip = Number.isInteger(params?.skip) && (params!.skip as number) > 0 ? (params!.skip as number) : 0;
+    const take = Number.isInteger(params?.take) && (params!.take as number) > 0 ? (params!.take as number) : 20;
+
+    // Search runs in the database across ALL users (not just the loaded page). Every
+    // whitespace-separated term must match somewhere (name, email, phone, company or role),
+    // so "john smith" finds a user whose first name is John and last name is Smith.
+    const terms = (search || '').trim().split(/\s+/).filter(Boolean);
+    const searchFilter = terms.length
+      ? {
+          AND: terms.map((term) => {
+            const matchingRoles = Object.values(UserRole).filter((r) => r.includes(term.toUpperCase()));
+            return {
+              OR: [
+                { firstName: { contains: term, mode: 'insensitive' as const } },
+                { lastName: { contains: term, mode: 'insensitive' as const } },
+                { email: { contains: term, mode: 'insensitive' as const } },
+                { phone: { contains: term, mode: 'insensitive' as const } },
+                { companyName: { contains: term, mode: 'insensitive' as const } },
+                { roleRel: { is: { label: { contains: term, mode: 'insensitive' as const } } } },
+                ...(matchingRoles.length ? [{ role: { in: matchingRoles } }] : []),
+              ],
+            };
+          }),
+        }
+      : {};
 
     const where = {
       ...(role && { role }),
       ...(status && { status }),
+      ...searchFilter,
     };
+
+    // Sorting is done by the database so it applies to the whole result set, not one page.
+    const sortableColumns = ['firstName', 'lastName', 'email', 'role', 'status', 'createdAt'];
+    const orderColumn = sortBy && sortableColumns.includes(sortBy) ? sortBy : 'createdAt';
+    const orderDirection: 'asc' | 'desc' = sortDir === 'asc' ? 'asc' : 'desc';
+    // `id` as a tie-breaker keeps page boundaries stable when many rows share a value.
+    const orderBy = [{ [orderColumn]: orderDirection }, { id: 'asc' as const }];
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
       }),
       this.prisma.user.count({ where }),
     ]);

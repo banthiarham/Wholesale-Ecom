@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { Search, ChevronDown, ChevronUp, Shield, User, Ban, Trash2, X, Plus, Upload } from "lucide-react"
+import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Shield, User, Ban, Trash2, X, Plus, Upload } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { getContrastTextColor } from "@/lib/utils"
 
@@ -28,14 +28,22 @@ interface UserData {
   phone?: string | null
 }
 
+const PAGE_SIZE_OPTIONS = [20, 30, 50, 100]
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserData[]>([])
   const [roles, setRoles] = useState<RoleData[]>([])
-  const [filtered, setFiltered] = useState<UserData[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true) // first load only (skeleton)
+  const [fetching, setFetching] = useState(false) // any reload (dims the table)
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [sortKey, setSortKey] = useState<keyof UserData>("createdAt")
   const [sortDesc, setSortDesc] = useState(true)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [total, setTotal] = useState(0)
+  const requestRef = useRef(0)
+  const hasLoadedRef = useRef(false)
   const [modalUser, setModalUser] = useState<UserData | null>(null)
   const [modalAction, setModalAction] = useState<"role" | "status" | "delete" | null>(null)
   const [updatingRole, setUpdatingRole] = useState(false)
@@ -57,39 +65,57 @@ export default function AdminUsersPage() {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   useEffect(() => {
-    loadUsers()
     loadRoles()
   }, [token])
 
+  // Search is sent to the server (it searches ALL users, not just this page). Wait for a
+  // short pause in typing before asking, and jump back to page 1 for every new search.
   useEffect(() => {
-    const q = search.toLowerCase()
-    const result = users.filter(
-      (u) =>
-        u.email.toLowerCase().includes(q) ||
-        u.firstName.toLowerCase().includes(q) ||
-        u.lastName.toLowerCase().includes(q) ||
-        (u.roleRel?.label || u.role).toLowerCase().includes(q)
-    )
-    result.sort((a, b) => {
-      const av = a[sortKey] ?? ""
-      const bv = b[sortKey] ?? ""
-      return sortDesc ? (bv > av ? 1 : -1) : av > bv ? 1 : -1
-    })
-    setFiltered(result)
-  }, [users, search, sortKey, sortDesc])
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim())
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
-  const loadUsers = async () => {
-    setLoading(true)
+  const loadUsers = useCallback(async () => {
+    const requestId = ++requestRef.current
+    if (!hasLoadedRef.current) setLoading(true)
+    setFetching(true)
     try {
-      const res = await fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } })
+      const params = new URLSearchParams({
+        skip: String((page - 1) * pageSize),
+        take: String(pageSize),
+        sortBy: String(sortKey),
+        sortDir: sortDesc ? "desc" : "asc",
+      })
+      if (debouncedSearch) params.set("search", debouncedSearch)
+      const res = await fetch(`/api/users?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
-      setUsers(data.users || [])
+      if (requestId !== requestRef.current) return // a newer request superseded this one
+      const list: UserData[] = data.users || []
+      const count: number = typeof data.total === "number" ? data.total : list.length
+      setTotal(count)
+      // The current page no longer exists (e.g. its last user was deleted): step back.
+      if (list.length === 0 && count > 0 && page > 1) {
+        setPage(Math.max(1, Math.ceil(count / pageSize)))
+        return
+      }
+      setUsers(list)
+      hasLoadedRef.current = true
     } catch (err) {
       console.error(err)
     } finally {
-      setLoading(false)
+      if (requestId === requestRef.current) {
+        setLoading(false)
+        setFetching(false)
+      }
     }
-  }
+  }, [token, page, pageSize, sortKey, sortDesc, debouncedSearch])
+
+  useEffect(() => {
+    loadUsers()
+  }, [loadUsers])
 
   const loadRoles = async () => {
     try {
@@ -138,7 +164,8 @@ export default function AdminUsersPage() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       })
-      setUsers((prev) => prev.filter((u) => u.id !== userId))
+      // Reload so the page refills from the next users and the total stays correct.
+      await loadUsers()
     } catch (err) {
       console.error(err)
     }
@@ -229,6 +256,21 @@ export default function AdminUsersPage() {
     return user.roleRel?.label || user.role
   }
 
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  // Compact page list: always first/last, the current page and its neighbours, "…" for gaps.
+  const pageNumbers = (current: number, last: number): (number | "…")[] => {
+    if (last <= 7) return Array.from({ length: last }, (_, i) => i + 1)
+    const pages = new Set([1, last, current - 1, current, current + 1])
+    const sorted = Array.from(pages).filter((p) => p >= 1 && p <= last).sort((a, b) => a - b)
+    const out: (number | "…")[] = []
+    sorted.forEach((p, i) => {
+      if (i > 0 && p - sorted[i - 1] > 1) out.push("…")
+      out.push(p)
+    })
+    return out
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -243,7 +285,7 @@ export default function AdminUsersPage() {
           />
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500 dark:text-gray-400">{filtered.length} user{filtered.length !== 1 ? "s" : ""}</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{total} user{total !== 1 ? "s" : ""}</span>
           <Link href="/admin/users/bulk-upload" className="flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 transition hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-900/20 dark:text-primary-300">
             <Upload size={16} /> Bulk Upload
           </Link>
@@ -260,7 +302,7 @@ export default function AdminUsersPage() {
         <SkeletonTable rows={5} cols={6} />
       ) : (
         <div className="admin-card-static overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto transition-opacity ${fetching ? "opacity-60" : ""}`}>
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                 <tr>
@@ -277,6 +319,7 @@ export default function AdminUsersPage() {
                       onClick={() => {
                         if (sortKey === col.key) setSortDesc(!sortDesc)
                         else { setSortKey(col.key); setSortDesc(true) }
+                        setPage(1)
                       }}
                     >
                       <div className="flex items-center gap-1">{col.label} <SortIcon col={col.key} /></div>
@@ -286,7 +329,14 @@ export default function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                {filtered.map((u) => (
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                      {debouncedSearch ? `No users match "${debouncedSearch}"` : "No users found"}
+                    </td>
+                  </tr>
+                )}
+                {users.map((u) => (
                   <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -344,6 +394,61 @@ export default function AdminUsersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 text-sm dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
+              <label htmlFor="users-page-size" className="whitespace-nowrap">Rows per page</label>
+              <select
+                id="users-page-size"
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
+                className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span className="whitespace-nowrap">
+                {total === 0 ? "0 of 0" : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={14} /> Prev
+              </button>
+              {pageNumbers(page, totalPages).map((n, i) =>
+                n === "…" ? (
+                  <span key={`gap-${i}`} className="px-1 text-gray-400">…</span>
+                ) : (
+                  <button
+                    key={n}
+                    onClick={() => setPage(n)}
+                    aria-current={n === page ? "page" : undefined}
+                    className={`min-w-[2rem] rounded-lg border px-2 py-1 ${
+                      n === page
+                        ? "border-primary-600 bg-primary-600 text-white"
+                        : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                )
+              )}
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                aria-label="Next page"
+              >
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
       )}

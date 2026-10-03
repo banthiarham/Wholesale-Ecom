@@ -416,6 +416,84 @@ export class ProductsService {
     return /<[^>]+>|\\r\\n|\\n|\\r|&(?:nbsp|amp|quot|lt|gt|#\d+|#x[\da-f]+);/i.test(description);
   }
 
+  // ---- Role pricing columns ("Min Quantity - <Role>" / "Wholesale Price - <Role>") ----
+
+  /** Roles that can have role-based prices — the same buyer-side roles the Role Pricing module lists. */
+  private async loadRolePricingRoles(): Promise<{ id: string; name: string; label: string }[]> {
+    const roles = await this.prisma.role.findMany({ orderBy: { name: 'asc' } });
+    return roles
+      .filter((role) => role.name.toUpperCase() !== 'ADMIN')
+      .map((role) => ({ id: role.id, name: role.name, label: role.label }));
+  }
+
+  /** Header cells that look like role pricing columns but match no role, so a typo is not silently dropped. */
+  private findUnmatchedRolePriceHeaders(
+    rawHeaders: string[],
+    roles: { name: string; label: string }[],
+  ): string[] {
+    const known = new Set<string>();
+    for (const role of roles) {
+      for (const prefix of ['Min Quantity', 'Wholesale Price']) {
+        known.add(this.normalizeHeaderKey(`${prefix} ${role.label}`));
+        known.add(this.normalizeHeaderKey(`${prefix} ${role.name}`));
+      }
+    }
+    return rawHeaders.filter((header) => {
+      const key = this.normalizeHeaderKey(header);
+      const isRoleColumn =
+        (key.startsWith('minquantity') && key.length > 'minquantity'.length) ||
+        (key.startsWith('wholesaleprice') && key.length > 'wholesaleprice'.length);
+      return isRoleColumn && !known.has(key);
+    });
+  }
+
+  /**
+   * Saves the role price tiers found in one import row. A role is only touched when both its
+   * minimum quantity and price cells are filled; that role's tiers for this product are then
+   * replaced by the single tier from the sheet (so re-uploading with a different minimum
+   * quantity cannot leave a stale tier behind). Returns how many role prices were saved.
+   */
+  private async applyRolePricesFromRow(
+    productId: string,
+    normalizedRow: Record<string, any>,
+    roles: { id: string; name: string; label: string }[],
+    rowNumber: number,
+    warnings: string[],
+  ): Promise<number> {
+    let saved = 0;
+    for (const role of roles) {
+      const qtyStr = this.getField(normalizedRow, `Min Quantity ${role.label}`, `Min Quantity ${role.name}`);
+      const priceStr = this.getField(normalizedRow, `Wholesale Price ${role.label}`, `Wholesale Price ${role.name}`);
+      if (!qtyStr && !priceStr) continue;
+
+      if (!qtyStr || !priceStr) {
+        warnings.push(
+          `Row ${rowNumber}: ${role.label} needs both Min Quantity and Wholesale Price — role price not saved`,
+        );
+        continue;
+      }
+      const minQty = this.parseNumericField(qtyStr);
+      const price = this.parseNumericField(priceStr);
+      if (!Number.isInteger(minQty) || minQty < 1) {
+        warnings.push(`Row ${rowNumber}: ${role.label} Min Quantity "${qtyStr}" must be a whole number of at least 1 — role price not saved`);
+        continue;
+      }
+      if (!Number.isFinite(price) || price <= 0) {
+        warnings.push(`Row ${rowNumber}: ${role.label} Wholesale Price "${priceStr}" must be a number greater than 0 — role price not saved`);
+        continue;
+      }
+
+      await this.prisma.$transaction([
+        this.prisma.rolePrice.deleteMany({ where: { productId, roleId: role.id } }),
+        this.prisma.rolePrice.create({
+          data: { productId, roleId: role.id, price, minQty, isActive: true },
+        }),
+      ]);
+      saved++;
+    }
+    return saved;
+  }
+
   async bulkUploadFromExcel(
     buffer: Buffer,
     imageFiles: Express.Multer.File[] = [],
@@ -446,7 +524,15 @@ export class ProductsService {
       imageErrors: [] as string[],
       imagesDownloaded: 0,
       imagesUploaded: 0,
+      rolePricesSet: 0,
+      rolePriceWarnings: [] as string[],
     };
+    const priceRoles = await this.loadRolePricingRoles();
+    for (const header of this.findUnmatchedRolePriceHeaders(Object.keys(rows[0] || {}), priceRoles)) {
+      results.rolePriceWarnings.push(
+        `Column "${header}" does not match any role and was ignored. Roles: ${priceRoles.map((r) => r.label).join(', ') || 'none'}`,
+      );
+    }
     const categoryCache = new Map<string, string>(); // lowercase, trimmed name -> category id
     const variationPrices = new Map<string, { sale: number; regular: number }[]>();
     const imageDownloadCache = new Map<string, Promise<string | null>>();
@@ -619,6 +705,23 @@ export class ProductsService {
           productsByTitle.set(this.normalizeImportIdentity(newProduct.title), newProduct);
         }
         seenProductIds.add(productId);
+
+        // Role pricing columns. A failure here must not fail the product row itself.
+        try {
+          const rolePricesSaved = await this.applyRolePricesFromRow(
+            productId, r, priceRoles, i + 2, results.rolePriceWarnings,
+          );
+          if (rolePricesSaved > 0) {
+            results.rolePricesSet += rolePricesSaved;
+            if (skippedDuplicate) {
+              results.existingUnchanged--;
+              skippedDuplicate = false;
+            }
+            if (!createdProductIds.has(productId)) updatedProductIds.add(productId);
+          }
+        } catch (err) {
+          results.rolePriceWarnings.push(`Row ${i + 2}: role prices could not be saved — ${err.message}`);
+        }
 
         // Process images for this product
         const localImageUrls: string[] = [];
