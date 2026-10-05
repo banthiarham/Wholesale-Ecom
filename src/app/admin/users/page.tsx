@@ -71,6 +71,14 @@ export default function AdminUsersPage() {
     loadRoles()
   }, [token])
 
+  // Pick up roles created elsewhere (e.g. in another tab) when the admin returns to this page.
+  useEffect(() => {
+    const onFocus = () => loadRoles()
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+
   // Search is sent to the server (it searches ALL users, not just this page). Wait for a
   // short pause in typing before asking, and jump back to page 1 for every new search.
   useEffect(() => {

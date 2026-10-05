@@ -210,6 +210,27 @@ export class UsersService {
     // `id` as a tie-breaker keeps page boundaries stable when many rows share a value.
     const orderBy = [{ [orderColumn]: orderDirection }, { id: 'asc' as const }];
 
+    // Name/email sorting must ignore letter case ("deepesh" belongs between "d" names, not after "Zara"),
+    // but the database's default ordering is case-sensitive. For those columns, order the matching
+    // ids here, then load just the requested page.
+    if (['firstName', 'lastName', 'email'].includes(orderColumn)) {
+      const rows = await this.prisma.user.findMany({ where, select: { id: true, firstName: true, lastName: true, email: true } });
+      const key = (r: { firstName: string | null; lastName: string | null; email: string }, col: string) =>
+        ((r as any)[col] ?? '').toString();
+      const cmp = (x: string, y: string) => x.localeCompare(y, undefined, { sensitivity: 'base' });
+      const dir = orderDirection === 'asc' ? 1 : -1;
+      rows.sort((p, q) =>
+        dir * cmp(key(p, orderColumn), key(q, orderColumn)) ||
+        dir * cmp(key(p, 'lastName'), key(q, 'lastName')) ||
+        cmp(p.id, q.id),
+      );
+      const pageIds = rows.slice(skip, skip + take).map((r) => r.id);
+      const pageUsers = await this.prisma.user.findMany({ where: { id: { in: pageIds } } });
+      const byId = new Map(pageUsers.map((u) => [u.id, u]));
+      const ordered = pageIds.map((id) => byId.get(id)).filter((u): u is NonNullable<typeof u> => !!u);
+      return { users: ordered.map((u) => this.excludePassword(u)), total: rows.length };
+    }
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
