@@ -6,20 +6,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { handle } = await params
   try {
     const res = await fetch(`${process.env.API_URL || "http://localhost:3000"}/api/v1/packages/${handle}`, { cache: "no-store" })
-    if (!res.ok) return { title: "Package — WholesaleX Pro" }
+    if (!res.ok) return { title: "Package — Wholesale Center" }
     const data = await res.json()
     const pkg = data.package || data
     return {
-      title: `${pkg.title} — WholesaleX Pro`,
+      title: `${pkg.title} — Wholesale Center`,
       description: pkg.description || `Configure your ${pkg.title} package with custom components and exclusive discounts.`,
       openGraph: {
-        title: `${pkg.title} — WholesaleX Pro`,
+        title: `${pkg.title} — Wholesale Center`,
         description: pkg.description || `Configure your ${pkg.title} package with custom components and exclusive discounts.`,
         images: pkg.thumbnail || pkg.images?.[0] ? [pkg.thumbnail || pkg.images[0]] : undefined,
       },
     }
   } catch {
-    return { title: "Package — WholesaleX Pro" }
+    return { title: "Package — Wholesale Center" }
   }
 }
 

@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: category.name,
       description,
       openGraph: {
-        title: `${category.name} — WholesaleX Pro`,
+        title: `${category.name} — Wholesale Center`,
         description,
         type: "website",
       },

@@ -8,7 +8,7 @@ import { adjustColor, generateShades, hexToRgb } from "./color-utils"
 const SELF_HOSTED_FONTS = new Set(["Inter", "Poppins", "Open Sans"])
 
 const DEFAULTS: Record<string, string> = {
-  siteName: "WholesaleX Pro",
+  siteName: "Wholesale Center",
   tagline: "B2B Wholesale E-Commerce Platform",
   logoUrl: "",
   faviconUrl: "",
@@ -26,7 +26,7 @@ const DEFAULTS: Record<string, string> = {
   contactEmail: "",
   contactPhone: "",
   socialLinks: '{"facebook":"","twitter":"","instagram":"","linkedin":""}',
-  copyrightText: "WholesaleX Pro. All rights reserved.",
+  copyrightText: "Wholesale Center. All rights reserved.",
   announcementBarEnabled: "false",
   announcementBarText: "",
   announcementBarColor: "#ffffff",
@@ -63,8 +63,8 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
         setLoaded(true)
       }
     }
-    window.addEventListener("wholesalex-settings-updated", handleSettingsUpdated)
-    return () => window.removeEventListener("wholesalex-settings-updated", handleSettingsUpdated)
+    window.addEventListener("wholesalecenter-settings-updated", handleSettingsUpdated)
+    return () => window.removeEventListener("wholesalecenter-settings-updated", handleSettingsUpdated)
   }, [])
 
   useEffect(() => {

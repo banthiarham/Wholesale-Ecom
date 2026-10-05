@@ -55,7 +55,7 @@ export class SettingsService {
 
   private getDefaults(): Record<string, string> {
     return {
-      siteName: 'WholesaleX Pro',
+      siteName: 'Wholesale Center',
       tagline: 'B2B Wholesale E-Commerce Platform',
       logoUrl: '',
       faviconUrl: '',
@@ -73,7 +73,7 @@ export class SettingsService {
       contactEmail: '',
       contactPhone: '',
       socialLinks: '{"facebook":"","twitter":"","instagram":"","linkedin":""}',
-      copyrightText: 'WholesaleX Pro. All rights reserved.',
+      copyrightText: 'Wholesale Center. All rights reserved.',
       announcementBarEnabled: 'false',
       announcementBarText: '',
       announcementBarColor: '#ffffff',

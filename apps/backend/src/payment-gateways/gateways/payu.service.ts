@@ -111,7 +111,7 @@ export class PayuGatewayService implements PaymentGatewayProvider {
   }
 
   private generateHash(key: string, amount: string, txnid: string, salt: string, email: string): string {
-    const str = `${key}|${txnid}|${amount}|WholesaleX Order|${email}|${salt}`;
+    const str = `${key}|${txnid}|${amount}|Wholesale Center Order|${email}|${salt}`;
     return crypto.createHash('sha512').update(str).digest('hex');
   }
 

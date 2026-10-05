@@ -272,7 +272,7 @@ export default function CheckoutPage() {
       const options: any = {
         key: data.keyId,
         order_id: data.providerOrderId,
-        name: "WholesaleX",
+        name: "Wholesale Center",
         amount: data.extra?.amount,
         currency: data.extra?.currency || "INR",
         prefill: {

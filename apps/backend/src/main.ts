@@ -40,10 +40,10 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('WholesaleX Pro API')
+    .setTitle('Wholesale Center API')
     .setDescription(
-      '# WholesaleX Pro — B2B Wholesale E-commerce API\n\n' +
-      'This API powers the **WholesaleX Pro** platform, a full-stack B2B wholesale e-commerce solution built with **NestJS + Prisma + PostgreSQL**.\n\n' +
+      '# Wholesale Center — B2B Wholesale E-commerce API\n\n' +
+      'This API powers the **Wholesale Center** platform, a full-stack B2B wholesale e-commerce solution built with **NestJS + Prisma + PostgreSQL**.\n\n' +
       '## Phase 1 Modules (Current)\n\n' +
       '- **Authentication** — JWT + Google OAuth, OTP verification, forgot/reset password\n' +
       '- **Users** — CRUD, role/status management, address book\n' +

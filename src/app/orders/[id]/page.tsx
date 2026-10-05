@@ -239,7 +239,7 @@ export default function OrderDetailPage() {
         const options: any = {
           key: initData.keyId,
           order_id: initData.providerOrderId,
-          name: "WholesaleX",
+          name: "Wholesale Center",
           amount: initData.extra?.amount,
           currency: initData.extra?.currency || "INR",
           prefill: {

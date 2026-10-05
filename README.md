@@ -1,4 +1,4 @@
-# WholesaleX Pro — B2B Wholesale E-commerce Platform
+# Wholesale Center — B2B Wholesale E-commerce Platform
 
 > **Live API Docs:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs) (Swagger/OpenAPI)
 > **Frontend:** [http://localhost:3001](http://localhost:3001)
@@ -8,7 +8,7 @@
 
 ## Overview
 
-**WholesaleX Pro** is a full-stack B2B wholesale e-commerce platform designed for manufacturers, distributors, and bulk buyers. It features tier pricing, guest/user cart management, order lifecycle tracking, COD payments, product reviews, and role-based access control.
+**Wholesale Center** is a full-stack B2B wholesale e-commerce platform designed for manufacturers, distributors, and bulk buyers. It features tier pricing, guest/user cart management, order lifecycle tracking, COD payments, product reviews, and role-based access control.
 
 ---
 

@@ -22,7 +22,7 @@ const TOP_CATEGORY_COUNT = 5
  * All colours come from the theme's primary colour (Admin → Settings), nothing is hard-coded.
  */
 export default function Home() {
-  const siteName = useSetting("siteName", "WholesaleX Pro")
+  const siteName = useSetting("siteName", "Wholesale Center")
   const { categories } = useCategories()
 
   // The categories with the most products (top level only), empty ones skipped.

@@ -1026,7 +1026,7 @@ model SmtpSettings {
   port              Int      @default(587)
   username          String
   passwordEncrypted String   @db.Text
-  fromName          String   @default("WholesaleX Pro")
+  fromName          String   @default("Wholesale Center")
   fromEmail         String
   replyToEmail      String?
   isActive          Boolean  @default(true)

@@ -30,7 +30,7 @@ function amountInWords(value: number) {
 
 export default function InvoicePage() {
   const params = useParams(); const router = useRouter(); const [order, setOrder] = useState<InvoiceOrder | null>(null); const [loading, setLoading] = useState(true)
-  const siteName = useSetting("siteName", "WholesaleX Pro")
+  const siteName = useSetting("siteName", "Wholesale Center")
   const logoUrl = useSetting("logoUrl", "")
   const sellerAddress = useSetting("businessAddress", "Business address")
   const sellerState = useSetting("businessState", "")

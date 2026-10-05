@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   description:
     "Browse our full catalog of wholesale products. Bulk pricing, tier discounts, and fast shipping across India.",
   openGraph: {
-    title: "Wholesale Products — WholesaleX Pro",
+    title: "Wholesale Products — Wholesale Center",
     description:
       "Browse our full catalog of wholesale products. Bulk pricing, tier discounts, and fast shipping across India.",
   },

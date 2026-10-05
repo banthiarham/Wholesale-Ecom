@@ -1,4 +1,4 @@
-# WholesaleX Pro — Project Plan & Requirements
+# Wholesale Center — Project Plan & Requirements
 
 > **Live API Documentation:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs) (Swagger/OpenAPI)
 
@@ -6,7 +6,7 @@
 
 ## 1. Project Overview
 
-**WholesaleX Pro** is a B2B wholesale e-commerce platform built for manufacturers, distributors, and bulk buyers. It supports tier pricing, guest carts, order management, loyalty programs, and digital catalogs.
+**Wholesale Center** is a B2B wholesale e-commerce platform built for manufacturers, distributors, and bulk buyers. It supports tier pricing, guest carts, order management, loyalty programs, and digital catalogs.
 
 ### Tech Stack
 

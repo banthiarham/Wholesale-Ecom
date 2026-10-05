@@ -21,7 +21,7 @@ const DEFAULT_FORM = {
   port: 587,
   username: "",
   password: "",
-  fromName: "WholesaleX Pro",
+  fromName: "Wholesale Center",
   fromEmail: "",
   replyToEmail: "",
 }
@@ -244,7 +244,7 @@ export default function AdminSmtpSettingsPage() {
             <label className={labelClass}>From Name</label>
             <input
               required
-              placeholder="WholesaleX Pro"
+              placeholder="Wholesale Center"
               value={form.fromName}
               onChange={(e) => update("fromName", e.target.value)}
               className={inputClass}
@@ -255,7 +255,7 @@ export default function AdminSmtpSettingsPage() {
             <input
               required
               type="email"
-              placeholder="noreply@wholesalex.com"
+              placeholder="noreply@wholesalecenter.in"
               value={form.fromEmail}
               onChange={(e) => update("fromEmail", e.target.value)}
               className={inputClass}
@@ -268,7 +268,7 @@ export default function AdminSmtpSettingsPage() {
             </label>
             <input
               type="email"
-              placeholder="support@wholesalex.com"
+              placeholder="support@wholesalecenter.in"
               value={form.replyToEmail}
               onChange={(e) => update("replyToEmail", e.target.value)}
               className={inputClass}

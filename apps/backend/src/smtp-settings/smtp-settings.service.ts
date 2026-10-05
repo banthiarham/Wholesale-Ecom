@@ -152,18 +152,18 @@ export class SmtpSettingsService {
         from: `"${dto.fromName.trim()}" <${fromEmail}>`,
         replyTo: `"${dto.fromName.trim()}" <${replyTo}>`,
         to: dto.to.trim(),
-        subject: 'WholesaleX Pro — SMTP Test Email',
+        subject: 'Wholesale Center — SMTP Test Email',
         messageId: `<${randomUUID()}@${domain}>`,
         text:
           'SMTP Test Successful\n\n' +
           'This is a test email confirming your SMTP configuration is working correctly.\n\n' +
-          'WholesaleX Pro — B2B Wholesale Platform',
+          'Wholesale Center — B2B Wholesale Platform',
         html: `
           <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
             <h2 style="color:#2563eb;">SMTP Test Successful</h2>
             <p>This is a test email confirming your SMTP configuration is working correctly.</p>
             <hr/>
-            <p style="font-size:12px;color:#666;">WholesaleX Pro — B2B Wholesale Platform</p>
+            <p style="font-size:12px;color:#666;">Wholesale Center — B2B Wholesale Platform</p>
           </div>
         `,
       });

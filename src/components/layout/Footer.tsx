@@ -27,11 +27,11 @@ const policyLinks = [
 ]
 
 export default function Footer() {
-  const siteName = useSetting("siteName", "WholesaleX Pro")
+  const siteName = useSetting("siteName", "Wholesale Center")
   const logoUrl = useSetting("logoUrl", "")
   const contactEmail = useSetting("contactEmail", "")
   const contactPhone = useSetting("contactPhone", "")
-  const copyrightText = useSetting("copyrightText", "WholesaleX Pro. All rights reserved.")
+  const copyrightText = useSetting("copyrightText", "Wholesale Center. All rights reserved.")
   const socialLinksRaw = useSetting("socialLinks", '{"facebook":"","twitter":"","instagram":"","linkedin":""}')
 
   let socialLinks: Record<string, string> = { facebook: "", twitter: "", instagram: "", linkedin: "" }

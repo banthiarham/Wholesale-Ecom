@@ -178,7 +178,7 @@ export default function RegisterPage() {
               <span className="text-white font-bold text-xl">W</span>
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-1">Create your account</h1>
-            <p className="text-gray-500 text-sm">Join WholesaleX Pro today</p>
+            <p className="text-gray-500 text-sm">Join Wholesale Center today</p>
           </div>
 
           <div className="card-base-static p-6 space-y-3">
@@ -230,7 +230,7 @@ export default function RegisterPage() {
             <span className="text-white font-bold text-xl">W</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">{signupType === "buyer" ? "Create your Customer account" : "Create your Dealer / B2B account"}</h1>
-          <p className="text-gray-500 text-sm">Join WholesaleX Pro today</p>
+          <p className="text-gray-500 text-sm">Join Wholesale Center today</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card-base-static p-8">
