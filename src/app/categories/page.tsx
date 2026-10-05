@@ -20,7 +20,7 @@ const categoryIcons: Record<string, any> = {
 // Soft pastel backdrops that cycle across the cards, like the reference design.
 const TINTS = ["bg-sky-100", "bg-violet-100", "bg-emerald-100", "bg-amber-100", "bg-rose-100"]
 
-type SortKey = "newest" | "name" | "products"
+type SortKey = "newest" | "name" | "name_desc" | "products"
 type ViewMode = "grid" | "list"
 const BATCH_SIZE = 20
 
@@ -70,6 +70,7 @@ export default function CategoriesPage() {
     })
     list = [...list]
     if (sort === "name") list.sort((a, b) => a.name.localeCompare(b.name))
+    else if (sort === "name_desc") list.sort((a, b) => b.name.localeCompare(a.name))
     else if (sort === "products") list.sort((a, b) => (b._count?.products ?? 0) - (a._count?.products ?? 0))
     else list.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
     return list
@@ -129,9 +130,10 @@ export default function CategoriesPage() {
                 aria-label="Sort categories"
                 className="pl-8 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
               >
-                <option value="newest">Newest</option>
-                <option value="name">Name A–Z</option>
-                <option value="products">Most products</option>
+                <option value="newest">Recommended</option>
+                <option value="name">Name: A to Z</option>
+                <option value="name_desc">Name: Z to A</option>
+                <option value="products">Most Products</option>
               </select>
             </div>
             <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white">

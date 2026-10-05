@@ -58,6 +58,7 @@ export class UsersController {
   @ApiOperation({ summary: 'List all users with filters (Admin only)' })
   @ApiQuery({ name: 'role', enum: UserRole, required: false })
   @ApiQuery({ name: 'status', enum: UserStatus, required: false })
+  @ApiQuery({ name: 'roleId', type: String, required: false, description: 'Only users assigned this (dynamic) role' })
   @ApiQuery({ name: 'skip', type: Number, required: false })
   @ApiQuery({ name: 'take', type: Number, required: false })
   @ApiQuery({ name: 'search', type: String, required: false, description: 'Matches name, email, phone, company or role across all users' })
@@ -65,6 +66,7 @@ export class UsersController {
   @ApiQuery({ name: 'sortDir', enum: ['asc', 'desc'], required: false })
   findAll(
     @Query('role') role?: UserRole,
+    @Query('roleId') roleId?: string,
     @Query('status') status?: UserStatus,
     @Query('skip') skipRaw?: string,
     @Query('take') takeRaw?: string,
@@ -74,7 +76,7 @@ export class UsersController {
   ) {
     const skip = skipRaw !== undefined ? parseInt(skipRaw, 10) : undefined;
     const take = takeRaw !== undefined ? parseInt(takeRaw, 10) : undefined;
-    return this.usersService.findAll({ role, status, skip, take, search, sortBy, sortDir });
+    return this.usersService.findAll({ role, roleId, status, skip, take, search, sortBy, sortDir });
   }
 
   @Get('me')

@@ -6,6 +6,8 @@ import { Search, ChevronDown, ChevronUp, Eye, Truck, X, ExternalLink, Plug, Laye
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
+import { ListFilterBar, emptyValues, type FilterField, type FilterValues } from "@/components/admin/ListFilters"
+import { paymentModeLabel, PAYMENT_STATUS_OPTIONS } from "@/lib/paymentMode"
 
 interface Order {
   id: string
@@ -21,6 +23,7 @@ interface Order {
   deliveryPartnerId?: string | null
   deliveryPartner?: { id: string; name: string; code: string; trackingUrlTemplate: string | null } | null
   payment?: {
+    provider?: string
     status: string
     amount?: number
     refunds?: { id: string; amount: number; status: string; reason: string | null; createdAt: string }[]
@@ -60,13 +63,22 @@ interface Partner {
 
 const statuses = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]
 
+const ORDER_FILTER_FIELDS: FilterField[] = [
+  { type: "multi", key: "status", label: "Order Status", options: statuses.map((s) => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() })) },
+  { type: "multi", key: "payment", label: "Payment Status", options: PAYMENT_STATUS_OPTIONS },
+  { type: "number", key: "minTotal", label: "Minimum Total Amount (₹)", placeholder: "e.g. 5000", hint: "Shows orders with this total or more" },
+  { type: "select", key: "refund", label: "Refund", allLabel: "All refunds", options: REFUND_STATUSES.map((s) => ({ value: s, label: REFUND_STATUS_LABELS[s] })) },
+]
+
+// An order with no payment record yet (e.g. Cash on Delivery) counts as a pending payment.
+const orderPaymentStatus = (o: Order) => (o.payment?.status || o.paymentStatus || "PENDING").toUpperCase()
+
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [filtered, setFiltered] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState("")
-  const [refundFilter, setRefundFilter] = useState("")
+  const [ofilters, setOfilters] = useState<FilterValues>(emptyValues(ORDER_FILTER_FIELDS))
   const [sortKey, setSortKey] = useState<keyof Order>("createdAt")
   const [sortDesc, setSortDesc] = useState(true)
   const [detailOrder, setDetailOrder] = useState<Order | null>(null)
@@ -96,19 +108,19 @@ export default function AdminOrdersPage() {
           o.user?.firstName?.toLowerCase().includes(q)
       )
     }
-    if (statusFilter) {
-      result = result.filter((o) => o.status === statusFilter)
-    }
-    if (refundFilter) {
-      result = result.filter((o) => latestRefund(o)?.status === refundFilter)
-    }
+    const statusSel = ofilters.status as string[]
+    if (statusSel.length) result = result.filter((o) => statusSel.includes(o.status))
+    const paySel = ofilters.payment as string[]
+    if (paySel.length) result = result.filter((o) => paySel.includes(orderPaymentStatus(o)))
+    if (ofilters.minTotal !== "") result = result.filter((o) => Number(o.totalAmount) >= Number(ofilters.minTotal))
+    if (ofilters.refund) result = result.filter((o) => latestRefund(o)?.status === ofilters.refund)
     result.sort((a, b) => {
       const av = (a[sortKey] ?? "") as string
       const bv = (b[sortKey] ?? "") as string
       return sortDesc ? (bv > av ? 1 : -1) : av > bv ? 1 : -1
     })
     setFiltered(result)
-  }, [orders, search, statusFilter, refundFilter, sortKey, sortDesc])
+  }, [orders, search, ofilters, sortKey, sortDesc])
 
   const loadOrders = async () => {
     setLoading(true)
@@ -242,39 +254,17 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={16} />
-          <input
-            type="text"
-            placeholder="Search orders..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm w-full"
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm"
-        >
-          <option value="">All Statuses</option>
-          {statuses.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <select
-          value={refundFilter}
-          onChange={(e) => setRefundFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm"
-        >
-          <option value="">All Refunds</option>
-          {REFUND_STATUSES.map((s) => (
-            <option key={s} value={s}>{REFUND_STATUS_LABELS[s]}</option>
-          ))}
-        </select>
-        <span className="text-sm text-gray-500 dark:text-gray-400">{filtered.length} order{filtered.length !== 1 ? "s" : ""}</span>
+      <div className="relative max-w-xs">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={16} />
+        <input
+          type="text"
+          placeholder="Search orders..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm w-full"
+        />
       </div>
+      <ListFilterBar fields={ORDER_FILTER_FIELDS} values={ofilters} onValues={setOfilters} resultCount={filtered.length} totalCount={orders.length} noun="orders" />
 
       {loading ? (
         <SkeletonTable rows={5} cols={6} />
@@ -314,7 +304,10 @@ export default function AdminOrdersPage() {
                     </td>
                     <td className="px-4 py-3">{statusBadge(o.status)}</td>
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{formatPrice(Number(o.totalAmount))}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 uppercase text-xs">{o.payment?.status || o.paymentStatus || 'N/A'}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
+                      <span className="uppercase">{o.payment?.status || o.paymentStatus || 'N/A'}</span>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{paymentModeLabel(o.payment?.provider)}</p>
+                    </td>
                     <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{new Date(o.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -345,6 +338,16 @@ export default function AdminOrdersPage() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Status</span>
                 {statusBadge(detailOrder.status)}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Payment Mode</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{paymentModeLabel(detailOrder.payment?.provider)}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Payment Status</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 uppercase">{orderPaymentStatus(detailOrder).replace(/_/g, " ")}</span>
               </div>
 
               <div className="flex items-center justify-between">

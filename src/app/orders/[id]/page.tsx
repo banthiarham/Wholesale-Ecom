@@ -1,4 +1,5 @@
 "use client"
+import { paymentModeLabel } from "@/lib/paymentMode"
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
@@ -727,7 +728,7 @@ export default function OrderDetailPage() {
                   <h2 className="font-semibold text-gray-900">Payment</h2>
                 </div>
                 <div className="text-sm text-gray-700 space-y-2">
-                  <div className="flex justify-between"><span>Method</span><span className="font-medium">{order.payment?.provider || "COD"}</span></div>
+                  <div className="flex justify-between"><span>Method</span><span className="font-medium">{paymentModeLabel(order.payment?.provider)}</span></div>
                   <div className="flex justify-between items-center"><span>Status</span><PaymentStatusBadge status={order.payment?.status || "PENDING"} /></div>
                   {order.payment?.providerRef && <div className="flex justify-between"><span>Transaction ID</span><span className="font-medium text-xs">{order.payment.providerRef}</span></div>}
                   {order.payment?.metadata?.razorpayOrderId && (

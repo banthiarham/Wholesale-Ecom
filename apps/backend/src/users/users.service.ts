@@ -150,6 +150,7 @@ export class UsersService {
 
   async findAll(params?: {
     role?: UserRole;
+    roleId?: string;
     status?: UserStatus;
     skip?: number;
     take?: number;
@@ -157,7 +158,7 @@ export class UsersService {
     sortBy?: string;
     sortDir?: string;
   }): Promise<{ users: Omit<User, 'password'>[]; total: number }> {
-    const { role, status, search, sortBy, sortDir } = params || {};
+    const { role, roleId, status, search, sortBy, sortDir } = params || {};
     // Guard against NaN / negative values from malformed query strings.
     const skip = Number.isInteger(params?.skip) && (params!.skip as number) > 0 ? (params!.skip as number) : 0;
     const take = Number.isInteger(params?.take) && (params!.take as number) > 0 ? (params!.take as number) : 20;
@@ -185,8 +186,19 @@ export class UsersService {
         }
       : {};
 
+    // Filter by dynamic role: users assigned that role, plus legacy users who only have the matching enum value.
+    let roleIdFilter = {};
+    if (roleId) {
+      const roleRecord = await this.prisma.role.findUnique({ where: { id: roleId } });
+      const legacy = roleRecord && (Object.values(UserRole) as string[]).includes(roleRecord.name)
+        ? [{ roleId: null, role: roleRecord.name as UserRole }]
+        : [];
+      roleIdFilter = { OR: [{ roleId }, ...legacy] };
+    }
+
     const where = {
       ...(role && { role }),
+      ...roleIdFilter,
       ...(status && { status }),
       ...searchFilter,
     };
