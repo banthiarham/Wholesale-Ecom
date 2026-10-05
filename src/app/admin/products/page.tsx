@@ -1,5 +1,7 @@
 "use client"
 
+import { FormField } from "@/components/admin/FormField"
+
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -9,6 +11,7 @@ import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import RolePriceTable from "@/components/admin/RolePriceTable"
+import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters } from "@/components/admin/ProductFilters"
 
 interface Product {
   id: string
@@ -28,6 +31,7 @@ interface Product {
   images: string[]
   tierPrices: { id: string; minQty: number; maxQty: number | null; price: number }[]
   category?: { name: string }
+  rating?: number
 }
 
 interface Category {
@@ -43,6 +47,8 @@ function AdminProductsContent() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [filters, setFilters] = useState<ProductFilterState>(defaultFilters)
+  const [sort, setSort] = useState<SortKey>("default")
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -82,15 +88,14 @@ function AdminProductsContent() {
 
   useEffect(() => {
     const q = search.toLowerCase()
-    setFiltered(
-      products.filter(
-        (p) =>
-          p.title.toLowerCase().includes(q) ||
-          p.sku?.toLowerCase().includes(q) ||
-          p.vendorName?.toLowerCase().includes(q)
-      )
+    const searched = products.filter(
+      (p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.sku?.toLowerCase().includes(q) ||
+        p.vendorName?.toLowerCase().includes(q)
     )
-  }, [products, search])
+    setFiltered(applyProductFilters(searched, filters, sort))
+  }, [products, search, filters, sort])
 
   const loadProducts = async () => {
     setLoading(true)
@@ -398,8 +403,12 @@ function AdminProductsContent() {
             <button onClick={() => setShowCatForm(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
           </div>
           <form onSubmit={handleSaveCategory} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <input required placeholder="Category Name" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value, handle: catForm.handle || generateHandle(e.target.value) })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
-            <input placeholder="URL Handle (auto-generated)" value={catForm.handle} onChange={(e) => setCatForm({ ...catForm, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            <FormField label="Category Name" required>
+              <input required placeholder="Category Name" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value, handle: catForm.handle || generateHandle(e.target.value) })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            </FormField>
+            <FormField label="URL Handle" hint="Auto-generated from the name">
+              <input placeholder="URL Handle (auto-generated)" value={catForm.handle} onChange={(e) => setCatForm({ ...catForm, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            </FormField>
             <div className="flex gap-3">
               <input placeholder="Description (optional)" value={catForm.description} onChange={(e) => setCatForm({ ...catForm, description: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
               <button type="submit" disabled={savingCat} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50 whitespace-nowrap">
@@ -417,28 +426,47 @@ function AdminProductsContent() {
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingProduct ? "Edit Product" : "New Product"}</h3>
             <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
           </div>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <input required placeholder="Product Title" value={form.title} onChange={(e) => { const t = e.target.value; setForm({ ...form, title: t, handle: editingProduct ? form.handle : generateHandle(t) }) }} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input placeholder="URL Handle" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <FormField label="Product Title" required>
+              <input required placeholder="Product Title" value={form.title} onChange={(e) => { const t = e.target.value; setForm({ ...form, title: t, handle: editingProduct ? form.handle : generateHandle(t) }) }} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="URL Handle" hint="Web address of the product page">
+              <input placeholder="URL Handle" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="SKU" hint="Your internal stock code">
+              <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Category">
+              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
               <option value="">Select Category</option>
               {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
             </select>
-            <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input required type="number" placeholder="MOQ (Minimum Order Quantity)" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input required type="number" placeholder="Inventory Quantity" value={form.inventoryQuantity} onChange={(e) => setForm({ ...form, inventoryQuantity: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            </FormField>
+            <FormField label="Unit Price (Rs.)" required hint="Selling price per unit">
+              <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Compare At Price (Rs.)" hint="Original / MRP price, shown struck through">
+              <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="MOQ (Minimum Order Quantity)" required hint="Smallest quantity a buyer can order">
+              <input required type="number" placeholder="MOQ (Minimum Order Quantity)" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Inventory Quantity" required hint="Units currently in stock">
+              <input required type="number" placeholder="Inventory Quantity" value={form.inventoryQuantity} onChange={(e) => setForm({ ...form, inventoryQuantity: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Status">
+              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
               <option value="PUBLISHED">Published</option>
               <option value="DRAFT">Draft</option>
               <option value="ARCHIVED">Archived</option>
             </select>
-            <div></div>
-            <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="sm:col-span-2 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Description" className="sm:col-span-2 lg:col-span-3">
+              <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
 
             {/* Tier Pricing */}
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-3">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1"><Tag size={14} /> Tier Pricing (Bulk Discounts)</label>
                 <button type="button" onClick={addTierRow} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">+ Add Tier</button>
@@ -463,7 +491,7 @@ function AdminProductsContent() {
 
             {/* Role Pricing (edit only — shares data with the Role Pricing page) */}
             {editingProduct && (
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role Pricing</label>
                 <RolePriceTable
                   product={{ id: editingProduct.id, title: editingProduct.title, sku: editingProduct.sku || undefined, unitPrice: Number(editingProduct.unitPrice) }}
@@ -472,7 +500,7 @@ function AdminProductsContent() {
             )}
 
             {/* Images */}
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Product Images (max 5)</label>
               <div className="flex flex-wrap gap-3 mb-3">
                 {imagePreviews.map((src, i) => (
@@ -491,13 +519,15 @@ function AdminProductsContent() {
               <p className="text-xs text-gray-500 dark:text-gray-400">Click + to add images. Supports JPG, PNG, WebP.</p>
             </div>
 
-            <div className="sm:col-span-2 flex justify-end gap-3">
+            <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-3">
               <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
               <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">{uploading ? "Saving..." : editingProduct ? "Save Changes" : "Add Product"}</button>
             </div>
           </form>
         </div>
       )}
+
+      <ProductFilterBar filters={filters} onFilters={setFilters} sort={sort} onSort={setSort} categories={categories} resultCount={filtered.length} totalCount={products.length} />
 
       {/* Product List */}
       {loading ? (

@@ -193,23 +193,23 @@ export function ProductCard({
     if (showQuantity) {
       const stop = (e: React.SyntheticEvent) => { e.preventDefault(); e.stopPropagation() }
       return (
-        <div className="mt-3 flex items-center gap-2" onClick={stop}>
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden shrink-0">
-            <button type="button" onClick={(e) => { stop(e); setQty((q) => clampQty(q - 1)) }} disabled={disabled || qty <= Math.max(1, product.moq || 1)} className="w-7 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease quantity"><Minus size={12} /></button>
+        <div className="mt-3 flex flex-col xl:flex-row xl:items-center gap-2" onClick={stop}>
+          <div className="flex items-center justify-between xl:justify-start border border-gray-200 rounded-lg overflow-hidden shrink-0">
+            <button type="button" onClick={(e) => { stop(e); setQty((q) => clampQty(q - 1)) }} disabled={disabled || qty <= Math.max(1, product.moq || 1)} className="w-9 xl:w-7 h-9 xl:h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease quantity"><Minus size={12} /></button>
             <input
               type="number" min={Math.max(1, product.moq || 1)} value={qty} disabled={disabled} aria-label="Quantity"
               onChange={(e) => setQty(Number(e.target.value))}
               onBlur={() => setQty((q) => clampQty(q))}
               onKeyDown={(e) => { if (e.key === "Enter") { stop(e); setQty((q) => clampQty(q)) } }}
-              className="w-10 h-8 text-center text-xs font-semibold border-x border-gray-200 focus:outline-none focus:bg-gray-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="w-full xl:w-10 h-9 xl:h-8 text-center text-xs font-semibold border-x border-gray-200 focus:outline-none focus:bg-gray-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
-            <button type="button" onClick={(e) => { stop(e); setQty((q) => clampQty(q + 1)) }} disabled={disabled} className="w-7 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Increase quantity"><Plus size={12} /></button>
+            <button type="button" onClick={(e) => { stop(e); setQty((q) => clampQty(q + 1)) }} disabled={disabled} className="w-9 xl:w-7 h-9 xl:h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Increase quantity"><Plus size={12} /></button>
           </div>
           <button
             type="button"
             onClick={(e) => { stop(e); onAddToCart(product.id, clampQty(qty)) }}
             disabled={disabled}
-            className="flex-1 min-w-0 h-8 bg-primary-600 text-white rounded-lg text-xs font-bold hover:bg-primary-700 active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
+            className="w-full xl:flex-1 min-w-0 h-9 xl:h-8 bg-primary-600 text-white rounded-lg text-xs font-bold hover:bg-primary-700 active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
           >
             <ShoppingCart size={13} className="shrink-0" /> <span className="truncate">{label}</span>
           </button>
@@ -255,9 +255,9 @@ export function ProductCard({
     const listLowStock = !isOutOfStock && (product.inventoryQuantity ?? Infinity) <= Math.max(product.moq * 2, 20)
     return (
       <Link href={`/products/${product.handle}`} className="card-interactive flex gap-4 p-3 sm:p-4 group h-full">
-        <div className="relative w-28 sm:w-40 lg:w-44 shrink-0 self-start aspect-square rounded-xl bg-gray-50 overflow-hidden">
+        <div className="relative w-28 sm:w-40 lg:w-44 shrink-0 self-start aspect-square rounded-xl bg-white border border-gray-100 overflow-hidden">
           {product.thumbnail ? (
-            <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-cover" sizes="176px" />
+            <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-contain p-1" sizes="176px" />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
               <Package size={32} className="text-gray-200" />
@@ -304,9 +304,9 @@ export function ProductCard({
 
   return (
     <Link href={`/products/${product.handle}`} className="card-interactive group flex flex-col h-full">
-      <div className={`relative bg-gray-50 overflow-hidden ${compact ? "h-36 sm:h-40" : "aspect-square"}`}>
+      <div className="relative bg-white overflow-hidden aspect-square">
         {product.thumbnail ? (
-          <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-cover" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" />
+          <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-contain p-2" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
             <Package size={40} className="text-gray-200" />
@@ -334,12 +334,12 @@ export function ProductCard({
           </span>
         )}
       </div>
-      <div className="p-3.5 flex-1 flex flex-col">
+      <div className="p-2.5 sm:p-3.5 flex-1 flex flex-col">
         <h3 className="font-semibold text-gray-900 text-sm line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug min-h-[2.5rem]">{product.title}</h3>
         <div className="flex items-center gap-1.5 mt-1.5">{ratingRow("sm", "text-[11px] text-gray-400")}
           {product.sku && <span className="text-[11px] text-gray-400">· {product.sku}</span>}
         </div>
-        <div className="flex items-end justify-between gap-2 mt-2">
+        <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1 mt-2">
           <div className="min-w-0">{priceDisplay("sm")}</div>
           <span className="shrink-0 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-100 px-1.5 py-1 rounded-md">MOQ {rolePricing?.minQty ?? product.moq}</span>
         </div>

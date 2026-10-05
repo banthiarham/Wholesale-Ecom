@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText, X, Store, Sparkles } from "lucide-react"
+import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText, X, Store, Sparkles, ChevronLeft, ZoomIn, Tag, Lock, Undo2, Headphones } from "lucide-react"
 import { formatPrice, getCartSessionId, getContrastTextColor, isExternalImageUrl } from "@/lib/utils"
 import { PricingBreakdown, SeasonalDiscount, PaymentOffer, TierPrice, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, findApplicableTier, getEffectiveUnitPrice, sortTierPrices } from "@/lib/pricing"
 import { useQuantityStepper } from "@/lib/pricing/useQuantityStepper"
@@ -30,6 +30,7 @@ interface Product {
   category: { id: string; name: string; handle: string } | null;
   tierPrices: TierPrice[]; reviews: Review[];
   categoryId?: string
+  metadata?: Record<string, unknown> | null
 }
 
 /* Collapsible section helper */
@@ -370,136 +371,342 @@ export default function ProductDetailPage() {
   const hasOffers = productBogo.length > 0 || productQtyDiscount || productExtraCharges.length > 0 || productShipping || productTaxes.length > 0 || (minQtyRule || maxQtyRule)
   const hasPricingInfo = (pricingIsCurrent && (pricing!.rolePrice !== null || pricing!.contractPrice !== null || pricing!.seasonalDiscount > 0)) || ruleDiscount
 
+  // ── Product page layout helpers ──
+  const galleryImages = Array.from(new Set([product.thumbnail, ...(product.images || [])].filter((u): u is string => !!u)))
+  const stepImage = (dir: number) => {
+    if (galleryImages.length < 2) return
+    const i = Math.max(0, galleryImages.indexOf(mainImage || ""))
+    setMainImage(galleryImages[(i + dir + galleryImages.length) % galleryImages.length])
+  }
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : ""
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any).share) { await (navigator as any).share({ title: product.title, url }); return }
+      await navigator.clipboard.writeText(url)
+      showToast("success", "Product link copied")
+    } catch { /* user dismissed the share sheet */ }
+  }
+
+  const isOutOfStock = product.inventoryQuantity <= 0
+  const isLowStock = !isOutOfStock && product.inventoryQuantity <= Math.max(product.moq * 2, 20)
+  const shownPrice = Number(ruleDiscount ? product.unitPrice - ruleDiscount.discountAmount : headlinePrice)
+  const strikeCandidate = product.compareAtPrice != null && Number(product.compareAtPrice) > shownPrice ? Number(product.compareAtPrice) : Number(product.unitPrice) > shownPrice ? Number(product.unitPrice) : null
+  const strikePrice = strikeCandidate
+  const shownDiscountPct = strikePrice ? Math.round(((strikePrice - shownPrice) / strikePrice) * 100) : 0
+
+  const metaSpecs: [string, string][] = product.metadata && typeof product.metadata === "object"
+    ? Object.entries(product.metadata).filter(([k, v]) => !/packageTemplate|package_template/i.test(k) && (typeof v === "string" || typeof v === "number")).map(([k, v]) => [k.replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()), String(v)])
+    : []
+  const detailRows: { icon: any; label: string; value: React.ReactNode }[] = [
+    ...(product.vendorName ? [{ icon: Store, label: "Seller", value: product.vendorId ? <Link href={`/vendors/${product.vendorId}`} className="hover:text-primary-600 hover:underline">{product.vendorName}</Link> : product.vendorName }] : []),
+    ...(product.category ? [{ icon: Layers, label: "Category", value: <Link href={`/categories/${product.category.handle}`} className="hover:text-primary-600 hover:underline">{product.category.name}</Link> }] : []),
+    ...(product.sku ? [{ icon: Tag, label: "SKU", value: product.sku }] : []),
+    { icon: Package, label: "Min. Order Qty", value: `${roleHeadline?.roleMinQty ?? product.moq} units` },
+    { icon: Truck, label: "Availability", value: isOutOfStock ? "Out of stock" : `${product.inventoryQuantity} units in stock` },
+    ...metaSpecs.map(([label, value]) => ({ icon: ShieldCheck, label, value })),
+  ]
+  const detailsTable = (
+    <div className="rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-100 text-sm">
+      {detailRows.map((r) => (
+        <div key={r.label} className="flex items-center gap-3 px-3.5 py-2.5 odd:bg-gray-50/70">
+          <r.icon size={16} className="text-gray-400 shrink-0" />
+          <span className="w-32 sm:w-40 shrink-0 text-gray-600">{r.label}</span>
+          <span className="min-w-0 flex-1 text-gray-800 font-medium break-words">{r.value}</span>
+        </div>
+      ))}
+    </div>
+  )
+  const trustItems = [
+    { icon: Truck, title: "Fast Delivery", sub: "Across India", tint: "bg-blue-50 text-blue-600" },
+    { icon: ShieldCheck, title: "Verified Products", sub: "100% Genuine", tint: "bg-green-50 text-green-600" },
+    { icon: Lock, title: "Secure Payments", sub: "Multiple payment options", tint: "bg-purple-50 text-purple-600" },
+    { icon: Undo2, title: "Easy Returns", sub: "Hassle-free returns", tint: "bg-sky-50 text-sky-600" },
+    { icon: Headphones, title: "Dedicated Support", sub: "24/7 assistance", tint: "bg-emerald-50 text-emerald-600" },
+  ]
+
   return (
     <>
       {productJsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />}
       <div className="min-h-screen bg-gray-50/50">
-        <main className="section-container py-8">
+        <main className="section-container py-4 sm:py-8">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-            <Link href="/" className="hover:text-primary-600 transition-colors">Home</Link>
-            <ChevronRight size={14} />
-            <Link href="/products" className="hover:text-primary-600 transition-colors">Products</Link>
-            {product.category && (<><ChevronRight size={14} /><Link href={`/categories/${product.category.handle}`} className="hover:text-primary-600 transition-colors">{product.category.name}</Link></>)}
-            <ChevronRight size={14} />
+          <div className="flex items-center gap-2 text-sm text-gray-500 mb-4 sm:mb-6 overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
+            <Link href="/" className="hover:text-primary-600 transition-colors shrink-0">Home</Link>
+            <ChevronRight size={14} className="shrink-0" />
+            <Link href="/products" className="hover:text-primary-600 transition-colors shrink-0">Products</Link>
+            {product.category && (<><ChevronRight size={14} className="shrink-0" /><Link href={`/categories/${product.category.handle}`} className="hover:text-primary-600 transition-colors shrink-0">{product.category.name}</Link></>)}
+            <ChevronRight size={14} className="shrink-0" />
             <span className="text-gray-900 font-medium truncate">{product.title}</span>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12">
-            {/* Left: Images — 3 cols on lg */}
-            <div className="lg:col-span-3 space-y-4">
-              {/* Main image — hover to zoom, click to open lightbox */}
-              <div className="card-base-static overflow-hidden relative">
-                {/* Dynamic Rule badge — top-left of the image, fetched on initial load
-                    (same /rules/evaluate response already used for pricing/discount
-                    badges below), independent of quantity or any other interaction.
-                    Highest-priority matching rule wins when more than one applies. */}
-                {productCustomBadges[0] && (
-                  <span
-                    className="absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-md shadow-sm max-w-[calc(100%-1.25rem)] truncate"
-                    style={{
-                      backgroundColor: productCustomBadges[0].badgeColor || "#7c3aed",
-                      color: getContrastTextColor(productCustomBadges[0].badgeColor || "#7c3aed"),
-                    }}
-                    title={productCustomBadges[0].badgeLabel}
-                  >
-                    <Sparkles size={12} className="shrink-0" />
-                    <span className="truncate">{productCustomBadges[0].badgeLabel}</span>
-                  </span>
-                )}
-                {mainImage ? (
-                  <div
-                    className="relative w-full aspect-square overflow-hidden cursor-zoom-in"
-                    onMouseMove={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      const x = ((e.clientX - rect.left) / rect.width) * 100
-                      const y = ((e.clientY - rect.top) / rect.height) * 100
-                      setZoomOrigin(`${x}% ${y}%`)
-                    }}
-                    onMouseEnter={() => setIsZooming(true)}
-                    onMouseLeave={() => setIsZooming(false)}
-                    onClick={() => setLightboxOpen(true)}
-                  >
-                    <Image
-                      src={mainImage}
-                      alt={product.title}
-                      fill
-                      unoptimized={isExternalImageUrl(mainImage)}
-                      className={`object-cover transition-transform duration-200 ease-out ${isZooming ? "scale-[1.8]" : "scale-100"}`}
-                      style={{ transformOrigin: zoomOrigin }}
-                      sizes="(max-width: 1024px) 100vw, 60vw"
-                      priority
-                    />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
+            {/* Left card: gallery + product info */}
+            <div className="lg:col-span-8 card-base-static p-3 sm:p-5 lg:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-8">
+                {/* Gallery */}
+                <div className="min-w-0">
+                  <div className="relative rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden">
+                    <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 max-w-[calc(100%-1.5rem)]">
+                      {shownDiscountPct > 0 && !isPriceHidden && <span className="chip-sale">{shownDiscountPct}% OFF</span>}
+                      {productCustomBadges[0] && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-md shadow-sm max-w-full truncate"
+                          style={{ backgroundColor: productCustomBadges[0].badgeColor || "#7c3aed", color: getContrastTextColor(productCustomBadges[0].badgeColor || "#7c3aed") }}
+                          title={productCustomBadges[0].badgeLabel}
+                        >
+                          <Sparkles size={12} className="shrink-0" />
+                          <span className="truncate">{productCustomBadges[0].badgeLabel}</span>
+                        </span>
+                      )}
+                    </div>
+                    {mainImage ? (
+                      <div
+                        className="relative w-full aspect-square overflow-hidden cursor-zoom-in"
+                        onMouseMove={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setZoomOrigin(`${((e.clientX - rect.left) / rect.width) * 100}% ${((e.clientY - rect.top) / rect.height) * 100}%`)
+                        }}
+                        onMouseEnter={() => setIsZooming(true)}
+                        onMouseLeave={() => setIsZooming(false)}
+                        onClick={() => setLightboxOpen(true)}
+                      >
+                        <Image
+                          src={mainImage}
+                          alt={product.title}
+                          fill
+                          unoptimized={isExternalImageUrl(mainImage)}
+                          className={`object-contain p-3 transition-transform duration-200 ease-out ${isZooming ? "md:scale-[1.8]" : "scale-100"}`}
+                          style={{ transformOrigin: zoomOrigin }}
+                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 40vw"
+                          priority
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-square flex items-center justify-center">
+                        <Package size={64} className="text-gray-200" />
+                      </div>
+                    )}
+                    {galleryImages.length > 1 && (
+                      <>
+                        <button type="button" onClick={() => stepImage(-1)} aria-label="Previous image" className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 active:scale-95 transition"><ChevronLeft size={18} /></button>
+                        <button type="button" onClick={() => stepImage(1)} aria-label="Next image" className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 active:scale-95 transition"><ChevronRight size={18} /></button>
+                      </>
+                    )}
+                    {mainImage && (
+                      <button type="button" onClick={() => setLightboxOpen(true)} aria-label="Zoom image" className="absolute right-3 bottom-3 w-9 h-9 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 transition"><ZoomIn size={17} /></button>
+                    )}
                   </div>
-                ) : (
-                  <div className="w-full aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-                    <Package size={64} className="text-gray-200" />
-                  </div>
-                )}
-              </div>
-              {/* Thumbnails */}
-              {product.images && product.images.length > 1 && (
-                <div className="flex gap-3 overflow-x-auto pb-2">
-                  {product.images.map((img, idx) => (
-                    <button key={idx} onClick={() => setMainImage(img)} className={`flex-shrink-0 w-20 h-20 rounded-xl border-2 overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
-                      <Image src={img} alt={`${product.title} ${idx + 1}`} width={80} height={80} unoptimized={isExternalImageUrl(img)} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
+                  {galleryImages.length > 1 && (
+                    <div className="flex gap-2.5 overflow-x-auto pt-3 pb-1 [scrollbar-width:thin]">
+                      {galleryImages.map((img, idx) => (
+                        <button key={idx} type="button" onClick={() => setMainImage(img)} aria-label={`Show image ${idx + 1}`} className={`flex-shrink-0 w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-xl border-2 bg-white overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
+                          <Image src={img} alt={`${product.title} ${idx + 1}`} width={80} height={80} unoptimized={isExternalImageUrl(img)} className="w-full h-full object-contain p-1" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Collapsible sections below image */}
+                {/* Product info */}
+                <div className="min-w-0 flex flex-col">
+                  <div className="flex items-start justify-between gap-3">
+                    <h1 className="text-xl sm:text-2xl lg:text-[28px] font-bold text-gray-900 leading-tight tracking-tight">{product.title}</h1>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button type="button" onClick={toggleWishlist} disabled={wishlistLoading} aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"} className={`w-10 h-10 rounded-full border flex items-center justify-center transition ${inWishlist ? "border-red-200 bg-red-50 text-red-500" : "border-gray-200 text-gray-500 hover:text-red-500 hover:bg-gray-50"}`}>
+                        <Heart size={18} fill={inWishlist ? "currentColor" : "none"} />
+                      </button>
+                      <button type="button" onClick={handleShare} aria-label="Share" className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition"><Share2 size={18} /></button>
+                    </div>
+                  </div>
+                  {product.sku && <p className="text-sm text-gray-500 mt-1">SKU: {product.sku}</p>}
+                  <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                    <div className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={17} fill={i <= Math.round(product.rating) ? "currentColor" : "none"} className={i <= Math.round(product.rating) ? "text-amber-400" : "text-gray-300"} />)}</div>
+                    {product.reviewCount > 0 && <span className="text-sm font-bold text-gray-900">{Number(product.rating).toFixed(1)}</span>}
+                    <span className="text-sm text-gray-500">({product.reviewCount} {product.reviewCount === 1 ? "review" : "reviews"})</span>
+                  </div>
+                  {product.description && (
+                    <p className="text-gray-600 leading-relaxed mt-4 line-clamp-4 whitespace-pre-line">{product.description}</p>
+                  )}
+                  <div className="hidden md:block mt-5 pt-5 border-t border-gray-100">{detailsTable}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right column: price + bulk pricing */}
+            <div className="lg:col-span-4 space-y-4 lg:space-y-5 min-w-0">
+              <div className="card-base-static p-4 sm:p-5 space-y-4">
+                {/* Price */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    {isPriceHidden ? (
+                      <span className="text-xl text-gray-500 italic">Contact us for pricing</span>
+                    ) : (
+                      <div className="flex items-baseline gap-2.5 flex-wrap">
+                        <span className="text-3xl sm:text-4xl font-extrabold text-primary-700 tracking-tight">{formatPrice(shownPrice)}</span>
+                        {strikePrice != null && <span className="text-base sm:text-lg text-gray-400 line-through">{formatPrice(strikePrice)}</span>}
+                      </div>
+                    )}
+                    {!isPriceHidden && headlineLabel && (
+                      <span className="inline-block mt-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full" style={{ backgroundColor: role?.color || "#7c3aed", color: getContrastTextColor(role?.color || "#7c3aed") }}>{headlineLabel} Price</span>
+                    )}
+                  </div>
+                  {!isPriceHidden && shownDiscountPct > 0 && <span className="chip-sale shrink-0">{shownDiscountPct}% OFF</span>}
+                </div>
+
+                {!isPriceHidden && roleHeadline?.roleMinQty != null && (
+                  <div className="-mt-2">
+                    <p className="text-xs text-gray-500">Min quantity - {roleHeadline.roleMinQty}</p>
+                    {roleBelowMin && (
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        Below {roleHeadline.roleMinQty} units you are charged the retail price of {formatPrice(Number(product.unitPrice))}/unit.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Stock */}
+                <div className="flex items-center justify-between gap-2 text-sm font-semibold">
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${isOutOfStock ? "bg-red-500" : "bg-green-500"}`} />
+                    <span className={isOutOfStock ? "text-red-600" : "text-green-600"}>{isOutOfStock ? "Out of Stock" : "In Stock"}</span>
+                  </span>
+                  {isLowStock && <span className="inline-flex items-center gap-1.5 text-xs text-amber-600"><span className="w-2 h-2 rounded-full bg-amber-400" />Only {product.inventoryQuantity} left</span>}
+                </div>
+
+                {/* MOQ */}
+                <div className="flex items-center gap-2.5 rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-3 text-sm font-bold text-gray-700">
+                  <Package size={17} className="text-gray-400" /> MOQ: {roleHeadline?.roleMinQty ?? product.moq} units
+                </div>
+
+                {/* Price warnings */}
+                {isNonPurchasable && (
+                  <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                    <span className="text-sm text-red-700 font-medium">{nonPurchasableMsg || "This product is not available for purchase"}</span>
+                  </div>
+                )}
+                {ruleDiscount && !isPriceHidden && savingsPerUnit === 0 && (
+                  <div className="bg-green-50 border border-green-100 rounded-xl px-4 py-3">
+                    <span className="text-sm text-green-700 font-medium">{ruleDiscount.ruleName}: {ruleDiscount.discountPercent}% off — save {formatPrice(ruleDiscount.discountAmount)}/unit</span>
+                  </div>
+                )}
+
+                {/* Package Configurator or Add to Cart */}
+                {packageData ? (
+                  <PackageConfigurator pkg={packageData} userId={user?.id} />
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+                        <button
+                          onClick={decrement}
+                          disabled={atMin}
+                          title={atMin ? `Minimum order quantity is ${product.moq}` : undefined}
+                          className="px-3 sm:px-3.5 py-2.5 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        ><Minus size={16} /></button>
+                        <input
+                          type="number" min={effectiveMinQty} max={effectiveMaxQty} value={quantity}
+                          onChange={(e) => setTyped(Number(e.target.value))}
+                          onBlur={flush}
+                          onKeyDown={(e) => { if (e.key === "Enter") flush() }}
+                          className="w-12 sm:w-16 text-center border-x border-gray-200 py-2.5 text-sm font-medium focus:outline-none"
+                        />
+                        <button onClick={increment} className="px-3 sm:px-3.5 py-2.5 hover:bg-gray-50 transition-colors"><Plus size={16} /></button>
+                      </div>
+                      <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < effectiveMinQty || quantity > effectiveMaxQty || isNonPurchasable} className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {added ? <><Check size={18} /> Added!</> : adding ? "Adding..." : isNonPurchasable ? (nonPurchasableMsg || "Not Available") : quantity < effectiveMinQty ? "Adjust Quantity" : <><ShoppingCart size={18} /> Add to Cart</>}
+                      </button>
+                    </div>
+                    {quantity < effectiveMinQty && (
+                      <p className="text-xs text-amber-600 flex items-center gap-1 -mt-2">
+                        <AlertTriangle size={12} /> Minimum order quantity is {effectiveMinQty} units — quantity can't go lower.
+                      </p>
+                    )}
+                  </>
+                )}
+
+
+                {!packageData && !isNonPurchasable && (
+                  <Link
+                    href={`/rfqs/new?productId=${product.id}&quantity=${quantity}`}
+                    className="flex items-center justify-center gap-2 h-12 rounded-xl border border-primary-200 bg-primary-50/60 text-primary-700 hover:bg-primary-50 hover:border-primary-300 transition-all text-sm font-bold"
+                  >
+                    <FileText size={17} /> Add to Quotation
+                  </Link>
+                )}
+                <Link href={`/bulk-orders?productId=${product.id}`} className="flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-primary-600 transition-colors">
+                  Need a large order? Order in bulk <ChevronRight size={13} />
+                </Link>
+
+                {/* Rule badges */}
+                <ProductRuleBadge
+                  priceHidden={isPriceHidden}
+                  nonPurchasable={isNonPurchasable}
+                  nonPurchasableMessage={nonPurchasableMsg}
+                  hasRolePrice={pricingIsCurrent && (pricing!.appliedRule === "role" || pricing!.appliedRule === "contract")}
+                  roleLabel={pricing?.appliedRoleName || undefined}
+                  bogoLabel={productBogo.length > 0 ? `Buy ${productBogo[0].buyQuantity} Get ${productBogo[0].freeQuantity} Free` : undefined}
+                  quantityDiscountLabel={productQtyDiscount ? productQtyDiscount.ruleName : undefined}
+                  discountLabel={ruleDiscount?.ruleName}
+                  discountPercent={ruleDiscount?.discountPercent}
+                />
+              </div>
+
+              {/* Bulk quantity pricing */}
+              {displayTierPrices.length > 0 && !isPriceHidden && (() => {
+                const sortedTiers = sortTierPrices(displayTierPrices)
+                return (
+                  <div className="card-base-static p-4 sm:p-5">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <h2 className="flex items-center gap-2.5 font-bold text-gray-900"><Layers size={20} className="text-gray-500" /> Bulk Quantity Pricing</h2>
+                      <span className="text-sm font-semibold text-gray-500">Per Unit</span>
+                    </div>
+                    {roleTierPrices.length > 0 && (
+                      <p className="text-xs text-primary-600 font-medium mb-2 flex items-center gap-1.5">
+                        <Layers size={12} /> Special pricing for your account{priceLabel ? ` (${priceLabel})` : ""}
+                      </p>
+                    )}
+                    <div className="rounded-xl bg-gray-50 border border-gray-100 p-1.5 space-y-1">
+                      {sortedTiers.map((tp, idx) => {
+                        const isActive = tp === activeTier
+                        return (
+                          <div key={tp.id ?? `${tp.minQty}-${idx}`} className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive ? "bg-primary-600 text-white font-bold shadow-sm" : "bg-white text-gray-700"}`}>
+                            <span>{tp.minQty}{tp.maxQty ? ` - ${tp.maxQty}` : "+"} units</span>
+                            <span className="font-bold">{formatPrice(Number(tp.price))}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2 text-sm">
+                      <span className="text-gray-500">Total for {quantity} units</span>
+                      <span className="font-bold text-gray-900">{formatPrice(totalCost)}</span>
+                    </div>
+                    {totalSavings > 0 && <p className="mt-1 text-xs font-semibold text-green-600 text-right">You save {formatPrice(totalSavings)}</p>}
+                  </div>
+                )
+              })()}
+
+              <div className="md:hidden card-base-static p-4">{detailsTable}</div>
+            </div>
+          </div>
+
+          {/* Trust strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 mt-5 lg:mt-6">
+            {trustItems.map((t) => (
+              <div key={t.title} className="card-base-static flex items-center gap-3.5 p-3.5 sm:p-4">
+                <span className={`w-12 h-12 shrink-0 rounded-xl flex items-center justify-center ${t.tint}`}><t.icon size={22} /></span>
+                <div className="min-w-0"><p className="text-sm font-bold text-gray-900">{t.title}</p><p className="text-xs text-gray-500">{t.sub}</p></div>
+              </div>
+            ))}
+          </div>
+
+          {/* More details */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 mt-5 lg:mt-6 items-start">
+            <div className="lg:col-span-8 space-y-4 min-w-0">
               <div className="space-y-3">
                 {/* Description */}
                 {product.description && (
                   <CollapsibleSection title="Description" defaultOpen={true}>
                     <p className="text-gray-600 whitespace-pre-line leading-relaxed">{product.description}</p>
-                  </CollapsibleSection>
-                )}
-
-                {/* Tier Pricing — the buyer's own role tiers when configured, otherwise the
-                    universal product tier ladder (see displayTierPrices above). */}
-                {displayTierPrices.length > 0 && (
-                  <CollapsibleSection title="Bulk Pricing" icon={Layers}>
-                    {roleTierPrices.length > 0 && (
-                      <p className="text-xs text-primary-600 font-medium mb-3 flex items-center gap-1.5">
-                        <Layers size={12} /> Special pricing for your account{priceLabel ? ` (${priceLabel})` : ""}
-                      </p>
-                    )}
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead><tr className="border-b border-gray-100"><th className="px-4 py-3 text-left font-medium text-gray-500">Quantity</th><th className="px-4 py-3 text-right font-medium text-gray-500">Price/unit</th><th className="px-4 py-3 text-right font-medium text-gray-500">You Save</th></tr></thead>
-                        <tbody>
-                          {displayTierPrices.map((tp, idx) => {
-                            const saving = Number(product.unitPrice) - Number(tp.price)
-                            const isActive = tp === activeTier
-                            return (
-                              <tr key={tp.id ?? `${tp.minQty}-${idx}`} className={`border-b border-gray-50 ${isActive ? "bg-primary-50" : ""}`}>
-                                <td className="px-4 py-3 font-medium">{tp.minQty}{tp.maxQty ? ` - ${tp.maxQty}` : "+"} units</td>
-                                <td className="px-4 py-3 text-right font-semibold">{formatPrice(Number(tp.price))}</td>
-                                <td className="px-4 py-3 text-right text-green-600 font-medium">{saving > 0 ? formatPrice(saving) : "—"}</td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    {/* Calculator */}
-                    <div className="grid grid-cols-3 gap-4 mt-4">
-                      <div className="bg-gray-50 rounded-xl p-4 text-center">
-                        <p className="body-sm text-gray-500">Quantity</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{quantity}</p>
-                      </div>
-                      <div className="bg-primary-50 rounded-xl p-4 text-center">
-                        <p className="body-sm text-primary-600">Price/unit</p>
-                        <p className="text-2xl font-bold text-primary-700 mt-1">{formatPrice(Number(displayPrice))}</p>
-                      </div>
-                      <div className="bg-green-50 rounded-xl p-4 text-center">
-                        <p className="body-sm text-green-600">Total</p>
-                        <p className="text-2xl font-bold text-green-700 mt-1">{formatPrice(totalCost)}</p>
-                        {totalSavings > 0 && <p className="text-xs text-green-600 mt-1">Save {formatPrice(totalSavings)}</p>}
-                      </div>
-                    </div>
                   </CollapsibleSection>
                 )}
 
@@ -655,252 +862,33 @@ export default function ProductDetailPage() {
                 )}
               </div>
             </div>
-
-            {/* Right: Sticky sidebar — 2 cols on lg */}
-            <div className="lg:col-span-2">
-              <div className="lg:sticky lg:top-32 space-y-5 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
-                {/* Main product info card */}
-                <div className="card-base-static p-6 space-y-5">
-                  {/* Category + Badges */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {product.category && <Link href={`/categories/${product.category.handle}`} className="badge badge-primary">{product.category.name}</Link>}
-                    {product.tags?.includes("best-seller") && <span className="badge badge-warning">Best Seller</span>}
-                    {getProductDiscount(discounts, product.id, product.categoryId || product.category?.id) && <span className="badge badge-warning flex items-center gap-1"><Flame size={10} />{discountBadge(getProductDiscount(discounts, product.id, product.categoryId || product.category?.id)!)}</span>}
-                    {paymentOffers.filter(o => o.productId === product.id || (!o.productId && !o.categoryId)).slice(0, 2).map((offer) => (
-                      <span key={offer.id} className={`badge ${offer.offerType === "BANK" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>{getPaymentOfferBadge(offer)}</span>
+            <div className="lg:col-span-4 space-y-4 min-w-0">
+              {/* Bank & UPI Offers — shown directly below price, Amazon/Flipkart style */}
+              {paymentOffers.length > 0 && !isPriceHidden && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Bank Offers</span>
+                    <button onClick={() => setShowOffersModal(true)} className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors">
+                      View All Offers
+                    </button>
+                  </div>
+                  <div className="p-3 space-y-2.5">
+                    {paymentOffers.slice(0, 3).map((offer) => (
+                      <BankOfferCard key={offer.id} offer={offer} />
                     ))}
                   </div>
-
-                  {/* Title */}
-                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 leading-tight">{product.title}</h1>
-
-                  {/* Rating */}
-                  <div className="flex items-center gap-2">
-                    <div className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={18} fill={i <= Math.round(product.rating) ? "currentColor" : "none"} className={i <= Math.round(product.rating) ? "text-amber-400" : "text-gray-200"} />)}</div>
-                    <span className="text-sm text-gray-500">({product.reviewCount} reviews)</span>
-                  </div>
-
-                  {/* Price */}
-                  <div className="flex items-baseline gap-3 flex-wrap">
-                    {isPriceHidden ? (
-                      <span className="text-xl text-gray-500 italic">Contact us for pricing</span>
-                    ) : (
-                      <>
-                        <span className="text-3xl font-bold text-primary-700">{formatPrice(Number(ruleDiscount ? product.unitPrice - ruleDiscount.discountAmount : headlinePrice))}</span>
-                        {headlineLabel && (
-                          <span className="text-sm font-medium px-2.5 py-0.5 rounded-full" style={{ backgroundColor: role?.color || "#7c3aed", color: getContrastTextColor(role?.color || "#7c3aed") }}>{headlineLabel} Price</span>
-                        )}
-                        {ruleDiscount && Number(product.unitPrice) > (Number(product.unitPrice) - ruleDiscount.discountAmount) && (
-                          <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
-                        )}
-                        {!ruleDiscount && Number(product.unitPrice) > Number(headlinePrice) && (
-                          <span className="text-lg text-gray-400 line-through">{formatPrice(Number(product.unitPrice))}</span>
-                        )}
-                        {ruleDiscount && <span className="badge badge-success">{ruleDiscount.discountPercent}% off</span>}
-                        {!ruleDiscount && product.compareAtPrice && Number(headlinePrice) < Number(product.compareAtPrice) && (
-                          <span className="badge badge-success">{Math.round(((Number(product.compareAtPrice) - Number(headlinePrice)) / Number(product.compareAtPrice)) * 100)}% off</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {!isPriceHidden && roleHeadline?.roleMinQty != null && (
-                    <div className="-mt-2">
-                      <p className="text-xs text-gray-500">Min quantity - {roleHeadline.roleMinQty}</p>
-                      {roleBelowMin && (
-                        <p className="text-xs text-amber-600 mt-0.5">
-                          Below {roleHeadline.roleMinQty} units you are charged the retail price of {formatPrice(Number(product.unitPrice))}/unit.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* MOQ — front-loaded near price (B2B/Alibaba-style hierarchy) */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-lg">
-                      <Package size={13} className="text-gray-400" /> MOQ: {roleHeadline?.roleMinQty ?? product.moq} units
-                    </span>
-                  </div>
-
-                  {/* Tier pricing ladder — the buyer's own role tiers when configured,
-                      otherwise the universal product tier ladder; current price + upcoming
-                      slabs, active tier highlighted */}
-                  {displayTierPrices.length > 0 && (() => {
-                    const sortedTiers = sortTierPrices(displayTierPrices)
-                    return (
-                      <div className="rounded-xl border border-gray-100 bg-white p-4">
-                        {roleTierPrices.length > 0 && (
-                          <p className="text-xs text-primary-600 font-medium mb-2 flex items-center gap-1.5">
-                            <Layers size={12} /> Special pricing for your account{priceLabel ? ` (${priceLabel})` : ""}
-                          </p>
-                        )}
-                        <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                          <p className="text-sm text-gray-500">
-                            Current <span className="text-lg font-bold text-gray-900">{formatPrice(displayPrice)}</span>/piece
-                          </p>
-                          {totalSavings > 0 && (
-                            <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                              You saved {formatPrice(totalSavings)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-3 space-y-1.5">
-                          {sortedTiers.map((tp, idx) => {
-                            const isActive = tp === activeTier
-                            const isBest = idx === sortedTiers.length - 1
-                            return (
-                              <div
-                                key={tp.id ?? `${tp.minQty}-${idx}`}
-                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                                  isActive ? "bg-primary-600 text-white font-bold shadow-sm" : "bg-gray-50 text-gray-600"
-                                }`}
-                              >
-                                <span>{tp.minQty}+ Pieces</span>
-                                <span>
-                                  → {formatPrice(Number(tp.price))}/piece
-                                  {isBest && (
-                                    <span className={isActive ? "text-primary-100 font-semibold" : "text-primary-600 font-semibold"}> (Best Price)</span>
-                                  )}
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Price warnings */}
-                  {isNonPurchasable && (
-                    <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3">
-                      <span className="text-sm text-red-700 font-medium">{nonPurchasableMsg || "This product is not available for purchase"}</span>
-                    </div>
-                  )}
-                  {ruleDiscount && !isPriceHidden && savingsPerUnit === 0 && (
-                    <div className="bg-green-50 border border-green-100 rounded-xl px-4 py-3">
-                      <span className="text-sm text-green-700 font-medium">{ruleDiscount.ruleName}: {ruleDiscount.discountPercent}% off — save {formatPrice(ruleDiscount.discountAmount)}/unit</span>
-                    </div>
-                  )}
-
-                  {/* Bank & UPI Offers — shown directly below price, Amazon/Flipkart style */}
-                  {paymentOffers.length > 0 && !isPriceHidden && (
-                    <div className="border border-gray-100 rounded-xl overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                        <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Bank Offers</span>
-                        <button onClick={() => setShowOffersModal(true)} className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors">
-                          View All Offers
-                        </button>
-                      </div>
-                      <div className="p-3 space-y-2.5">
-                        {paymentOffers.slice(0, 3).map((offer) => (
-                          <BankOfferCard key={offer.id} offer={offer} />
-                        ))}
-                      </div>
-                      {paymentOffers.length > 3 && (
-                        <button onClick={() => setShowOffersModal(true)} className="w-full text-center py-2.5 text-xs font-semibold text-primary-600 hover:bg-primary-50 border-t border-gray-100 transition-colors">
-                          +{paymentOffers.length - 3} more offer{paymentOffers.length - 3 !== 1 ? "s" : ""}
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Meta info */}
-                  <div className="space-y-2">
-                    {product.sku && <p className="body-sm">SKU: {product.sku}</p>}
-                    {product.vendorName && (
-                      product.vendorId ? (
-                        <Link href={`/vendors/${product.vendorId}`} className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-                          <Store size={14} className="text-gray-400" /> {product.vendorName}
-                        </Link>
-                      ) : (
-                        <p className="body-sm flex items-center gap-1.5"><Store size={14} className="text-gray-400" /> {product.vendorName}</p>
-                      )
-                    )}
-                    <div className="flex items-center gap-2 text-sm text-gray-600"><Truck size={15} className="text-gray-400" /><span>{product.inventoryQuantity > 0 ? `${product.inventoryQuantity} in stock` : "Out of stock"}</span></div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600"><ShieldCheck size={15} className="text-gray-400" /><span>Secure checkout</span></div>
-                  </div>
-
-                  {/* Rule badges */}
-                  <ProductRuleBadge
-                    priceHidden={isPriceHidden}
-                    nonPurchasable={isNonPurchasable}
-                    nonPurchasableMessage={nonPurchasableMsg}
-                    hasRolePrice={pricingIsCurrent && (pricing!.appliedRule === "role" || pricing!.appliedRule === "contract")}
-                    roleLabel={pricing?.appliedRoleName || undefined}
-                    bogoLabel={productBogo.length > 0 ? `Buy ${productBogo[0].buyQuantity} Get ${productBogo[0].freeQuantity} Free` : undefined}
-                    quantityDiscountLabel={productQtyDiscount ? productQtyDiscount.ruleName : undefined}
-                    discountLabel={ruleDiscount?.ruleName}
-                    discountPercent={ruleDiscount?.discountPercent}
-                  />
-
-                  {/* Package Configurator or Add to Cart */}
-                  {packageData ? (
-                    <PackageConfigurator pkg={packageData} userId={user?.id} />
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
-                          <button
-                            onClick={decrement}
-                            disabled={atMin}
-                            title={atMin ? `Minimum order quantity is ${product.moq}` : undefined}
-                            className="px-3.5 py-2.5 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                          ><Minus size={16} /></button>
-                          <input
-                            type="number" min={effectiveMinQty} max={effectiveMaxQty} value={quantity}
-                            onChange={(e) => setTyped(Number(e.target.value))}
-                            onBlur={flush}
-                            onKeyDown={(e) => { if (e.key === "Enter") flush() }}
-                            className="w-16 text-center border-x border-gray-200 py-2.5 text-sm font-medium focus:outline-none"
-                          />
-                          <button onClick={increment} className="px-3.5 py-2.5 hover:bg-gray-50 transition-colors"><Plus size={16} /></button>
-                        </div>
-                        <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < effectiveMinQty || quantity > effectiveMaxQty || isNonPurchasable} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                          {added ? <><Check size={18} /> Added!</> : adding ? "Adding..." : isNonPurchasable ? (nonPurchasableMsg || "Not Available") : quantity < effectiveMinQty ? "Adjust Quantity" : <><ShoppingCart size={18} /> Add to Cart</>}
-                        </button>
-                      </div>
-                      {quantity < effectiveMinQty && (
-                        <p className="text-xs text-amber-600 flex items-center gap-1 -mt-2">
-                          <AlertTriangle size={12} /> Minimum order quantity is {effectiveMinQty} units — quantity can't go lower.
-                        </p>
-                      )}
-                      <div className="flex gap-3">
-                        <button onClick={toggleWishlist} disabled={wishlistLoading} className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-sm font-medium ${inWishlist ? "border-red-200 text-red-600 bg-red-50 hover:bg-red-100" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
-                          <Heart size={16} fill={inWishlist ? "currentColor" : "none"} /> {inWishlist ? "Saved" : "Wishlist"}
-                        </button>
-                      </div>
-                    </>
-                  )}
-
-                  <Link
-                    href={`/bulk-orders?productId=${product.id}`}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-primary-300 text-primary-700 bg-primary-50/50 hover:bg-primary-50 hover:border-primary-400 transition-all duration-200 text-sm font-semibold"
-                  >
-                    <FileText size={16} /> Order in Bulk
-                  </Link>
-
-                  {product.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2">{product.tags.map((tag) => <span key={tag} className="badge bg-gray-100 text-gray-600">{tag}</span>)}</div>
+                  {paymentOffers.length > 3 && (
+                    <button onClick={() => setShowOffersModal(true)} className="w-full text-center py-2.5 text-xs font-semibold text-primary-600 hover:bg-primary-50 border-t border-gray-100 transition-colors">
+                      +{paymentOffers.length - 3} more offer{paymentOffers.length - 3 !== 1 ? "s" : ""}
+                    </button>
                   )}
                 </div>
-
-                {/* Trust signals */}
-                <div className="card-base-static p-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-gray-50">
-                      <Truck size={18} className="text-primary-600" />
-                      <div><p className="text-xs font-semibold text-gray-900">Fast Delivery</p><p className="text-[10px] text-gray-500">Across India</p></div>
-                    </div>
-                    <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-gray-50">
-                      <ShieldCheck size={18} className="text-primary-600" />
-                      <div><p className="text-xs font-semibold text-gray-900">Secure</p><p className="text-[10px] text-gray-500">Safe checkout</p></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              )}
+              {product.tags.length > 0 && (
+                <div className="card-base-static p-4 flex flex-wrap gap-2">{product.tags.map((tag) => <span key={tag} className="badge bg-gray-100 text-gray-600">{tag}</span>)}</div>
+              )}
             </div>
           </div>
-
           {/* Related Products */}
           {related.length > 0 && (
             <div className="mt-12">
