@@ -11,7 +11,7 @@ import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import RolePriceTable from "@/components/admin/RolePriceTable"
-import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters } from "@/components/admin/ProductFilters"
+import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters, uniqueCompanies } from "@/components/admin/ProductFilters"
 
 interface Product {
   id: string
@@ -32,6 +32,8 @@ interface Product {
   tierPrices: { id: string; minQty: number; maxQty: number | null; price: number }[]
   category?: { name: string }
   rating?: number
+  companyName?: string | null
+  sizeGb?: number | null
 }
 
 interface Category {
@@ -73,6 +75,8 @@ function AdminProductsContent() {
     sku: "",
     unitPrice: "",
     compareAtPrice: "",
+    companyName: "",
+    sizeGb: "",
     moq: "1",
     inventoryQuantity: "0",
     categoryId: "",
@@ -139,6 +143,8 @@ function AdminProductsContent() {
       ...form,
       unitPrice: Number(form.unitPrice),
       compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : undefined,
+      companyName: form.companyName.trim(),
+      sizeGb: form.sizeGb !== "" ? Number(form.sizeGb) : undefined,
       moq: Number(form.moq),
       inventoryQuantity: Number(form.inventoryQuantity),
       tierPrices: tierRows
@@ -146,6 +152,9 @@ function AdminProductsContent() {
         .map((r) => ({ minQty: Number(r.minQty), maxQty: r.maxQty ? Number(r.maxQty) : null, price: Number(r.price) })),
     }
     if (!body.compareAtPrice) delete body.compareAtPrice
+    // Company name and size are optional: leaving them empty clears them on edit and omits them on create.
+    if (!body.companyName) { if (editingProduct) body.companyName = null; else delete body.companyName }
+    if (body.sizeGb === undefined || Number.isNaN(body.sizeGb)) { if (editingProduct) body.sizeGb = null; else delete body.sizeGb }
     if (!body.categoryId) delete body.categoryId
     if (!body.sku) delete body.sku
     if (!body.description) delete body.description
@@ -251,6 +260,8 @@ function AdminProductsContent() {
       sku: p.sku || "",
       unitPrice: String(p.unitPrice),
       compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "",
+      companyName: p.companyName || "",
+      sizeGb: p.sizeGb != null ? String(p.sizeGb) : "",
       moq: String(p.moq),
       inventoryQuantity: String(p.inventoryQuantity),
       categoryId: p.categoryId || "",
@@ -442,6 +453,12 @@ function AdminProductsContent() {
               {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
             </select>
             </FormField>
+            <FormField label="Company Name" hint="Optional: the maker or brand company">
+              <input placeholder="e.g. Zebronics" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Size (GB)" hint="Optional: storage size in GB (1 TB = 1024)">
+              <input type="number" min="0" step="any" placeholder="e.g. 128" value={form.sizeGb} onChange={(e) => setForm({ ...form, sizeGb: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
             <FormField label="Unit Price (Rs.)" required hint="Selling price per unit">
               <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </FormField>
@@ -527,7 +544,7 @@ function AdminProductsContent() {
         </div>
       )}
 
-      <ProductFilterBar filters={filters} onFilters={setFilters} sort={sort} onSort={setSort} categories={categories} resultCount={filtered.length} totalCount={products.length} />
+      <ProductFilterBar filters={filters} onFilters={setFilters} sort={sort} onSort={setSort} categories={categories} companies={uniqueCompanies(products)} resultCount={filtered.length} totalCount={products.length} />
 
       {/* Product List */}
       {loading ? (

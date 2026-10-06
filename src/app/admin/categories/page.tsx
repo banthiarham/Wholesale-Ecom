@@ -7,7 +7,7 @@ import { Plus, Trash2, Edit, X, ChevronRight, ChevronDown, Folder, Tag, ImagePlu
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { ListFilterBar, emptyValues, type FilterField, type FilterValues } from "@/components/admin/ListFilters"
-import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters } from "@/components/admin/ProductFilters"
+import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters, uniqueCompanies } from "@/components/admin/ProductFilters"
 
 interface CategoryNode {
   id: string
@@ -37,6 +37,8 @@ interface CategoryProduct {
   status: string
   tierPrices?: unknown[]
   rating?: number
+  companyName?: string | null
+  sizeGb?: number | null
 }
 
 const CATEGORY_FIELDS: FilterField[] = [
@@ -466,7 +468,7 @@ export default function AdminCategoriesPage() {
           </div>
           {!loadingProducts && catProducts.length > 0 && (
             <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-              <ProductFilterBar filters={prodFilters} onFilters={setProdFilters} sort={prodSort} onSort={setProdSort} showCategory={false} resultCount={visibleCatProducts.length} totalCount={catProducts.length} />
+              <ProductFilterBar filters={prodFilters} onFilters={setProdFilters} sort={prodSort} onSort={setProdSort} showCategory={false} companies={uniqueCompanies(catProducts)} resultCount={visibleCatProducts.length} totalCount={catProducts.length} />
             </div>
           )}
           {loadingProducts ? (

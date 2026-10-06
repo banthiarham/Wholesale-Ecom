@@ -55,6 +55,14 @@ export class UpdateProductDto {
   vendorId?: string;
 
   @IsOptional()
+  @IsString()
+  companyName?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  sizeGb?: number | null;
+
+  @IsOptional()
   @IsArray()
   tags?: string[];
 

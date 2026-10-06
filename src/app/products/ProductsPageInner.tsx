@@ -15,8 +15,8 @@ import { useCategories, flattenCategories } from "@/lib/categories/CategoriesPro
 import { ProductCard } from "@/components/ui/ProductCard"
 import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 import { EmptyState } from "@/components/ui/EmptyState"
-import { ProductFilterPopup } from "@/components/storefront/ProductFilterPopup"
-import { ProductFilterState, SortKey, applyProductFilters, countActiveFilters, defaultFilters } from "@/components/admin/ProductFilters"
+import { ProductFilterPanel } from "@/components/storefront/ProductFilterPanel"
+import { ProductFilterState, SortKey, applyProductFilters, countActiveFilters, defaultFilters, uniqueCompanies } from "@/components/admin/ProductFilters"
 import { ListingToolbar, SortOption, ViewMode } from "@/components/storefront/ListingToolbar"
 import { useInfiniteScroll, ScrollSentinel } from "@/lib/useInfiniteScroll"
 
@@ -32,6 +32,8 @@ interface Product {
   inventoryQuantity: number
   rating: number
   reviewCount?: number
+  companyName?: string | null
+  sizeGb?: number | null
   vendorName: string | null
   tags: string[]
   tierPrices: { minQty: number; maxQty: number | null; price: number }[]
@@ -189,6 +191,8 @@ export default function ProductsPageInner() {
     return applyProductFilters(filtered, filters, sortKey)
   }, [products, hiddenProductIds, sort, filters])
 
+  const companyNames = useMemo(() => uniqueCompanies(products), [products])
+
   const { visibleCount, hasMore, sentinelRef } = useInfiniteScroll(visibleProducts.length, visibleProducts, BATCH_SIZE)
   const shownProducts = visibleProducts.slice(0, visibleCount)
 
@@ -223,12 +227,13 @@ export default function ProductsPageInner() {
           </div>
         </div>
 
-        <ProductFilterPopup
+        <ProductFilterPanel
           open={mobileFiltersOpen}
           onClose={() => setMobileFiltersOpen(false)}
           filters={filters}
           onFilters={setFilters}
           categories={categories}
+          companies={companyNames}
           resultCount={visibleProducts.length}
         />
 

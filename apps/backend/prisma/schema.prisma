@@ -267,6 +267,9 @@ model Product {
   thumbnail         String?
   vendorName        String?
   vendorId          String?
+  // Optional extra product details (admin product form): maker/company name and size in GB.
+  companyName       String?
+  sizeGb            Float?
   rating            Float         @default(0)
   reviewCount       Int           @default(0)
   tags              String[]
