@@ -119,9 +119,10 @@ export class OrdersService {
   async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string; couponCode?: string; bankOfferId?: string; paymentMethod?: string }) {
     // Offline payment methods can be switched off by the admin (Payment Gateways); refuse orders that still try to use one.
     if (data.paymentMethod === 'COD' || data.paymentMethod === 'BANK_TRANSFER') {
-      const gw = await this.prisma.paymentGateway.findUnique({ where: { provider: data.paymentMethod } });
-      // COD is on unless an admin turned it off; Bank Transfer needs an active gateway with bank details.
-      const unavailable = data.paymentMethod === 'COD' ? !!gw && !gw.isActive : !gw || !gw.isActive;
+      // COD is on unless an admin turned it off; Bank Transfer needs at least one active bank account.
+      const unavailable = data.paymentMethod === 'COD'
+        ? !!(await this.prisma.paymentGateway.findFirst({ where: { provider: 'COD' } })) && !(await this.prisma.paymentGateway.findFirst({ where: { provider: 'COD', isActive: true } }))
+        : !(await this.prisma.paymentGateway.findFirst({ where: { provider: 'BANK_TRANSFER', isActive: true } }));
       if (unavailable) {
         throw new BadRequestException(data.paymentMethod === 'COD' ? 'Cash on Delivery is currently unavailable. Please choose another payment method.' : 'Bank transfer is currently unavailable. Please choose another payment method.');
       }

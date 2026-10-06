@@ -10,6 +10,7 @@ const quickLinks = [
   { label: "Products", href: "/products" },
   { label: "Categories", href: "/categories" },
   { label: "Packages", href: "/packages" },
+  { label: "Account Details", href: "/account-details" },
 ]
 
 const supportLinks = [

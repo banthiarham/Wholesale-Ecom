@@ -52,8 +52,8 @@ export class PaymentsService {
     if (!order) throw new NotFoundException('Order not found');
     this.assertOwnerOrAdmin(currentUser, order.userId);
 
-    const gateway = await this.prisma.paymentGateway.findUnique({ where: { provider: 'BANK_TRANSFER' } });
-    if (!gateway || !gateway.isActive) throw new BadRequestException('Bank transfer is not available');
+    const gateway = await this.prisma.paymentGateway.findFirst({ where: { provider: 'BANK_TRANSFER', isActive: true }, orderBy: { createdAt: 'asc' } });
+    if (!gateway) throw new BadRequestException('Bank transfer is not available');
 
     const existing = await this.prisma.payment.findUnique({ where: { orderId } });
     if (existing) return existing;

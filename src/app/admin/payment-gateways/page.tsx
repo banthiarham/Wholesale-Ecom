@@ -285,7 +285,7 @@ export default function AdminPaymentGatewaysPage() {
       ...prev,
       provider,
       credentials: {},
-      label: prev.label || PROVIDER_LABELS[provider] || provider,
+      label: provider === "BANK_TRANSFER" ? "Bank Transfer" : (prev.label && prev.label !== "Bank Transfer" ? prev.label : PROVIDER_LABELS[provider] || provider),
     }))
   }
 
@@ -444,7 +444,9 @@ export default function AdminPaymentGatewaysPage() {
               <input
                 required
                 placeholder="Label (e.g. Razorpay Test)"
-                value={form.label}
+                value={isBank ? "Bank Transfer" : form.label}
+                readOnly={isBank}
+                title={isBank ? "Bank transfer gateways are always named Bank Transfer" : undefined}
                 onChange={(e) => setForm({ ...form, label: e.target.value })}
                 className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
@@ -533,7 +535,7 @@ export default function AdminPaymentGatewaysPage() {
             {isBank && (
               <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-4">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bank account details</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Customers who choose Bank Transfer at checkout will see these details (read-only) before placing their order.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Customers who choose Bank Transfer at checkout will see these details (read-only) before placing their order. You can add more than one bank account; customers can browse through all of them.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {BANK_FIELDS.map((f) => (
                     <FormField key={f.key} label={f.label} required>
@@ -712,7 +714,7 @@ export default function AdminPaymentGatewaysPage() {
                     <td className="px-4 py-3">
                       {g.provider === "BANK_TRANSFER" && g.settings ? (
                         <div className="text-xs text-gray-500 dark:text-gray-400">
-                          <div className="font-medium text-gray-600 dark:text-gray-400">{g.settings.bankName}</div>
+                          <div className="font-medium text-gray-600 dark:text-gray-400">{g.settings.bankName} <span className="font-normal text-gray-400">({g.settings.accountName})</span></div>
                           <div className="font-mono">A/C {g.settings.accountNumber}</div>
                         </div>
                       ) : g.credentials && typeof g.credentials === "object" && Object.keys(g.credentials).length > 0 ? (

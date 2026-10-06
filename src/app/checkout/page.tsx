@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useRef, Fragment } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { BankAccountsCarousel } from "@/components/storefront/BankAccounts"
 import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck, ShoppingCart, Landmark } from "lucide-react"
 import { formatPrice, getCartSessionId, COUNTRIES } from "@/lib/utils"
 import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
@@ -51,13 +52,6 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 // Offline methods are shown as their own options, not in the online-gateway list.
 const OFFLINE_PROVIDERS = ["COD", "BANK_TRANSFER"]
-const BANK_DETAIL_ROWS: { key: string; label: string }[] = [
-  { key: "bankName", label: "Bank Name" },
-  { key: "accountName", label: "Account Name" },
-  { key: "accountNumber", label: "Account Number" },
-  { key: "ifscCode", label: "IFSC Code" },
-  { key: "branch", label: "Branch" },
-]
 
 const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   CCAVENUE: "Credit/Debit card, UPI, NetBanking, Wallets",
@@ -600,7 +594,8 @@ export default function CheckoutPage() {
   }
 
   const codGateway = gateways.find((g) => g.provider === "COD")
-  const bankGateway = gateways.find((g) => g.provider === "BANK_TRANSFER")
+  const bankGateways = gateways.filter((g) => g.provider === "BANK_TRANSFER")
+  const bankGateway = bankGateways[0]
   const onlineGateways = gateways.filter((g) => !OFFLINE_PROVIDERS.includes(g.provider) && (isPaymentAllowed(g.provider) || isPaymentAllowed("ONLINE")))
   const codAvailable = !!codGateway && isPaymentAllowed("COD")
   const bankAvailable = !!bankGateway && isPaymentAllowed("BANK_TRANSFER")
@@ -941,8 +936,8 @@ export default function CheckoutPage() {
                         <Landmark size={18} />
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">{bankGateway?.label || "Bank Transfer"}</p>
-                        <p className="text-xs text-gray-500">{bankGateway?.description || "Pay by NEFT / IMPS / UPI to our bank account"}</p>
+                        <p className="font-semibold text-gray-900">Bank Transfer</p>
+                        <p className="text-xs text-gray-500">{bankGateway?.description || (bankGateways.length > 1 ? `Pay by NEFT / IMPS / UPI to one of ${bankGateways.length} bank accounts` : "Pay by NEFT / IMPS / UPI to our bank account")}</p>
                       </div>
                     </div>
                   </label>
@@ -1249,7 +1244,7 @@ export default function CheckoutPage() {
               <span className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center"><Landmark size={20} /></span>
               <div>
                 <h3 className="font-bold text-gray-900">Bank Transfer Details</h3>
-                <p className="text-xs text-gray-500">Transfer the order amount to this account</p>
+                <p className="text-xs text-gray-500">Transfer the order amount to {bankGateways.length > 1 ? "any one of these accounts" : "this account"}</p>
               </div>
             </div>
             <div className="p-5 space-y-3">
@@ -1257,14 +1252,7 @@ export default function CheckoutPage() {
                 <span className="text-sm text-gray-600">Amount to transfer</span>
                 <span className="text-lg font-bold text-primary-700">{formatPrice(finalTotal)}</span>
               </div>
-              <dl className="rounded-xl border border-gray-100 divide-y divide-gray-100 text-sm">
-                {BANK_DETAIL_ROWS.map((r) => (
-                  <div key={r.key} className="flex items-start justify-between gap-4 px-4 py-2.5">
-                    <dt className="text-gray-500 shrink-0">{r.label}</dt>
-                    <dd className="font-semibold text-gray-900 text-right break-all select-all">{bankGateway.settings?.[r.key] || "—"}</dd>
-                  </div>
-                ))}
-              </dl>
+              <BankAccountsCarousel accounts={bankGateways.map((g) => ({ id: g.id, settings: g.settings }))} />
               <p className="text-xs text-gray-500">Your order will be placed now with payment status <strong>Pending</strong>. We will confirm it once your transfer is received.</p>
             </div>
             <div className="p-5 pt-0 flex gap-3">

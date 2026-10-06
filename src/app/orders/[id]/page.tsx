@@ -1,5 +1,6 @@
 "use client"
 import { paymentModeLabel } from "@/lib/paymentMode"
+import { BankAccountsCarousel, fetchBankAccounts, type BankAccount } from "@/components/storefront/BankAccounts"
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
@@ -7,7 +8,7 @@ import { useRouter, useParams, useSearchParams } from "next/navigation"
 import {
   ArrowLeft, Package, Truck, MapPin, CreditCard, CheckCircle, XCircle, RotateCcw, ShoppingCart,
   Navigation, ExternalLink, Circle, Layers, Download, RefreshCcw, ClipboardCheck, PackageCheck, Home, ReceiptText,
-  Repeat,
+  Repeat, Landmark, X,
 } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { useToast } from "@/components/ui/Toast"
@@ -151,8 +152,14 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<OrderDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
+  const [showBank, setShowBank] = useState(false)
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[] | null>(null)
   const [reordering, setReordering] = useState(false)
   const [paymentAlert, setPaymentAlert] = useState<string | null>(null)
+  const openBankDetails = async () => {
+    setShowBank(true)
+    if (bankAccounts === null) setBankAccounts(await fetchBankAccounts())
+  }
   const [activeTab, setActiveTab] = useState<TabKey>("details")
 
   const [returnReason, setReturnReason] = useState("")
@@ -730,6 +737,11 @@ export default function OrderDetailPage() {
                 <div className="text-sm text-gray-700 space-y-2">
                   <div className="flex justify-between"><span>Method</span><span className="font-medium">{paymentModeLabel(order.payment?.provider)}</span></div>
                   <div className="flex justify-between items-center"><span>Status</span><PaymentStatusBadge status={order.payment?.status || "PENDING"} /></div>
+                  {order.payment?.provider === "BANK_TRANSFER" && (
+                    <button type="button" onClick={openBankDetails} className="w-full mt-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-primary-200 bg-primary-50/60 text-primary-700 hover:bg-primary-50 text-sm font-semibold transition">
+                      <Landmark size={16} /> View Bank Details
+                    </button>
+                  )}
                   {order.payment?.providerRef && <div className="flex justify-between"><span>Transaction ID</span><span className="font-medium text-xs">{order.payment.providerRef}</span></div>}
                   {order.payment?.metadata?.razorpayOrderId && (
                     <div className="flex justify-between"><span>Razorpay Order ID</span><span className="font-medium text-xs">{order.payment.metadata.razorpayOrderId}</span></div>
@@ -823,6 +835,31 @@ export default function OrderDetailPage() {
           </div>
         )}
       </main>
+
+      {showBank && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Bank details">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBank(false)} />
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center"><Landmark size={20} /></span>
+              <div className="flex-1">
+                <h3 className="font-bold text-gray-900">Bank Transfer Details</h3>
+                <p className="text-xs text-gray-500">Order #{order.orderNumber.slice(0, 8)} · {formatPrice(Number(order.totalAmount))}</p>
+              </div>
+              <button type="button" onClick={() => setShowBank(false)} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={18} /></button>
+            </div>
+            <div className="p-5">
+              {bankAccounts === null ? (
+                <p className="text-sm text-gray-500 text-center py-6">Loading bank details...</p>
+              ) : bankAccounts.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">Bank details are not available right now. Please contact us for help.</p>
+              ) : (
+                <BankAccountsCarousel accounts={bankAccounts} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

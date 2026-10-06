@@ -548,7 +548,8 @@ model BulkOrderStatusHistory {
 
 model PaymentGateway {
   id               String   @id @default(uuid())
-  provider         String   @unique
+  // Not unique: Bank Transfer can have several rows (one per bank account). Other providers are kept to one row in the service.
+  provider         String
   label            String
   description      String?
   isActive         Boolean  @default(false)

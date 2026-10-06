@@ -8,6 +8,8 @@ import * as CryptoJS from 'crypto-js';
 export const COD_PROVIDER = 'COD';
 export const BANK_TRANSFER_PROVIDER = 'BANK_TRANSFER';
 const OFFLINE_PROVIDERS = [COD_PROVIDER, BANK_TRANSFER_PROVIDER];
+/** Bank Transfer gateways are always named this, whatever the admin types. */
+export const BANK_TRANSFER_LABEL = 'Bank Transfer';
 /** Bank details the admin fills in for Bank Transfer (stored in the gateway's `settings`, shown to customers at checkout). */
 const BANK_FIELDS: { key: string; label: string }[] = [
   { key: 'bankName', label: 'Bank name' },
@@ -31,7 +33,7 @@ export class PaymentGatewaysService {
 
   /** Cash on Delivery always exists as a built-in method (enabled by default) so admins can switch it on/off. */
   private async ensureCodGateway() {
-    const existing = await this.prisma.paymentGateway.findUnique({ where: { provider: COD_PROVIDER } });
+    const existing = await this.prisma.paymentGateway.findFirst({ where: { provider: COD_PROVIDER } });
     if (existing) return existing;
     return this.prisma.paymentGateway.create({
       data: {
@@ -75,10 +77,11 @@ export class PaymentGatewaysService {
     }
 
     if (providerName === BANK_TRANSFER_PROVIDER) {
+      // Several bank accounts are allowed; each one is its own "Bank Transfer" gateway.
       return this.prisma.paymentGateway.create({
         data: {
           provider: providerName,
-          label: data.label,
+          label: BANK_TRANSFER_LABEL,
           description: data.description,
           isActive: data.isActive,
           isDefault: false,
@@ -86,6 +89,12 @@ export class PaymentGatewaysService {
           settings: this.cleanBankDetails(data.settings),
         },
       });
+    }
+
+    // Online providers are configured once (several Bank Transfer rows are the only exception).
+    const alreadyConfigured = await this.prisma.paymentGateway.findFirst({ where: { provider: providerName } });
+    if (alreadyConfigured) {
+      throw new BadRequestException(`${providerName} is already configured. Edit the existing gateway instead of adding another.`);
     }
 
     const provider = this.factory.getProvider(providerName);
@@ -137,7 +146,7 @@ export class PaymentGatewaysService {
     if (OFFLINE_PROVIDERS.includes(gateway.provider)) {
       // Offline methods only have a label, description, on/off switch and (for bank transfer) bank details.
       const offline: any = {};
-      if (data.label !== undefined) offline.label = data.label;
+      if (data.label !== undefined && gateway.provider !== BANK_TRANSFER_PROVIDER) offline.label = data.label;
       if (data.description !== undefined) offline.description = data.description;
       if (data.isActive !== undefined) offline.isActive = data.isActive;
       if (gateway.provider === BANK_TRANSFER_PROVIDER && data.settings !== undefined) {
@@ -210,6 +219,7 @@ export class PaymentGatewaysService {
     await this.ensureCodGateway();
     const gateways = await this.prisma.paymentGateway.findMany({
       where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
       select: {
         id: true,
         provider: true,
@@ -231,7 +241,7 @@ export class PaymentGatewaysService {
     gatewayId: string;
     webhookUrl?: string;
   }> {
-    const dbRecord = await this.prisma.paymentGateway.findUnique({
+    const dbRecord = await this.prisma.paymentGateway.findFirst({
       where: { provider },
     });
 
