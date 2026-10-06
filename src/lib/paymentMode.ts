@@ -8,6 +8,7 @@ const MODE_LABELS: Record<string, string> = {
   CCAVENUE: "CCAvenue",
   RAZORPAY: "Razorpay",
   WALLET: "Wallet",
+  BANK_TRANSFER: "Bank Transfer",
   PAYU: "PayU",
   STRIPE: "Stripe",
 }

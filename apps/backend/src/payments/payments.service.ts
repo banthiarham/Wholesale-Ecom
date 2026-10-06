@@ -43,6 +43,32 @@ export class PaymentsService {
     });
   }
 
+  /**
+   * Bank Transfer checkout: record the order's payment as BANK_TRANSFER / PENDING so admins can see how the
+   * customer chose to pay and confirm it once the money arrives. Safe to call twice (returns the same payment).
+   */
+  async createBankTransferPayment(orderId: string, currentUser: any) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    this.assertOwnerOrAdmin(currentUser, order.userId);
+
+    const gateway = await this.prisma.paymentGateway.findUnique({ where: { provider: 'BANK_TRANSFER' } });
+    if (!gateway || !gateway.isActive) throw new BadRequestException('Bank transfer is not available');
+
+    const existing = await this.prisma.payment.findUnique({ where: { orderId } });
+    if (existing) return existing;
+
+    return this.prisma.payment.create({
+      data: {
+        orderId,
+        provider: 'BANK_TRANSFER',
+        amount: Number(order.totalAmount),
+        status: PaymentStatus.PENDING,
+        gatewayId: gateway.id,
+      },
+    });
+  }
+
   async verify(orderId: string, providerRef: string, status: PaymentStatus) {
     const payment = await this.prisma.payment.findUnique({
       where: { orderId },
