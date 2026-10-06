@@ -405,11 +405,11 @@ export default function ProductDetailPage() {
     ...metaSpecs.map(([label, value]) => ({ icon: ShieldCheck, label, value })),
   ]
   const detailsTable = (
-    <div className="rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-100 text-sm">
+    <div className="flex flex-col h-full rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-100 text-sm lg:text-base">
       {detailRows.map((r) => (
-        <div key={r.label} className="flex items-center gap-3 px-3.5 py-2 odd:bg-gray-50/70">
+        <div key={r.label} className="flex-1 flex items-center gap-3 px-3.5 py-2 lg:py-2.5 odd:bg-gray-50/70">
           <r.icon size={16} className="text-gray-400 shrink-0" />
-          <span className="w-28 sm:w-36 shrink-0 text-gray-600">{r.label}</span>
+          <span className="w-28 sm:w-36 lg:w-40 shrink-0 text-gray-600">{r.label}</span>
           <span className="min-w-0 flex-1 text-gray-800 font-medium break-words">{r.value}</span>
         </div>
       ))}
@@ -438,10 +438,10 @@ export default function ProductDetailPage() {
             <span className="text-gray-900 font-medium truncate">{product.title}</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[4fr_5fr_4fr] gap-3 lg:gap-4 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[4fr_5fr_4fr] gap-3 lg:gap-4 items-start lg:items-stretch">
                 {/* Gallery */}
-                <div className="card-base-static p-3 min-w-0">
-                  <div className="relative rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden">
+                <div className="card-base-static p-3 min-w-0 flex flex-col">
+                  <div className="relative rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden lg:flex-1 lg:min-h-[280px]">
                     <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 max-w-[calc(100%-1.5rem)]">
                       {shownDiscountPct > 0 && !isPriceHidden && <span className="chip-sale">{shownDiscountPct}% OFF</span>}
                       {productCustomBadges[0] && (
@@ -457,7 +457,7 @@ export default function ProductDetailPage() {
                     </div>
                     {mainImage ? (
                       <div
-                        className="relative w-full aspect-[4/3] overflow-hidden cursor-zoom-in"
+                        className="relative w-full aspect-[4/3] lg:aspect-auto lg:absolute lg:inset-0 overflow-hidden cursor-zoom-in"
                         onMouseMove={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect()
                           setZoomOrigin(`${((e.clientX - rect.left) / rect.width) * 100}% ${((e.clientY - rect.top) / rect.height) * 100}%`)
@@ -471,14 +471,14 @@ export default function ProductDetailPage() {
                           alt={product.title}
                           fill
                           unoptimized={isExternalImageUrl(mainImage)}
-                          className={`object-contain p-2 transition-transform duration-200 ease-out ${isZooming ? "md:scale-[1.8]" : "scale-100"}`}
+                          className={`object-contain p-3 transition-transform duration-200 ease-out ${isZooming ? "md:scale-[1.8]" : "scale-100"}`}
                           style={{ transformOrigin: zoomOrigin }}
                           sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 30vw"
                           priority
                         />
                       </div>
                     ) : (
-                      <div className="w-full aspect-[4/3] flex items-center justify-center">
+                      <div className="w-full aspect-[4/3] lg:aspect-auto lg:absolute lg:inset-0 flex items-center justify-center">
                         <Package size={64} className="text-gray-200" />
                       </div>
                     )}
@@ -495,7 +495,7 @@ export default function ProductDetailPage() {
                   {galleryImages.length > 1 && (
                     <div className="flex gap-2.5 overflow-x-auto pt-3 pb-1 [scrollbar-width:thin]">
                       {galleryImages.map((img, idx) => (
-                        <button key={idx} type="button" onClick={() => setMainImage(img)} aria-label={`Show image ${idx + 1}`} className={`flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-2 bg-white overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
+                        <button key={idx} type="button" onClick={() => setMainImage(img)} aria-label={`Show image ${idx + 1}`} className={`flex-shrink-0 w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-xl border-2 bg-white overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
                           <Image src={img} alt={`${product.title} ${idx + 1}`} width={80} height={80} unoptimized={isExternalImageUrl(img)} className="w-full h-full object-contain p-1" />
                         </button>
                       ))}
@@ -506,7 +506,7 @@ export default function ProductDetailPage() {
                 {/* Product info */}
                 <div className="card-base-static p-4 min-w-0 flex flex-col">
                   <div className="flex items-start justify-between gap-3">
-                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight tracking-tight">{product.title}</h1>
+                    <h1 className="text-xl sm:text-2xl lg:text-[28px] font-bold text-gray-900 leading-tight tracking-tight">{product.title}</h1>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button type="button" onClick={toggleWishlist} disabled={wishlistLoading} aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"} className={`w-10 h-10 rounded-full border flex items-center justify-center transition ${inWishlist ? "border-red-200 bg-red-50 text-red-500" : "border-gray-200 text-gray-500 hover:text-red-500 hover:bg-gray-50"}`}>
                         <Heart size={18} fill={inWishlist ? "currentColor" : "none"} />
@@ -521,9 +521,9 @@ export default function ProductDetailPage() {
                     <span className="text-sm text-gray-500">({product.reviewCount} {product.reviewCount === 1 ? "review" : "reviews"})</span>
                   </div>
                   {product.description && (
-                    <p className="text-gray-600 leading-relaxed mt-3 line-clamp-3 whitespace-pre-line text-sm">{product.description}</p>
+                    <p className="text-gray-600 leading-relaxed mt-3 line-clamp-3 whitespace-pre-line text-sm lg:text-base">{product.description}</p>
                   )}
-                  <div className="hidden md:block mt-4">{detailsTable}</div>
+                  <div className="hidden md:flex flex-col flex-1 mt-4">{detailsTable}</div>
                 </div>
 
             {/* Right column: price + bulk pricing */}
