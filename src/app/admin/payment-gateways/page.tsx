@@ -678,9 +678,9 @@ export default function AdminPaymentGatewaysPage() {
                           aria-label={`${g.isActive ? "Disable" : "Enable"} ${g.label}`}
                           title={g.isActive ? "Click to disable" : "Click to enable"}
                           onClick={() => toggleActive(g)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${g.isActive ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                          className={`relative inline-flex h-5 w-10 shrink-0 items-center rounded-full transition-colors ${g.isActive ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`}
                         >
-                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${g.isActive ? "translate-x-4" : "translate-x-0.5"}`} />
+                          <span className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200" style={{ transform: g.isActive ? "translateX(18px)" : "translateX(2px)" }} />
                         </button>
                         <span
                           className={`px-2 py-0.5 rounded-full text-xs font-medium ${

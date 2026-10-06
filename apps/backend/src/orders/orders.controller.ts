@@ -55,6 +55,7 @@ export class OrdersController {
         notes: body.notes,
         couponCode: body.couponCode,
         bankOfferId: body.bankOfferId,
+        paymentMethod: body.paymentMethod,
       },
     );
     return { order };

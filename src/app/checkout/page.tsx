@@ -428,6 +428,7 @@ export default function CheckoutPage() {
           billingAddress: billingSameAsShipping ? undefined : billingAddress,
           couponCode: couponCode || undefined,
           bankOfferId: selectedBankOfferEntry?.eligible ? selectedBankOfferId : undefined,
+          paymentMethod: paymentMethod === "COD" || paymentMethod === "BANK_TRANSFER" ? paymentMethod : undefined,
         }),
       })
       const data = await parseApiResponse(res)
