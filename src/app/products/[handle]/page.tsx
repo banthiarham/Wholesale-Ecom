@@ -400,17 +400,16 @@ export default function ProductDetailPage() {
   const detailRows: { icon: any; label: string; value: React.ReactNode }[] = [
     ...(product.vendorName ? [{ icon: Store, label: "Seller", value: product.vendorId ? <Link href={`/vendors/${product.vendorId}`} className="hover:text-primary-600 hover:underline">{product.vendorName}</Link> : product.vendorName }] : []),
     ...(product.category ? [{ icon: Layers, label: "Category", value: <Link href={`/categories/${product.category.handle}`} className="hover:text-primary-600 hover:underline">{product.category.name}</Link> }] : []),
-    ...(product.sku ? [{ icon: Tag, label: "SKU", value: product.sku }] : []),
     { icon: Package, label: "Min. Order Qty", value: `${roleHeadline?.roleMinQty ?? product.moq} units` },
-    { icon: Truck, label: "Availability", value: isOutOfStock ? "Out of stock" : `${product.inventoryQuantity} units in stock` },
+    { icon: Truck, label: "Availability", value: <span className={isOutOfStock ? "text-red-600" : "text-green-600"}>{isOutOfStock ? "Out of stock" : `${product.inventoryQuantity} units in stock`}</span> },
     ...metaSpecs.map(([label, value]) => ({ icon: ShieldCheck, label, value })),
   ]
   const detailsTable = (
     <div className="rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-100 text-sm">
       {detailRows.map((r) => (
-        <div key={r.label} className="flex items-center gap-3 px-3.5 py-2.5 odd:bg-gray-50/70">
+        <div key={r.label} className="flex items-center gap-3 px-3.5 py-2 odd:bg-gray-50/70">
           <r.icon size={16} className="text-gray-400 shrink-0" />
-          <span className="w-32 sm:w-40 shrink-0 text-gray-600">{r.label}</span>
+          <span className="w-28 sm:w-36 shrink-0 text-gray-600">{r.label}</span>
           <span className="min-w-0 flex-1 text-gray-800 font-medium break-words">{r.value}</span>
         </div>
       ))}
@@ -439,12 +438,9 @@ export default function ProductDetailPage() {
             <span className="text-gray-900 font-medium truncate">{product.title}</span>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
-            {/* Left card: gallery + product info */}
-            <div className="lg:col-span-8 card-base-static p-3 sm:p-5 lg:p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[4fr_5fr_4fr] gap-3 lg:gap-4 items-start">
                 {/* Gallery */}
-                <div className="min-w-0">
+                <div className="card-base-static p-3 min-w-0">
                   <div className="relative rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden">
                     <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 max-w-[calc(100%-1.5rem)]">
                       {shownDiscountPct > 0 && !isPriceHidden && <span className="chip-sale">{shownDiscountPct}% OFF</span>}
@@ -461,7 +457,7 @@ export default function ProductDetailPage() {
                     </div>
                     {mainImage ? (
                       <div
-                        className="relative w-full aspect-square overflow-hidden cursor-zoom-in"
+                        className="relative w-full aspect-[4/3] overflow-hidden cursor-zoom-in"
                         onMouseMove={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect()
                           setZoomOrigin(`${((e.clientX - rect.left) / rect.width) * 100}% ${((e.clientY - rect.top) / rect.height) * 100}%`)
@@ -475,14 +471,14 @@ export default function ProductDetailPage() {
                           alt={product.title}
                           fill
                           unoptimized={isExternalImageUrl(mainImage)}
-                          className={`object-contain p-3 transition-transform duration-200 ease-out ${isZooming ? "md:scale-[1.8]" : "scale-100"}`}
+                          className={`object-contain p-2 transition-transform duration-200 ease-out ${isZooming ? "md:scale-[1.8]" : "scale-100"}`}
                           style={{ transformOrigin: zoomOrigin }}
-                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 40vw"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 30vw"
                           priority
                         />
                       </div>
                     ) : (
-                      <div className="w-full aspect-square flex items-center justify-center">
+                      <div className="w-full aspect-[4/3] flex items-center justify-center">
                         <Package size={64} className="text-gray-200" />
                       </div>
                     )}
@@ -499,7 +495,7 @@ export default function ProductDetailPage() {
                   {galleryImages.length > 1 && (
                     <div className="flex gap-2.5 overflow-x-auto pt-3 pb-1 [scrollbar-width:thin]">
                       {galleryImages.map((img, idx) => (
-                        <button key={idx} type="button" onClick={() => setMainImage(img)} aria-label={`Show image ${idx + 1}`} className={`flex-shrink-0 w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-xl border-2 bg-white overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
+                        <button key={idx} type="button" onClick={() => setMainImage(img)} aria-label={`Show image ${idx + 1}`} className={`flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-2 bg-white overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
                           <Image src={img} alt={`${product.title} ${idx + 1}`} width={80} height={80} unoptimized={isExternalImageUrl(img)} className="w-full h-full object-contain p-1" />
                         </button>
                       ))}
@@ -508,9 +504,9 @@ export default function ProductDetailPage() {
                 </div>
 
                 {/* Product info */}
-                <div className="min-w-0 flex flex-col">
+                <div className="card-base-static p-4 min-w-0 flex flex-col">
                   <div className="flex items-start justify-between gap-3">
-                    <h1 className="text-xl sm:text-2xl lg:text-[28px] font-bold text-gray-900 leading-tight tracking-tight">{product.title}</h1>
+                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight tracking-tight">{product.title}</h1>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button type="button" onClick={toggleWishlist} disabled={wishlistLoading} aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"} className={`w-10 h-10 rounded-full border flex items-center justify-center transition ${inWishlist ? "border-red-200 bg-red-50 text-red-500" : "border-gray-200 text-gray-500 hover:text-red-500 hover:bg-gray-50"}`}>
                         <Heart size={18} fill={inWishlist ? "currentColor" : "none"} />
@@ -518,23 +514,21 @@ export default function ProductDetailPage() {
                       <button type="button" onClick={handleShare} aria-label="Share" className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition"><Share2 size={18} /></button>
                     </div>
                   </div>
-                  {product.sku && <p className="text-sm text-gray-500 mt-1">SKU: {product.sku}</p>}
+                  {(product.sku || product.vendorName) && <p className="text-sm text-gray-500 mt-1">{product.sku && <>SKU: {product.sku}</>}{product.sku && product.vendorName && <span className="mx-2 text-gray-300">|</span>}{product.vendorName && <>Seller: {product.vendorName}</>}</p>}
                   <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                     <div className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={17} fill={i <= Math.round(product.rating) ? "currentColor" : "none"} className={i <= Math.round(product.rating) ? "text-amber-400" : "text-gray-300"} />)}</div>
                     {product.reviewCount > 0 && <span className="text-sm font-bold text-gray-900">{Number(product.rating).toFixed(1)}</span>}
                     <span className="text-sm text-gray-500">({product.reviewCount} {product.reviewCount === 1 ? "review" : "reviews"})</span>
                   </div>
                   {product.description && (
-                    <p className="text-gray-600 leading-relaxed mt-4 line-clamp-4 whitespace-pre-line">{product.description}</p>
+                    <p className="text-gray-600 leading-relaxed mt-3 line-clamp-3 whitespace-pre-line text-sm">{product.description}</p>
                   )}
-                  <div className="hidden md:block mt-5 pt-5 border-t border-gray-100">{detailsTable}</div>
+                  <div className="hidden md:block mt-4">{detailsTable}</div>
                 </div>
-              </div>
-            </div>
 
             {/* Right column: price + bulk pricing */}
-            <div className="lg:col-span-4 space-y-4 lg:space-y-5 min-w-0">
-              <div className="card-base-static p-4 sm:p-5 space-y-4">
+            <div className="md:col-span-2 lg:col-span-1 space-y-3 min-w-0">
+              <div className="card-base-static p-4 space-y-3">
                 {/* Price */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -542,7 +536,7 @@ export default function ProductDetailPage() {
                       <span className="text-xl text-gray-500 italic">Contact us for pricing</span>
                     ) : (
                       <div className="flex items-baseline gap-2.5 flex-wrap">
-                        <span className="text-3xl sm:text-4xl font-extrabold text-primary-700 tracking-tight">{formatPrice(shownPrice)}</span>
+                        <span className="text-3xl sm:text-[34px] font-extrabold text-primary-700 tracking-tight">{formatPrice(shownPrice)}</span>
                         {strikePrice != null && <span className="text-base sm:text-lg text-gray-400 line-through">{formatPrice(strikePrice)}</span>}
                       </div>
                     )}
@@ -633,9 +627,6 @@ export default function ProductDetailPage() {
                     <FileText size={17} /> Add to Quotation
                   </Link>
                 )}
-                <Link href={`/bulk-orders?productId=${product.id}`} className="flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-primary-600 transition-colors">
-                  Need a large order? Order in bulk <ChevronRight size={13} />
-                </Link>
 
                 {/* Rule badges */}
                 <ProductRuleBadge
@@ -655,7 +646,7 @@ export default function ProductDetailPage() {
               {displayTierPrices.length > 0 && !isPriceHidden && (() => {
                 const sortedTiers = sortTierPrices(displayTierPrices)
                 return (
-                  <div className="card-base-static p-4 sm:p-5">
+                  <div className="card-base-static p-4">
                     <div className="flex items-center justify-between gap-2 mb-3">
                       <h2 className="flex items-center gap-2.5 font-bold text-gray-900"><Layers size={20} className="text-gray-500" /> Bulk Quantity Pricing</h2>
                       <span className="text-sm font-semibold text-gray-500">Per Unit</span>
@@ -689,8 +680,87 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
+          {/* Description + Reviews */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 mt-3 lg:mt-4 items-stretch">
+            <div className="card-base-static p-4 sm:p-5 min-w-0 h-full">
+              <h2 className="heading-sm">Description</h2>
+              <span className="block mt-1.5 mb-3 h-0.5 w-10 rounded bg-primary-600" />
+              {product.description ? (
+                <p className="text-gray-600 whitespace-pre-line leading-relaxed text-sm sm:text-base">{product.description}</p>
+              ) : (
+                <p className="text-gray-400 text-sm">No description provided.</p>
+              )}
+            </div>
+            <div className="min-w-0">
+              {/* Reviews */}
+              <div className="card-base-static p-4 sm:p-5 h-full">
+                <div className="flex items-center justify-between mb-4">
+                  <div><h2 className="heading-sm">Reviews ({product.reviewCount})</h2><span className="block mt-1.5 h-0.5 w-10 rounded bg-primary-600" /></div>
+                  {!userHasReviewed && localStorage.getItem("token") && !showReviewForm && (
+                    <button onClick={() => setShowReviewForm(true)} className="btn-sm btn-primary flex items-center gap-1.5">
+                      <MessageSquare size={14} /> Write Review
+                    </button>
+                  )}
+                  {userHasReviewed && <span className="badge badge-success">Reviewed</span>}
+                </div>
+
+                {showReviewForm && (
+                  <div className="mb-6 p-4 bg-gray-50 rounded-xl">
+                    <h3 className="font-semibold text-gray-900 mb-4">Write Your Review</h3>
+                    <div className="space-y-4 max-h-64 overflow-y-auto pr-1">
+                      <div>
+                        <label className="body-sm font-medium text-gray-700 mb-2 block">Rating</label>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map((val) => (
+                            <button key={val} onClick={() => setReviewRating(val)} className="focus:outline-none">
+                              <Star size={28} fill={val <= reviewRating ? "currentColor" : "none"} className={val <= reviewRating ? "text-amber-400" : "text-gray-300"} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="body-sm font-medium text-gray-700 mb-1 block">Title (optional)</label>
+                        <input type="text" value={reviewTitle} onChange={(e) => setReviewTitle(e.target.value)} placeholder="Summarize your experience" className="input-base" />
+                      </div>
+                      <div>
+                        <label className="body-sm font-medium text-gray-700 mb-1 block">Your Review *</label>
+                        <textarea value={reviewBody} onChange={(e) => setReviewBody(e.target.value)} rows={4} placeholder="Share your experience..." className="input-base" />
+                      </div>
+                      <div className="flex gap-3">
+                        <button onClick={handleSubmitReview} disabled={submittingReview || !reviewBody.trim()} className="btn-primary">
+                          {submittingReview ? "Submitting..." : "Submit Review"}
+                        </button>
+                        <button onClick={() => setShowReviewForm(false)} className="btn-outline">Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {product.reviews.length > 0 ? (
+                  <div className="space-y-4">
+                    {product.reviews.map((review) => (
+                      <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={14} fill={i <= review.rating ? "currentColor" : "none"} className={i <= review.rating ? "text-amber-400" : "text-gray-200"} />)}</div>
+                          <span className="text-sm font-medium text-gray-900">{review.user.firstName || "Anonymous"} {review.user.lastName || ""}</span>
+                        </div>
+                        {review.title && <h4 className="font-semibold text-gray-900 mt-1">{review.title}</h4>}
+                        {review.body && <p className="text-gray-600 text-sm mt-1 leading-relaxed">{review.body}</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <MessageSquare size={36} className="mx-auto text-gray-200 mb-3" />
+                    <p className="text-gray-400">No reviews yet. Be the first to review!</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Trust strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 mt-5 lg:mt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 mt-3 lg:mt-4">
             {trustItems.map((t) => (
               <div key={t.title} className="card-base-static flex items-center gap-3.5 p-3.5 sm:p-4">
                 <span className={`w-12 h-12 shrink-0 rounded-xl flex items-center justify-center ${t.tint}`}><t.icon size={22} /></span>
@@ -699,17 +769,9 @@ export default function ProductDetailPage() {
             ))}
           </div>
 
-          {/* More details */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 mt-5 lg:mt-6 items-start">
-            <div className="lg:col-span-8 space-y-4 min-w-0">
-              <div className="space-y-3">
-                {/* Description */}
-                {product.description && (
-                  <CollapsibleSection title="Description" defaultOpen={true}>
-                    <p className="text-gray-600 whitespace-pre-line leading-relaxed">{product.description}</p>
-                  </CollapsibleSection>
-                )}
-
+          {/* Offers, pricing details, bank offers and tags */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 mt-3 lg:mt-4 items-start empty:hidden">
+            <div className="lg:col-span-8 space-y-3 min-w-0 empty:hidden">
                 {/* Available Offers */}
                 {hasOffers && (
                   <CollapsibleSection title="Available Offers">
@@ -795,74 +857,8 @@ export default function ProductDetailPage() {
                     </div>
                   </CollapsibleSection>
                 )}
-              </div>
-
-              {/* Reviews */}
-              <div className="card-base-static p-5">
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="heading-sm">Reviews ({product.reviewCount})</h2>
-                  {!userHasReviewed && localStorage.getItem("token") && !showReviewForm && (
-                    <button onClick={() => setShowReviewForm(true)} className="btn-sm btn-primary flex items-center gap-1.5">
-                      <MessageSquare size={14} /> Write Review
-                    </button>
-                  )}
-                  {userHasReviewed && <span className="badge badge-success">Reviewed</span>}
-                </div>
-
-                {showReviewForm && (
-                  <div className="mb-6 p-4 bg-gray-50 rounded-xl">
-                    <h3 className="font-semibold text-gray-900 mb-4">Write Your Review</h3>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="body-sm font-medium text-gray-700 mb-2 block">Rating</label>
-                        <div className="flex gap-1">
-                          {[1, 2, 3, 4, 5].map((val) => (
-                            <button key={val} onClick={() => setReviewRating(val)} className="focus:outline-none">
-                              <Star size={28} fill={val <= reviewRating ? "currentColor" : "none"} className={val <= reviewRating ? "text-amber-400" : "text-gray-300"} />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="body-sm font-medium text-gray-700 mb-1 block">Title (optional)</label>
-                        <input type="text" value={reviewTitle} onChange={(e) => setReviewTitle(e.target.value)} placeholder="Summarize your experience" className="input-base" />
-                      </div>
-                      <div>
-                        <label className="body-sm font-medium text-gray-700 mb-1 block">Your Review *</label>
-                        <textarea value={reviewBody} onChange={(e) => setReviewBody(e.target.value)} rows={4} placeholder="Share your experience..." className="input-base" />
-                      </div>
-                      <div className="flex gap-3">
-                        <button onClick={handleSubmitReview} disabled={submittingReview || !reviewBody.trim()} className="btn-primary">
-                          {submittingReview ? "Submitting..." : "Submit Review"}
-                        </button>
-                        <button onClick={() => setShowReviewForm(false)} className="btn-outline">Cancel</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {product.reviews.length > 0 ? (
-                  <div className="space-y-4">
-                    {product.reviews.map((review) => (
-                      <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={14} fill={i <= review.rating ? "currentColor" : "none"} className={i <= review.rating ? "text-amber-400" : "text-gray-200"} />)}</div>
-                          <span className="text-sm font-medium text-gray-900">{review.user.firstName || "Anonymous"} {review.user.lastName || ""}</span>
-                        </div>
-                        {review.title && <h4 className="font-semibold text-gray-900 mt-1">{review.title}</h4>}
-                        {review.body && <p className="text-gray-600 text-sm mt-1 leading-relaxed">{review.body}</p>}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <MessageSquare size={36} className="mx-auto text-gray-200 mb-3" />
-                    <p className="text-gray-400">No reviews yet. Be the first to review!</p>
-                  </div>
-                )}
-              </div>
             </div>
-            <div className="lg:col-span-4 space-y-4 min-w-0">
+            <div className="lg:col-span-4 space-y-3 min-w-0 empty:hidden">
               {/* Bank & UPI Offers — shown directly below price, Amazon/Flipkart style */}
               {paymentOffers.length > 0 && !isPriceHidden && (
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
