@@ -31,6 +31,13 @@ interface UserData {
 
 const PAGE_SIZE_OPTIONS = [20, 30, 50, 100]
 
+const BUILTIN_ROLE_OPTIONS = [
+  { value: "enum:ADMIN", label: "Admin" },
+  { value: "enum:BUYER", label: "Buyer" },
+  { value: "enum:VENDOR", label: "Vendor" },
+  { value: "enum:DISTRIBUTOR", label: "Distributor" },
+]
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserData[]>([])
   const [roles, setRoles] = useState<RoleData[]>([])
@@ -101,7 +108,9 @@ export default function AdminUsersPage() {
         sortDir: sortDesc ? "desc" : "asc",
       })
       if (debouncedSearch) params.set("search", debouncedSearch)
-      if (roleId) params.set("roleId", roleId)
+      // "enum:ADMIN" = built-in role; anything else is a custom role id.
+      if (roleId.startsWith("enum:")) params.set("role", roleId.slice(5))
+      else if (roleId) params.set("roleId", roleId)
       const res = await fetch(`/api/users?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (requestId !== requestRef.current) return // a newer request superseded this one
@@ -272,7 +281,14 @@ export default function AdminUsersPage() {
 
   // Compact page list: always first/last, the current page and its neighbours, "…" for gaps.
   const userFilterFields: FilterField[] = [
-    { type: "select", key: "roleId", label: "Role", allLabel: "All roles", options: roles.map((r) => ({ value: r.id, label: r.label })) },
+    {
+      type: "select", key: "roleId", label: "Role", allLabel: "All roles",
+      options: [
+        // Built-in roles (most users, including every admin, only have these) + any custom roles added later.
+        ...BUILTIN_ROLE_OPTIONS,
+        ...roles.map((r) => ({ value: r.id, label: r.label })),
+      ],
+    },
   ]
   const userSort = sortKey === "firstName" ? (sortDesc ? "name-desc" : "name-asc") : sortKey === "createdAt" && sortDesc ? "default" : "custom"
   const userSortOptions = [
