@@ -65,6 +65,12 @@ export class CreateProductDto {
   @IsString()
   categoryId?: string;
 
+  // Every category the product is listed under. The first one becomes the primary categoryId.
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
+
   @IsOptional()
   tierPrices?: { minQty: number; maxQty?: number | null; price: number }[];
 }

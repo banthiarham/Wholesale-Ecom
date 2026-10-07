@@ -5,6 +5,7 @@ import { FormField } from "@/components/admin/FormField"
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
+import CategoryDropdown from "@/components/admin/CategoryDropdown"
 import { Search, Trash2, Edit, Plus, X, Package, ImagePlus, Tag, FolderPlus, FileSpreadsheet, Download, Upload } from "lucide-react"
 import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
@@ -31,6 +32,7 @@ interface Product {
   images: string[]
   tierPrices: { id: string; minQty: number; maxQty: number | null; price: number }[]
   category?: { name: string }
+  categories?: { id: string; name: string }[]
   rating?: number
   companyName?: string | null
   sizeGb?: number | null
@@ -81,7 +83,7 @@ function AdminProductsContent() {
     sizeGb: "",
     moq: "1",
     inventoryQuantity: "0",
-    categoryId: "",
+    categoryIds: [] as string[],
     status: "PUBLISHED",
   }
   const [form, setForm] = useState(emptyForm)
@@ -136,6 +138,12 @@ function AdminProductsContent() {
     }
   }
 
+  // Options for the category dropdown. Keeps categories the product already has even if they are no longer in the active list.
+  const categoryOptions = [
+    ...categories.map((c) => ({ id: c.id, name: c.name })),
+    ...(editingProduct?.categories || []).filter((pc) => !categories.some((c) => c.id === pc.id)).map((pc) => ({ id: pc.id, name: pc.name })),
+  ]
+
   const generateHandle = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -157,7 +165,8 @@ function AdminProductsContent() {
     // Company name and size are optional: leaving them empty clears them on edit and omits them on create.
     if (!body.companyName) { if (editingProduct) body.companyName = null; else delete body.companyName }
     if (body.sizeGb === undefined || Number.isNaN(body.sizeGb)) { if (editingProduct) body.sizeGb = null; else delete body.sizeGb }
-    if (!body.categoryId) delete body.categoryId
+    // First selected category is the primary one. On create an empty list is simply omitted.
+    if (body.categoryIds.length === 0 && !editingProduct) delete body.categoryIds
     if (!body.sku) delete body.sku
     if (!body.description) delete body.description
     // On edit, an empty list must still be sent so removing every tier row actually clears them.
@@ -280,7 +289,7 @@ function AdminProductsContent() {
       sizeGb: p.sizeGb != null ? String(p.sizeGb) : "",
       moq: String(p.moq),
       inventoryQuantity: String(p.inventoryQuantity),
-      categoryId: p.categoryId || "",
+      categoryIds: [p.categoryId, ...(p.categories || []).map((c) => c.id)].filter((id, i, a): id is string => !!id && a.indexOf(id) === i),
       status: p.status,
     })
     setTierRows(
@@ -467,11 +476,12 @@ function AdminProductsContent() {
             <FormField label="SKU" hint="Your internal stock code">
               <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </FormField>
-            <FormField label="Category">
-              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">Select Category</option>
-              {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-            </select>
+            <FormField label="Categories" hint="Pick one or more. The first one is the main category.">
+              <CategoryDropdown
+                options={categoryOptions}
+                selectedIds={form.categoryIds}
+                onChange={(ids) => setForm({ ...form, categoryIds: ids })}
+              />
             </FormField>
             <FormField label="Company Name" hint="Optional: the maker or brand company">
               <input placeholder="e.g. Zebronics" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
@@ -620,7 +630,7 @@ function AdminProductsContent() {
                       <Link href={`/products/${p.handle}`} className="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400">{p.title}</Link>
                       {p.vendorName && <p className="text-xs text-gray-500 dark:text-gray-400">{p.vendorName}</p>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{p.category?.name || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{p.categories?.length ? p.categories.map((c) => c.name).join(", ") : p.category?.name || "—"}</td>
                     <td className="px-4 py-3">
                       <span className="font-medium text-gray-900 dark:text-gray-100">{formatPrice(p.unitPrice)}</span>
                       {p.compareAtPrice && <span className="text-xs text-gray-400 dark:text-gray-500 line-through ml-1">{formatPrice(p.compareAtPrice)}</span>}

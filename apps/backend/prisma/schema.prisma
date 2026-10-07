@@ -239,7 +239,8 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products          Product[]
+  products          Product[]          @relation("ProductCategories")
+  primaryProducts   Product[]          @relation("PrimaryCategory")
   seasonalDiscounts SeasonalDiscount[]
   paymentOffers     PaymentOffer[]
   homeSections      HomeSection[]
@@ -278,8 +279,11 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // categoryId is the product's primary category (used by pricing/offer/loyalty rules);
+  // categories is the full set it is listed under (primary one included).
   categoryId String?
-  category   Category? @relation(fields: [categoryId], references: [id])
+  category   Category?  @relation("PrimaryCategory", fields: [categoryId], references: [id])
+  categories Category[] @relation("ProductCategories")
 
   tierPrices           TierPrice[]
   seasonalDiscounts    SeasonalDiscount[]

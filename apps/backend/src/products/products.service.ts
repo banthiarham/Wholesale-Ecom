@@ -27,7 +27,7 @@ export class ProductsService {
         { sku: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
-    if (filters?.categoryId) where.categoryId = filters.categoryId;
+    if (filters?.categoryId) where.categories = { some: { id: filters.categoryId } };
     if (filters?.vendorId) where.vendorId = filters.vendorId;
     if (filters?.minPrice !== undefined || filters?.maxPrice !== undefined) {
       where.unitPrice = {};
@@ -44,6 +44,7 @@ export class ProductsService {
         where,
         include: {
           category: { select: { id: true, name: true, handle: true } },
+        categories: { select: { id: true, name: true, handle: true } },
           tierPrices: { orderBy: { minQty: 'asc' } },
           _count: { select: { reviews: true } },
         },
@@ -59,6 +60,7 @@ export class ProductsService {
       const take = filters?.limit || 100;
       const include = {
         category: { select: { id: true, name: true, handle: true } },
+        categories: { select: { id: true, name: true, handle: true } },
         tierPrices: { orderBy: { minQty: 'asc' as const } },
         _count: { select: { reviews: true } },
       };
@@ -98,6 +100,7 @@ export class ProductsService {
       where,
       include: {
         category: { select: { id: true, name: true, handle: true } },
+        categories: { select: { id: true, name: true, handle: true } },
         tierPrices: { orderBy: { minQty: 'asc' } },
         _count: { select: { reviews: true } },
       },
@@ -111,6 +114,7 @@ export class ProductsService {
       where: { handle },
       include: {
         category: { select: { id: true, name: true, handle: true } },
+        categories: { select: { id: true, name: true, handle: true } },
         tierPrices: { orderBy: { minQty: 'asc' } },
         reviews: {
           where: { isVerified: true },
@@ -129,6 +133,7 @@ export class ProductsService {
       where: { id },
       include: {
         category: true,
+        categories: { select: { id: true, name: true, handle: true } },
         tierPrices: true,
       },
     });
@@ -136,19 +141,33 @@ export class ProductsService {
     return product;
   }
 
+  /**
+   * Turns the admin's `categoryIds` list (or a legacy single `categoryId`) into the relation data:
+   * the first id is the primary category, and every id is linked in the many-to-many list.
+   */
+  private withCategories(data: any, isUpdate: boolean) {
+    const { categoryIds, ...rest } = data;
+    let ids: string[] | undefined;
+    if (Array.isArray(categoryIds)) ids = [...new Set<string>(categoryIds.filter(Boolean))];
+    else if (rest.categoryId !== undefined) ids = rest.categoryId ? [rest.categoryId] : [];
+    if (ids === undefined) return rest;
+    const refs = ids.map((id) => ({ id }));
+    return { ...rest, categoryId: ids[0] ?? null, categories: isUpdate ? { set: refs } : { connect: refs } };
+  }
+
   async create(data: any) {
-    const { tierPrices, ...rest } = data;
+    const { tierPrices, ...rest } = this.withCategories(data, false);
     return this.prisma.product.create({
       data: {
         ...rest,
         tierPrices: tierPrices ? { create: tierPrices } : undefined,
       },
-      include: { category: true, tierPrices: true },
+      include: { category: true, categories: { select: { id: true, name: true, handle: true } }, tierPrices: true },
     });
   }
 
   async update(id: string, data: any) {
-    const { tierPrices, ...rest } = data;
+    const { tierPrices, ...rest } = this.withCategories(data, true);
     if (tierPrices) {
       await this.prisma.tierPrice.deleteMany({ where: { productId: id } });
     }
@@ -158,7 +177,7 @@ export class ProductsService {
         ...rest,
         tierPrices: tierPrices ? { create: tierPrices } : undefined,
       },
-      include: { category: true, tierPrices: true },
+      include: { category: true, categories: { select: { id: true, name: true, handle: true } }, tierPrices: true },
     });
   }
 
@@ -192,7 +211,7 @@ export class ProductsService {
     return this.prisma.product.update({
       where: { id },
       data,
-      include: { category: true, tierPrices: true },
+      include: { category: true, categories: { select: { id: true, name: true, handle: true } }, tierPrices: true },
     });
   }
 
@@ -695,7 +714,7 @@ export class ProductsService {
           if (description && (!existing.description || this.descriptionNeedsCleaning(existing.description))) updateData.description = description;
           if (existing.status === 'DRAFT' && status === 'PUBLISHED') updateData.status = 'PUBLISHED';
           if (!existing.vendorName && vendorName) updateData.vendorName = vendorName;
-          if (!existing.categoryId && categoryId) updateData.categoryId = categoryId;
+          if (!existing.categoryId && categoryId) { updateData.categoryId = categoryId; updateData.categories = { connect: { id: categoryId } }; }
           if ((!existing.tags || existing.tags.length === 0) && tags.length > 0) updateData.tags = tags;
           if (!existing.compareAtPrice && compareAtPrice) updateData.compareAtPrice = compareAtPrice;
 
@@ -727,6 +746,7 @@ export class ProductsService {
               status: (!hasUnitPrice ? 'DRAFT' : ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status) ? status : 'PUBLISHED') as ProductStatus,
               vendorName: vendorName || null,
               categoryId: categoryId || null,
+              categories: categoryId ? { connect: { id: categoryId } } : undefined,
               tags,
               metadata: { woocommerce: row },
             },
