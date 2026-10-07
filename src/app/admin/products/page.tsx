@@ -54,8 +54,10 @@ function AdminProductsContent() {
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [imageFiles, setImageFiles] = useState<File[]>([])
-  const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  // Ordered gallery: the first image is the main one. Existing images carry their stored URL,
+  // newly picked ones carry the File until the product is saved.
+  const [imageItems, setImageItems] = useState<{ key: string; src: string; file?: File }[]>([])
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [tierRows, setTierRows] = useState<{ minQty: string; maxQty: string; price: string }[]>([])
   const [catForm, setCatForm] = useState({ name: "", handle: "", description: "" })
@@ -184,21 +186,35 @@ function AdminProductsContent() {
         productId = data.product?.id || data.id
       }
 
-      if (imageFiles.length > 0 && productId) {
-        const formData = new FormData()
-        imageFiles.forEach((f) => formData.append("images", f))
-        await fetch(`/api/products/${productId}/images`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
+      if (productId && (imageItems.length > 0 || editingProduct)) {
+        // Upload the new files first, then save the final order (also applies deletions).
+        const newFiles = imageItems.filter((it) => it.file)
+        let uploaded: string[] = []
+        if (newFiles.length > 0) {
+          const formData = new FormData()
+          newFiles.forEach((it) => formData.append("images", it.file as File))
+          const upRes = await fetch(`/api/products/${productId}/images`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          })
+          if (!upRes.ok) throw new Error("Product saved, but uploading the new images failed")
+          uploaded = (await upRes.json()).uploaded || []
+        }
+        let next = 0
+        const finalImages = imageItems.map((it) => (it.file ? uploaded[next++] : it.src)).filter(Boolean) as string[]
+        const orderRes = await fetch(`/api/products/${productId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ images: finalImages, thumbnail: finalImages[0] ?? null }),
         })
+        if (!orderRes.ok) throw new Error("Product saved, but saving the image order failed")
       }
 
       setShowForm(false)
       setEditingProduct(null)
       setForm(emptyForm)
-      setImageFiles([])
-      setImagePreviews([])
+      setImageItems([])
       setTierRows([])
       loadProducts()
     } catch (err) {
@@ -270,8 +286,7 @@ function AdminProductsContent() {
     setTierRows(
       p.tierPrices?.map((tp) => ({ minQty: String(tp.minQty), maxQty: tp.maxQty ? String(tp.maxQty) : "", price: String(tp.price) })) || []
     )
-    setImageFiles([])
-    setImagePreviews((p.images || []).map((img) => img))
+    setImageItems((p.images || []).map((img, i) => ({ key: `old-${i}-${img}`, src: img })))
     setShowForm(true)
   }
 
@@ -279,8 +294,7 @@ function AdminProductsContent() {
     setEditingProduct(null)
     setForm(emptyForm)
     setTierRows([])
-    setImageFiles([])
-    setImagePreviews([])
+    setImageItems([])
     setShowForm(true)
   }
 
@@ -292,25 +306,31 @@ function AdminProductsContent() {
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    if (files.length === 0) return
-    const existingCount = editingProduct ? (editingProduct.images?.length || 0) : 0
-    const remaining = 5 - existingCount
-    const toAdd = files.slice(0, Math.max(0, remaining - imageFiles.length))
-    if (toAdd.length === 0) { alert("Maximum 5 images per product"); return }
-    setImageFiles((prev) => [...prev, ...toAdd])
-    const newPreviews = toAdd.map((f) => URL.createObjectURL(f))
-    setImagePreviews((prev) => [...prev, ...newPreviews])
     e.target.value = ""
+    if (files.length === 0) return
+    const room = Math.max(0, 5 - imageItems.length)
+    if (room === 0) { alert("Maximum 5 images per product"); return }
+    const added = files.slice(0, room).map((f, i) => ({ key: `new-${Date.now()}-${i}`, src: URL.createObjectURL(f), file: f }))
+    setImageItems((prev) => [...prev, ...added])
   }
 
   const removeImage = (index: number) => {
-    const existingCount = editingProduct ? (editingProduct.images?.length || 0) : 0
-    if (index < existingCount) return
-    const fileIndex = index - existingCount
-    const url = imagePreviews[index]
-    if (url.startsWith("blob:")) URL.revokeObjectURL(url)
-    setImageFiles((prev) => prev.filter((_, i) => i !== fileIndex))
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index))
+    setImageItems((prev) => {
+      const it = prev[index]
+      if (it?.src.startsWith("blob:")) URL.revokeObjectURL(it.src)
+      return prev.filter((_, i) => i !== index)
+    })
+  }
+
+  const moveImage = (from: number, to: number) => {
+    if (from === to || to < 0) return
+    setImageItems((prev) => {
+      if (to >= prev.length) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
   }
 
   // Bulk edit handlers (CSV download/upload)
@@ -435,7 +455,7 @@ function AdminProductsContent() {
         <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingProduct ? "Edit Product" : "New Product"}</h3>
-            <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
+            <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageItems([]); setTierRows([]) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <FormField label="Product Title" required>
@@ -520,24 +540,37 @@ function AdminProductsContent() {
             <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Product Images (max 5)</label>
               <div className="flex flex-wrap gap-3 mb-3">
-                {imagePreviews.map((src, i) => (
-                  <div key={i} className="relative w-20 h-20 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden group">
-                    <img src={src} alt={`Preview ${i + 1}`} className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => removeImage(i)} className="absolute top-0.5 right-0.5 bg-white dark:bg-gray-800 rounded-full p-0.5 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition shadow-sm"><X size={12} /></button>
+                {imageItems.map((it, i) => (
+                  <div
+                    key={it.key}
+                    draggable
+                    onDragStart={() => setDragIndex(i)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => { if (dragIndex !== null) moveImage(dragIndex, i); setDragIndex(null) }}
+                    onDragEnd={() => setDragIndex(null)}
+                    className={`relative w-24 h-24 rounded-lg border overflow-hidden cursor-move ${dragIndex === i ? "opacity-40" : ""} ${i === 0 ? "border-primary-500 ring-1 ring-primary-500" : "border-gray-200 dark:border-gray-700"}`}
+                  >
+                    <img src={it.src} alt={`Image ${i + 1}`} className="w-full h-full object-cover pointer-events-none" />
+                    <span className="absolute top-0.5 left-0.5 bg-black/60 text-white text-[10px] leading-none px-1.5 py-1 rounded">{i === 0 ? "Main" : i + 1}</span>
+                    <button type="button" aria-label="Remove image" onClick={() => removeImage(i)} className="absolute top-0.5 right-0.5 bg-white dark:bg-gray-800 rounded-full p-1 text-gray-600 dark:text-gray-300 hover:text-red-500 dark:hover:text-red-400 shadow"><X size={12} /></button>
+                    <div className="absolute bottom-0 inset-x-0 flex justify-between bg-black/50 text-white">
+                      <button type="button" aria-label="Move earlier" disabled={i === 0} onClick={() => moveImage(i, i - 1)} className="px-2 py-0.5 text-xs disabled:opacity-30">◀</button>
+                      <button type="button" aria-label="Move later" disabled={i === imageItems.length - 1} onClick={() => moveImage(i, i + 1)} className="px-2 py-0.5 text-xs disabled:opacity-30">▶</button>
+                    </div>
                   </div>
                 ))}
-                {imagePreviews.length < 5 && (
-                  <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
+                {imageItems.length < 5 && (
+                  <label className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
                     <ImagePlus size={20} className="text-gray-400 dark:text-gray-500" />
                     <input type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
                   </label>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Click + to add images. Supports JPG, PNG, WebP.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Click + to add images. Drag images or use the arrows to set the order; the first image is the main one. Supports JPG, PNG, WebP.</p>
             </div>
 
             <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-3">
-              <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageItems([]); setTierRows([]) }} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
               <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">{uploading ? "Saving..." : editingProduct ? "Save Changes" : "Add Product"}</button>
             </div>
           </form>
