@@ -46,7 +46,7 @@ export default function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const { locale, setLocale, t } = useTranslation()
   const pathname = usePathname()
-  const siteName = useSetting("siteName", "WholesaleX Pro")
+  const siteName = useSetting("siteName", "Wholesale Center")
   const logoUrl = useSetting("logoUrl", "")
   const { openCartDrawer } = useCartDrawer()
 

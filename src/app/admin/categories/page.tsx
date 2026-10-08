@@ -1,9 +1,13 @@
 "use client"
 
+import { FormField } from "@/components/admin/FormField"
+
 import { useEffect, useState } from "react"
 import { Plus, Trash2, Edit, X, ChevronRight, ChevronDown, Folder, Tag, ImagePlus } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { ListFilterBar, emptyValues, type FilterField, type FilterValues } from "@/components/admin/ListFilters"
+import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters, uniqueCompanies } from "@/components/admin/ProductFilters"
 
 interface CategoryNode {
   id: string
@@ -32,7 +36,19 @@ interface CategoryProduct {
   reservedQuantity?: number
   status: string
   tierPrices?: unknown[]
+  rating?: number
+  companyName?: string | null
+  sizeGb?: number | null
 }
+
+const CATEGORY_FIELDS: FilterField[] = [
+  { type: "number", key: "minProducts", label: "Minimum Number of Products", placeholder: "e.g. 5", hint: "Shows categories with this many products or more" },
+]
+const CATEGORY_SORTS = [
+  { value: "default", label: "Recommended" },
+  { value: "name-asc", label: "Name: A to Z" },
+  { value: "name-desc", label: "Name: Z to A" },
+]
 
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<CategoryNode[]>([])
@@ -41,6 +57,23 @@ export default function AdminCategoriesPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingCategory, setEditingCategory] = useState<CategoryNode | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [cfilters, setCfilters] = useState<FilterValues>(emptyValues(CATEGORY_FIELDS))
+  const [csort, setCsort] = useState("default")
+  const minProducts = cfilters.minProducts as string
+  const filterActive = minProducts !== ""
+  const countNodes = (nodes: CategoryNode[]): number => nodes.reduce((n, c) => n + 1 + countNodes(c.children || []), 0)
+  // Sort every level by name and keep a category when it, or anything under it, meets the minimum.
+  const shapeTree = (nodes: CategoryNode[]): CategoryNode[] => {
+    const out: CategoryNode[] = []
+    for (const n of nodes) {
+      const kids = shapeTree(n.children || [])
+      if (filterActive && (n._count?.products ?? 0) < Number(minProducts) && kids.length === 0) continue
+      out.push({ ...n, children: kids })
+    }
+    if (csort === "name-asc") out.sort((a, b) => a.name.trim().localeCompare(b.name.trim(), undefined, { sensitivity: "base" }))
+    else if (csort === "name-desc") out.sort((a, b) => b.name.trim().localeCompare(a.name.trim(), undefined, { sensitivity: "base" }))
+    return out
+  }
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
   const emptyForm = { name: "", handle: "", description: "", parentId: "", image: "" }
@@ -52,6 +85,9 @@ export default function AdminCategoriesPage() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const [catProducts, setCatProducts] = useState<CategoryProduct[]>([])
   const [loadingProducts, setLoadingProducts] = useState(false)
+  const [prodFilters, setProdFilters] = useState<ProductFilterState>(defaultFilters)
+  const [prodSort, setProdSort] = useState<SortKey>("default")
+  const visibleCatProducts = applyProductFilters(catProducts, prodFilters, prodSort)
 
   useEffect(() => {
     loadCategories()
@@ -173,6 +209,8 @@ export default function AdminCategoriesPage() {
   const loadCategoryProducts = async (categoryId: string) => {
     setLoadingProducts(true)
     setCatProducts([])
+    setProdFilters(defaultFilters)
+    setProdSort("default")
     try {
       const res = await fetch(`/api/products?category=${categoryId}&status=PUBLISHED,DRAFT,ARCHIVED&limit=2000`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
@@ -252,7 +290,7 @@ export default function AdminCategoriesPage() {
       <>
         {nodes.map((node) => {
           const hasChildren = (node.children?.length ?? 0) > 0
-          const isExpanded = expanded.has(node.id)
+          const isExpanded = filterActive || expanded.has(node.id)
           return (
             <div key={node.id}>
               <div
@@ -283,6 +321,8 @@ export default function AdminCategoriesPage() {
     )
   }
 
+  const shapedTree = shapeTree(categories)
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -301,17 +341,25 @@ export default function AdminCategoriesPage() {
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingCategory ? "Edit Category" : "New Category"}</h3>
             <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"><X size={18} /></button>
           </div>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
-            <input required placeholder="Handle (URL slug)" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
-            <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
-            <select value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <FormField label="Category Name" required>
+              <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            </FormField>
+            <FormField label="Handle (URL slug)" required hint="Web address of the category page">
+              <input required placeholder="Handle (URL slug)" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            </FormField>
+            <FormField label="Parent Category">
+              <select value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm">
               <option value="">No Parent (Root)</option>
               {flatCats.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-            <div className="sm:col-span-2">
+            </FormField>
+            <FormField label="Description" className="sm:col-span-2 lg:col-span-3">
+              <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            </FormField>
+            <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category Image</label>
               <div className="flex items-center gap-3">
                 {form.image ? (
@@ -329,7 +377,7 @@ export default function AdminCategoriesPage() {
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Shown to all users on the Categories page and in the home page category widgets. JPG, PNG or WebP, up to 5 MB. Click Save to apply.</p>
             </div>
-            <div className="sm:col-span-2 flex justify-end gap-3">
+            <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-3">
               <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">Save</button>
             </div>
@@ -408,12 +456,21 @@ export default function AdminCategoriesPage() {
         </div>
       )}
 
+      {!showForm && !loading && categories.length > 0 && (
+        <ListFilterBar fields={CATEGORY_FIELDS} values={cfilters} onValues={setCfilters} sort={csort} sortOptions={CATEGORY_SORTS} onSort={setCsort} resultCount={countNodes(shapedTree)} totalCount={countNodes(categories)} noun="categories" />
+      )}
+
       {showForm && editingCategory ? (
         <div className="admin-card-static overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100">
             Products in {editingCategory.name.trim()} {!loadingProducts && <span className="text-gray-400 dark:text-gray-500 font-normal">({catProducts.length})</span>}
             <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">To change a product, use the Products module.</span>
           </div>
+          {!loadingProducts && catProducts.length > 0 && (
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+              <ProductFilterBar filters={prodFilters} onFilters={setProdFilters} sort={prodSort} onSort={setProdSort} showCategory={false} companies={uniqueCompanies(catProducts)} resultCount={visibleCatProducts.length} totalCount={catProducts.length} />
+            </div>
+          )}
           {loadingProducts ? (
             <p className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading products...</p>
           ) : catProducts.length === 0 ? (
@@ -431,7 +488,10 @@ export default function AdminCategoriesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                  {catProducts.map((p) => (
+                  {visibleCatProducts.length === 0 && (
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">No products match the selected filters.</td></tr>
+                  )}
+                  {visibleCatProducts.map((p) => (
                     <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                       <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{p.title}</td>
                       <td className="px-4 py-3">
@@ -470,8 +530,10 @@ export default function AdminCategoriesPage() {
         <div className="admin-card-static">
           {categories.length === 0 ? (
             <p className="p-6 text-sm text-gray-500 dark:text-gray-400">No categories yet.</p>
+          ) : shapedTree.length === 0 ? (
+            <p className="p-6 text-sm text-gray-500 dark:text-gray-400">No categories match the selected filters.</p>
           ) : (
-            renderTree(categories)
+            renderTree(shapedTree)
           )}
         </div>
       )}

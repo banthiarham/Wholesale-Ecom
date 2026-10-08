@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 const defaultSettings = [
-  { key: 'siteName', value: 'WholesaleX Pro', group: 'branding', label: 'Site Name', type: 'text' },
+  { key: 'siteName', value: 'Wholesale Center', group: 'branding', label: 'Site Name', type: 'text' },
   { key: 'tagline', value: 'B2B Wholesale E-Commerce Platform', group: 'branding', label: 'Tagline', type: 'text' },
   { key: 'logoUrl', value: '', group: 'branding', label: 'Logo Image', type: 'image' },
   { key: 'faviconUrl', value: '', group: 'branding', label: 'Favicon', type: 'image' },
@@ -21,7 +21,7 @@ const defaultSettings = [
   { key: 'contactEmail', value: '', group: 'header_footer', label: 'Contact Email', type: 'text' },
   { key: 'contactPhone', value: '', group: 'header_footer', label: 'Contact Phone', type: 'text' },
   { key: 'socialLinks', value: '{"facebook":"","twitter":"","instagram":"","linkedin":""}', group: 'header_footer', label: 'Social Links', type: 'json' },
-  { key: 'copyrightText', value: 'WholesaleX Pro. All rights reserved.', group: 'header_footer', label: 'Copyright Text', type: 'text' },
+  { key: 'copyrightText', value: 'Wholesale Center. All rights reserved.', group: 'header_footer', label: 'Copyright Text', type: 'text' },
 ];
 
 async function main() {

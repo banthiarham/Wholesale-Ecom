@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Shield, User, Ban, Trash2, X, Plus, Upload } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { getContrastTextColor } from "@/lib/utils"
+import { ListFilterBar, type FilterField, type FilterValues } from "@/components/admin/ListFilters"
 
 interface RoleData {
   id: string
@@ -30,6 +31,13 @@ interface UserData {
 
 const PAGE_SIZE_OPTIONS = [20, 30, 50, 100]
 
+const BUILTIN_ROLE_OPTIONS = [
+  { value: "enum:ADMIN", label: "Admin" },
+  { value: "enum:BUYER", label: "Buyer" },
+  { value: "enum:VENDOR", label: "Vendor" },
+  { value: "enum:DISTRIBUTOR", label: "Distributor" },
+]
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserData[]>([])
   const [roles, setRoles] = useState<RoleData[]>([])
@@ -39,6 +47,8 @@ export default function AdminUsersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [sortKey, setSortKey] = useState<keyof UserData>("createdAt")
   const [sortDesc, setSortDesc] = useState(true)
+  const [ufilters, setUfilters] = useState<FilterValues>({ roleId: "" })
+  const roleId = ufilters.roleId as string
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [total, setTotal] = useState(0)
@@ -68,6 +78,14 @@ export default function AdminUsersPage() {
     loadRoles()
   }, [token])
 
+  // Pick up roles created elsewhere (e.g. in another tab) when the admin returns to this page.
+  useEffect(() => {
+    const onFocus = () => loadRoles()
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+
   // Search is sent to the server (it searches ALL users, not just this page). Wait for a
   // short pause in typing before asking, and jump back to page 1 for every new search.
   useEffect(() => {
@@ -90,6 +108,9 @@ export default function AdminUsersPage() {
         sortDir: sortDesc ? "desc" : "asc",
       })
       if (debouncedSearch) params.set("search", debouncedSearch)
+      // "enum:ADMIN" = built-in role; anything else is a custom role id.
+      if (roleId.startsWith("enum:")) params.set("role", roleId.slice(5))
+      else if (roleId) params.set("roleId", roleId)
       const res = await fetch(`/api/users?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (requestId !== requestRef.current) return // a newer request superseded this one
@@ -111,7 +132,7 @@ export default function AdminUsersPage() {
         setFetching(false)
       }
     }
-  }, [token, page, pageSize, sortKey, sortDesc, debouncedSearch])
+  }, [token, page, pageSize, sortKey, sortDesc, debouncedSearch, roleId])
 
   useEffect(() => {
     loadUsers()
@@ -259,6 +280,30 @@ export default function AdminUsersPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   // Compact page list: always first/last, the current page and its neighbours, "…" for gaps.
+  const userFilterFields: FilterField[] = [
+    {
+      type: "select", key: "roleId", label: "Role", allLabel: "All roles",
+      options: [
+        // Built-in roles (most users, including every admin, only have these) + any custom roles added later.
+        ...BUILTIN_ROLE_OPTIONS,
+        ...roles.map((r) => ({ value: r.id, label: r.label })),
+      ],
+    },
+  ]
+  const userSort = sortKey === "firstName" ? (sortDesc ? "name-desc" : "name-asc") : sortKey === "createdAt" && sortDesc ? "default" : "custom"
+  const userSortOptions = [
+    { value: "default", label: "Recommended (Newest first)" },
+    { value: "name-asc", label: "Name: A to Z" },
+    { value: "name-desc", label: "Name: Z to A" },
+    ...(userSort === "custom" ? [{ value: "custom", label: "Custom (column sort)" }] : []),
+  ]
+  const changeUserSort = (v: string) => {
+    if (v === "name-asc") { setSortKey("firstName"); setSortDesc(false) }
+    else if (v === "name-desc") { setSortKey("firstName"); setSortDesc(true) }
+    else if (v === "default") { setSortKey("createdAt"); setSortDesc(true) }
+    setPage(1)
+  }
+
   const pageNumbers = (current: number, last: number): (number | "…")[] => {
     if (last <= 7) return Array.from({ length: last }, (_, i) => i + 1)
     const pages = new Set([1, last, current - 1, current, current + 1])
@@ -285,7 +330,6 @@ export default function AdminUsersPage() {
           />
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500 dark:text-gray-400">{total} user{total !== 1 ? "s" : ""}</span>
           <Link href="/admin/users/bulk-upload" className="flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 transition hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-900/20 dark:text-primary-300">
             <Upload size={16} /> Bulk Upload
           </Link>
@@ -297,6 +341,7 @@ export default function AdminUsersPage() {
           </button>
         </div>
       </div>
+      <ListFilterBar fields={userFilterFields} values={ufilters} onValues={(v) => { setUfilters(v); setPage(1) }} sort={userSort} sortOptions={userSortOptions} onSort={changeUserSort} resultCount={total} totalCount={total} noun="users" />
 
       {loading ? (
         <SkeletonTable rows={5} cols={6} />

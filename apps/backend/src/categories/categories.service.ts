@@ -100,7 +100,7 @@ export class CategoriesService {
     const roleLabel = new Map(roles.map((r) => [r.id, r.label || r.name]));
 
     const rows = await this.prisma.rolePrice.findMany({
-      where: { roleId: { in: roleIds }, product: { categoryId: id } },
+      where: { roleId: { in: roleIds }, product: { categories: { some: { id } } } },
       include: { product: { select: { title: true } } },
     });
 

@@ -71,7 +71,7 @@ interface SettingsState {
 }
 
 const DEFAULT_SETTINGS: SettingsState = {
-  siteName: "WholesaleX Pro",
+  siteName: "Wholesale Center",
   tagline: "B2B Wholesale E-Commerce Platform",
   logoUrl: "",
   faviconUrl: "",
@@ -89,7 +89,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   contactEmail: "",
   contactPhone: "",
   socialLinks: { facebook: "", twitter: "", instagram: "", linkedin: "" },
-  copyrightText: "WholesaleX Pro. All rights reserved.",
+  copyrightText: "Wholesale Center. All rights reserved.",
   roundOffEnabled: false,
 }
 
@@ -191,7 +191,7 @@ export default function AdminSettingsPage() {
         body: JSON.stringify(payload),
       })
       if (!res.ok) throw new Error("Failed to save settings")
-      window.dispatchEvent(new CustomEvent("wholesalex-settings-updated", { detail: payload }))
+      window.dispatchEvent(new CustomEvent("wholesalecenter-settings-updated", { detail: payload }))
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch {

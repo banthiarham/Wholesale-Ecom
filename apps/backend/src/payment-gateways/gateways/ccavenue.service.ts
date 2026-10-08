@@ -35,7 +35,7 @@ export class CcavenueGatewayService implements PaymentGatewayProvider {
       delivery_email: customerInfo.email || '',
       delivery_tel: customerInfo.phone || '',
       merchant_param1: orderId,
-      merchant_param2: 'wholesalex-order',
+      merchant_param2: 'wholesalecenter-order',
     };
 
     const plainText = this.buildRequestPayload(requestParams);

@@ -5,7 +5,7 @@ export class AppController {
   @Get()
   getApiInfo() {
     return {
-      name: 'WholesaleX Pro API',
+      name: 'Wholesale Center API',
       version: '1.0',
       status: 'running',
       documentation: '/api/docs',

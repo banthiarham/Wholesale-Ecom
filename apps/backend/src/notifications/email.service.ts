@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import * as nodemailer from 'nodemailer';
 import { SmtpSettingsService, DecryptedSmtpConfig } from '../smtp-settings/smtp-settings.service';
 
-const BRAND_FOOTER = 'WholesaleX Pro — B2B Wholesale Platform';
+const BRAND_FOOTER = 'Wholesale Center — B2B Wholesale Platform';
 
 @Injectable()
 export class EmailService {
@@ -31,9 +31,9 @@ export class EmailService {
     const pass = this.configService.get<string>('SMTP_PASS', '');
     if (!host || !user || !pass) return null;
 
-    const from = this.configService.get<string>('SMTP_FROM', 'WholesaleX Pro <noreply@wholesalex.com>');
+    const from = this.configService.get<string>('SMTP_FROM', 'Wholesale Center <noreply@wholesalecenter.in>');
     const fromMatch = from.match(/^"?([^"<]*)"?\s*<(.+)>$/);
-    const fromName = fromMatch ? fromMatch[1].trim() : 'WholesaleX Pro';
+    const fromName = fromMatch ? fromMatch[1].trim() : 'Wholesale Center';
     const fromEmail = fromMatch ? fromMatch[2].trim() : from;
     const replyToEmail = this.configService.get<string>('SMTP_REPLY_TO', '') || fromEmail;
 
@@ -146,7 +146,7 @@ export class EmailService {
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
         <h2 style="color:#2563eb;">Email Verification</h2>
-        <p>Use the code below to verify your email address and finish signing up for WholesaleX Pro.</p>
+        <p>Use the code below to verify your email address and finish signing up for Wholesale Center.</p>
         <div style="font-size:32px;font-weight:bold;letter-spacing:8px;padding:16px;background:#f3f4f6;border-radius:8px;text-align:center;">${otp}</div>
         <p>This code expires in 10 minutes. If you didn't request this, you can safely ignore this email.</p>
         <hr/>
@@ -155,7 +155,7 @@ export class EmailService {
     `;
     const text =
       `Email Verification\n\n` +
-      `Use the code below to verify your email address and finish signing up for WholesaleX Pro.\n\n` +
+      `Use the code below to verify your email address and finish signing up for Wholesale Center.\n\n` +
       `${otp}\n\n` +
       `This code expires in 10 minutes. If you didn't request this, you can safely ignore this email.\n\n` +
       `${BRAND_FOOTER}`;
@@ -166,7 +166,7 @@ export class EmailService {
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
         <h2 style="color:#2563eb;">Reset Your Password</h2>
-        <p>We received a request to reset the password for your WholesaleX Pro account.</p>
+        <p>We received a request to reset the password for your Wholesale Center account.</p>
         <p style="text-align:center;margin:24px 0;">
           <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">Reset Password</a>
         </p>
@@ -179,7 +179,7 @@ export class EmailService {
     `;
     const text =
       `Reset Your Password\n\n` +
-      `We received a request to reset the password for your WholesaleX Pro account.\n\n` +
+      `We received a request to reset the password for your Wholesale Center account.\n\n` +
       `${resetUrl}\n\n` +
       `This link expires in 1 hour. If you didn't request this, you can safely ignore this email.\n\n` +
       `${BRAND_FOOTER}`;

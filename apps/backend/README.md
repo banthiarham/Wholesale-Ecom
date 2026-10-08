@@ -1,4 +1,4 @@
-# WholesaleX Pro - Authentication Backend
+# Wholesale Center - Authentication Backend
 
 ## Setup
 

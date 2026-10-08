@@ -245,6 +245,9 @@ export default function CategoryPage() {
       case "rating":
         filtered.sort((a, b) => b.rating - a.rating)
         break
+      case "name_desc":
+        filtered.sort((a, b) => b.title.localeCompare(a.title))
+        break
       case "name":
         filtered.sort((a, b) => a.title.localeCompare(b.title))
         break
