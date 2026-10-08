@@ -82,6 +82,16 @@ export class PaymentsController {
 
   // ─── Generic Payment Initiation ───
 
+  @Post('bank-transfer/:orderId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Record a Bank Transfer payment (status PENDING) for an order (owner or admin)' })
+  @ApiParam({ name: 'orderId', description: 'Order UUID' })
+  async createBankTransfer(@Param('orderId') orderId: string, @CurrentUser() user: any) {
+    const payment = await this.paymentsService.createBankTransferPayment(orderId, user);
+    return { payment };
+  }
+
   @Post('initiate/:orderId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

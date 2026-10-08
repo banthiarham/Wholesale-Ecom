@@ -2,7 +2,7 @@
 
 import { Search, SlidersHorizontal, Grid3X3, List, ArrowUpDown } from "lucide-react"
 
-export type SortOption = "newest" | "price_asc" | "price_desc" | "rating" | "name"
+export type SortOption = "newest" | "price_asc" | "price_desc" | "rating" | "name" | "name_desc"
 export type ViewMode = "grid" | "list"
 
 interface ListingToolbarProps {
@@ -83,11 +83,11 @@ export function ListingToolbar({
             onChange={(e) => onSortChange(e.target.value as SortOption)}
             className="pl-8 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-pointer"
           >
-            <option value="newest">Newest</option>
-            <option value="price_asc">Price: Low → High</option>
-            <option value="price_desc">Price: High → Low</option>
-            <option value="rating">Top Rated</option>
-            <option value="name">Name A–Z</option>
+            <option value="newest">Recommended</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+            <option value="name">Name: A to Z</option>
+            <option value="name_desc">Name: Z to A</option>
           </select>
         </div>
         {/* Mobile filter toggle — desktop uses the permanent FilterSidebar rail instead */}

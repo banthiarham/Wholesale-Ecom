@@ -245,6 +245,9 @@ export default function CategoryPage() {
       case "rating":
         filtered.sort((a, b) => b.rating - a.rating)
         break
+      case "name_desc":
+        filtered.sort((a, b) => b.title.localeCompare(a.title))
+        break
       case "name":
         filtered.sort((a, b) => a.title.localeCompare(b.title))
         break
@@ -365,7 +368,7 @@ export default function CategoryPage() {
               />
             ) : (
               <>
-                <div className={view === "grid" ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4" : "space-y-3"}>
+                <div className={view === "grid" ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4" : "grid grid-cols-1 lg:grid-cols-2 gap-4"}>
                   {shownProducts.map((product) => (
                     <ProductCard
                       key={product.id}

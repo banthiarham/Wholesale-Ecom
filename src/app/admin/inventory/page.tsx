@@ -3,6 +3,17 @@
 import { useEffect, useState } from "react"
 import { Search, AlertTriangle, X } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { ListFilterBar, emptyValues, type FilterField, type FilterValues } from "@/components/admin/ListFilters"
+
+const INVENTORY_FIELDS: FilterField[] = [
+  { type: "number", key: "minQty", label: "Minimum Quantity", placeholder: "e.g. 50", hint: "Shows products with this much available stock or more" },
+  { type: "number", key: "minMoq", label: "Minimum Order Quantity (MOQ)", placeholder: "e.g. 10", hint: "Shows products whose MOQ is equal to or greater than this" },
+]
+const INVENTORY_SORTS = [
+  { value: "default", label: "Recommended" },
+  { value: "name-asc", label: "Name: A to Z" },
+  { value: "name-desc", label: "Name: Z to A" },
+]
 
 interface InventoryItem {
   id: string
@@ -21,6 +32,8 @@ export default function AdminInventoryPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [lowStockOnly, setLowStockOnly] = useState(false)
+  const [ifilters, setIfilters] = useState<FilterValues>(emptyValues(INVENTORY_FIELDS))
+  const [sort, setSort] = useState("default")
   const [adjusting, setAdjusting] = useState(false)
   const [selected, setSelected] = useState<InventoryItem | null>(null)
   const [adjustment, setAdjustment] = useState("")
@@ -40,8 +53,12 @@ export default function AdminInventoryPage() {
     if (lowStockOnly) {
       result = result.filter((i) => (i.inventoryQuantity - i.reservedQuantity) <= 10)
     }
+    if (ifilters.minQty !== "") result = result.filter((i) => i.inventoryQuantity - i.reservedQuantity >= Number(ifilters.minQty))
+    if (ifilters.minMoq !== "") result = result.filter((i) => i.moq >= Number(ifilters.minMoq))
+    if (sort === "name-asc") result.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }))
+    else if (sort === "name-desc") result.sort((a, b) => b.title.localeCompare(a.title, undefined, { sensitivity: "base" }))
     setFiltered(result)
-  }, [items, search, lowStockOnly])
+  }, [items, search, lowStockOnly, ifilters, sort])
 
   const loadInventory = async () => {
     setLoading(true)
@@ -115,8 +132,8 @@ export default function AdminInventoryPage() {
             <span className="text-sm text-gray-600 dark:text-gray-400">Low stock only (≤10 available)</span>
           </label>
         </div>
-        <span className="text-sm text-gray-500 dark:text-gray-400">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
       </div>
+      <ListFilterBar fields={INVENTORY_FIELDS} values={ifilters} onValues={setIfilters} sort={sort} sortOptions={INVENTORY_SORTS} onSort={setSort} resultCount={filtered.length} totalCount={items.length} noun="items" />
 
       {loading ? (
         <SkeletonTable rows={6} cols={8} />

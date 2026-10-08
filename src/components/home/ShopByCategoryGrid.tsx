@@ -37,16 +37,16 @@ export default function ShopByCategoryGrid(_props: ShopByCategoryGridProps) {
             <Link
               key={cat.id}
               href={`/categories/${cat.handle}`}
-              className="group shrink-0 w-[132px] sm:w-[148px] rounded-2xl border border-gray-100 bg-white p-2.5 text-center shadow-sm hover:border-primary-300 hover:shadow-md transition-all"
+              className="group shrink-0 w-[132px] sm:w-[148px] rounded-2xl border border-gray-100 bg-white text-center shadow-sm overflow-hidden hover:border-primary-300 hover:shadow-md transition-all"
             >
-              <div className="relative h-20 sm:h-24 rounded-xl bg-primary-50/70 flex items-center justify-center overflow-hidden">
+              <div className="relative h-24 sm:h-28 bg-primary-50/70 flex items-center justify-center overflow-hidden">
                 {cat.image ? (
-                  <Image src={cat.image} alt={cat.name} fill className="object-contain p-2 transition-transform duration-300 group-hover:scale-105" sizes="148px" />
+                  <Image src={cat.image} alt={cat.name} fill className="object-cover transition-transform duration-300 group-hover:scale-105" sizes="148px" />
                 ) : (
                   <Package size={30} className="text-primary-400 transition-transform duration-300 group-hover:scale-110" />
                 )}
               </div>
-              <p className="mt-2 text-[11px] sm:text-xs font-bold uppercase tracking-wide text-gray-800 group-hover:text-primary-700 leading-snug line-clamp-2 min-h-[2rem]">{cat.name}</p>
+              <p className="mx-2.5 mt-2 mb-2.5 text-[11px] sm:text-xs font-bold uppercase tracking-wide text-gray-800 group-hover:text-primary-700 leading-snug line-clamp-2 min-h-[2rem]">{cat.name}</p>
             </Link>
           ))}
         </div>

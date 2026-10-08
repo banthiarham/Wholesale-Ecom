@@ -1,13 +1,18 @@
 "use client"
 
+import { FormField } from "@/components/admin/FormField"
+
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
+import CategoryDropdown from "@/components/admin/CategoryDropdown"
 import { Search, Trash2, Edit, Plus, X, Package, ImagePlus, Tag, FolderPlus, FileSpreadsheet, Download, Upload } from "lucide-react"
 import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import RolePriceTable from "@/components/admin/RolePriceTable"
+import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters, uniqueCompanies } from "@/components/admin/ProductFilters"
 
 interface Product {
   id: string
@@ -27,6 +32,10 @@ interface Product {
   images: string[]
   tierPrices: { id: string; minQty: number; maxQty: number | null; price: number }[]
   category?: { name: string }
+  categories?: { id: string; name: string }[]
+  rating?: number
+  companyName?: string | null
+  sizeGb?: number | null
 }
 
 interface Category {
@@ -42,11 +51,15 @@ function AdminProductsContent() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [filters, setFilters] = useState<ProductFilterState>(defaultFilters)
+  const [sort, setSort] = useState<SortKey>("default")
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [imageFiles, setImageFiles] = useState<File[]>([])
-  const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  // Ordered gallery: the first image is the main one. Existing images carry their stored URL,
+  // newly picked ones carry the File until the product is saved.
+  const [imageItems, setImageItems] = useState<{ key: string; src: string; file?: File }[]>([])
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [tierRows, setTierRows] = useState<{ minQty: string; maxQty: string; price: string }[]>([])
   const [catForm, setCatForm] = useState({ name: "", handle: "", description: "" })
@@ -66,9 +79,11 @@ function AdminProductsContent() {
     sku: "",
     unitPrice: "",
     compareAtPrice: "",
+    companyName: "",
+    sizeGb: "",
     moq: "1",
     inventoryQuantity: "0",
-    categoryId: "",
+    categoryIds: [] as string[],
     status: "PUBLISHED",
   }
   const [form, setForm] = useState(emptyForm)
@@ -81,15 +96,14 @@ function AdminProductsContent() {
 
   useEffect(() => {
     const q = search.toLowerCase()
-    setFiltered(
-      products.filter(
-        (p) =>
-          p.title.toLowerCase().includes(q) ||
-          p.sku?.toLowerCase().includes(q) ||
-          p.vendorName?.toLowerCase().includes(q)
-      )
+    const searched = products.filter(
+      (p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.sku?.toLowerCase().includes(q) ||
+        p.vendorName?.toLowerCase().includes(q)
     )
-  }, [products, search])
+    setFiltered(applyProductFilters(searched, filters, sort))
+  }, [products, search, filters, sort])
 
   const loadProducts = async () => {
     setLoading(true)
@@ -124,6 +138,12 @@ function AdminProductsContent() {
     }
   }
 
+  // Options for the category dropdown. Keeps categories the product already has even if they are no longer in the active list.
+  const categoryOptions = [
+    ...categories.map((c) => ({ id: c.id, name: c.name })),
+    ...(editingProduct?.categories || []).filter((pc) => !categories.some((c) => c.id === pc.id)).map((pc) => ({ id: pc.id, name: pc.name })),
+  ]
+
   const generateHandle = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -133,6 +153,8 @@ function AdminProductsContent() {
       ...form,
       unitPrice: Number(form.unitPrice),
       compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : undefined,
+      companyName: form.companyName.trim(),
+      sizeGb: form.sizeGb !== "" ? Number(form.sizeGb) : undefined,
       moq: Number(form.moq),
       inventoryQuantity: Number(form.inventoryQuantity),
       tierPrices: tierRows
@@ -140,7 +162,11 @@ function AdminProductsContent() {
         .map((r) => ({ minQty: Number(r.minQty), maxQty: r.maxQty ? Number(r.maxQty) : null, price: Number(r.price) })),
     }
     if (!body.compareAtPrice) delete body.compareAtPrice
-    if (!body.categoryId) delete body.categoryId
+    // Company name and size are optional: leaving them empty clears them on edit and omits them on create.
+    if (!body.companyName) { if (editingProduct) body.companyName = null; else delete body.companyName }
+    if (body.sizeGb === undefined || Number.isNaN(body.sizeGb)) { if (editingProduct) body.sizeGb = null; else delete body.sizeGb }
+    // First selected category is the primary one. On create an empty list is simply omitted.
+    if (body.categoryIds.length === 0 && !editingProduct) delete body.categoryIds
     if (!body.sku) delete body.sku
     if (!body.description) delete body.description
     // On edit, an empty list must still be sent so removing every tier row actually clears them.
@@ -169,21 +195,35 @@ function AdminProductsContent() {
         productId = data.product?.id || data.id
       }
 
-      if (imageFiles.length > 0 && productId) {
-        const formData = new FormData()
-        imageFiles.forEach((f) => formData.append("images", f))
-        await fetch(`/api/products/${productId}/images`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
+      if (productId && (imageItems.length > 0 || editingProduct)) {
+        // Upload the new files first, then save the final order (also applies deletions).
+        const newFiles = imageItems.filter((it) => it.file)
+        let uploaded: string[] = []
+        if (newFiles.length > 0) {
+          const formData = new FormData()
+          newFiles.forEach((it) => formData.append("images", it.file as File))
+          const upRes = await fetch(`/api/products/${productId}/images`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          })
+          if (!upRes.ok) throw new Error("Product saved, but uploading the new images failed")
+          uploaded = (await upRes.json()).uploaded || []
+        }
+        let next = 0
+        const finalImages = imageItems.map((it) => (it.file ? uploaded[next++] : it.src)).filter(Boolean) as string[]
+        const orderRes = await fetch(`/api/products/${productId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ images: finalImages, thumbnail: finalImages[0] ?? null }),
         })
+        if (!orderRes.ok) throw new Error("Product saved, but saving the image order failed")
       }
 
       setShowForm(false)
       setEditingProduct(null)
       setForm(emptyForm)
-      setImageFiles([])
-      setImagePreviews([])
+      setImageItems([])
       setTierRows([])
       loadProducts()
     } catch (err) {
@@ -245,16 +285,17 @@ function AdminProductsContent() {
       sku: p.sku || "",
       unitPrice: String(p.unitPrice),
       compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "",
+      companyName: p.companyName || "",
+      sizeGb: p.sizeGb != null ? String(p.sizeGb) : "",
       moq: String(p.moq),
       inventoryQuantity: String(p.inventoryQuantity),
-      categoryId: p.categoryId || "",
+      categoryIds: [p.categoryId, ...(p.categories || []).map((c) => c.id)].filter((id, i, a): id is string => !!id && a.indexOf(id) === i),
       status: p.status,
     })
     setTierRows(
       p.tierPrices?.map((tp) => ({ minQty: String(tp.minQty), maxQty: tp.maxQty ? String(tp.maxQty) : "", price: String(tp.price) })) || []
     )
-    setImageFiles([])
-    setImagePreviews((p.images || []).map((img) => img))
+    setImageItems((p.images || []).map((img, i) => ({ key: `old-${i}-${img}`, src: img })))
     setShowForm(true)
   }
 
@@ -262,8 +303,7 @@ function AdminProductsContent() {
     setEditingProduct(null)
     setForm(emptyForm)
     setTierRows([])
-    setImageFiles([])
-    setImagePreviews([])
+    setImageItems([])
     setShowForm(true)
   }
 
@@ -275,25 +315,31 @@ function AdminProductsContent() {
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    if (files.length === 0) return
-    const existingCount = editingProduct ? (editingProduct.images?.length || 0) : 0
-    const remaining = 5 - existingCount
-    const toAdd = files.slice(0, Math.max(0, remaining - imageFiles.length))
-    if (toAdd.length === 0) { alert("Maximum 5 images per product"); return }
-    setImageFiles((prev) => [...prev, ...toAdd])
-    const newPreviews = toAdd.map((f) => URL.createObjectURL(f))
-    setImagePreviews((prev) => [...prev, ...newPreviews])
     e.target.value = ""
+    if (files.length === 0) return
+    const room = Math.max(0, 5 - imageItems.length)
+    if (room === 0) { alert("Maximum 5 images per product"); return }
+    const added = files.slice(0, room).map((f, i) => ({ key: `new-${Date.now()}-${i}`, src: URL.createObjectURL(f), file: f }))
+    setImageItems((prev) => [...prev, ...added])
   }
 
   const removeImage = (index: number) => {
-    const existingCount = editingProduct ? (editingProduct.images?.length || 0) : 0
-    if (index < existingCount) return
-    const fileIndex = index - existingCount
-    const url = imagePreviews[index]
-    if (url.startsWith("blob:")) URL.revokeObjectURL(url)
-    setImageFiles((prev) => prev.filter((_, i) => i !== fileIndex))
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index))
+    setImageItems((prev) => {
+      const it = prev[index]
+      if (it?.src.startsWith("blob:")) URL.revokeObjectURL(it.src)
+      return prev.filter((_, i) => i !== index)
+    })
+  }
+
+  const moveImage = (from: number, to: number) => {
+    if (from === to || to < 0) return
+    setImageItems((prev) => {
+      if (to >= prev.length) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
   }
 
   // Bulk edit handlers (CSV download/upload)
@@ -397,8 +443,12 @@ function AdminProductsContent() {
             <button onClick={() => setShowCatForm(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
           </div>
           <form onSubmit={handleSaveCategory} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <input required placeholder="Category Name" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value, handle: catForm.handle || generateHandle(e.target.value) })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
-            <input placeholder="URL Handle (auto-generated)" value={catForm.handle} onChange={(e) => setCatForm({ ...catForm, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            <FormField label="Category Name" required>
+              <input required placeholder="Category Name" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value, handle: catForm.handle || generateHandle(e.target.value) })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            </FormField>
+            <FormField label="URL Handle" hint="Auto-generated from the name">
+              <input placeholder="URL Handle (auto-generated)" value={catForm.handle} onChange={(e) => setCatForm({ ...catForm, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+            </FormField>
             <div className="flex gap-3">
               <input placeholder="Description (optional)" value={catForm.description} onChange={(e) => setCatForm({ ...catForm, description: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
               <button type="submit" disabled={savingCat} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50 whitespace-nowrap">
@@ -414,30 +464,56 @@ function AdminProductsContent() {
         <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingProduct ? "Edit Product" : "New Product"}</h3>
-            <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
+            <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageItems([]); setTierRows([]) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
           </div>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <input required placeholder="Product Title" value={form.title} onChange={(e) => { const t = e.target.value; setForm({ ...form, title: t, handle: editingProduct ? form.handle : generateHandle(t) }) }} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input placeholder="URL Handle" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">Select Category</option>
-              {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-            </select>
-            <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input required type="number" placeholder="MOQ (Minimum Order Quantity)" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <input required type="number" placeholder="Inventory Quantity" value={form.inventoryQuantity} onChange={(e) => setForm({ ...form, inventoryQuantity: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <FormField label="Product Title" required>
+              <input required placeholder="Product Title" value={form.title} onChange={(e) => { const t = e.target.value; setForm({ ...form, title: t, handle: editingProduct ? form.handle : generateHandle(t) }) }} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="URL Handle" hint="Web address of the product page">
+              <input placeholder="URL Handle" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="SKU" hint="Your internal stock code">
+              <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Categories" hint="Pick one or more. The first one is the main category.">
+              <CategoryDropdown
+                options={categoryOptions}
+                selectedIds={form.categoryIds}
+                onChange={(ids) => setForm({ ...form, categoryIds: ids })}
+              />
+            </FormField>
+            <FormField label="Company Name" hint="Optional: the maker or brand company">
+              <input placeholder="e.g. Zebronics" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Size (GB)" hint="Optional: storage size in GB (1 TB = 1024)">
+              <input type="number" min="0" step="any" placeholder="e.g. 128" value={form.sizeGb} onChange={(e) => setForm({ ...form, sizeGb: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Unit Price (Rs.)" required hint="Selling price per unit">
+              <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Compare At Price (Rs.)" hint="Original / MRP price, shown struck through">
+              <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="MOQ (Minimum Order Quantity)" required hint="Smallest quantity a buyer can order">
+              <input required type="number" placeholder="MOQ (Minimum Order Quantity)" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Inventory Quantity" required hint="Units currently in stock">
+              <input required type="number" placeholder="Inventory Quantity" value={form.inventoryQuantity} onChange={(e) => setForm({ ...form, inventoryQuantity: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Status">
+              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
               <option value="PUBLISHED">Published</option>
               <option value="DRAFT">Draft</option>
               <option value="ARCHIVED">Archived</option>
             </select>
-            <div></div>
-            <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="sm:col-span-2 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
+            <FormField label="Description" className="sm:col-span-2 lg:col-span-3">
+              <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </FormField>
 
             {/* Tier Pricing */}
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-3">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1"><Tag size={14} /> Tier Pricing (Bulk Discounts)</label>
                 <button type="button" onClick={addTierRow} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">+ Add Tier</button>
@@ -460,33 +536,58 @@ function AdminProductsContent() {
               <p className="text-xs text-gray-400 dark:text-gray-500">Add quantity-based pricing tiers. Buyers ordering in bulk get discounted rates.</p>
             </div>
 
+            {/* Role Pricing (edit only — shares data with the Role Pricing page) */}
+            {editingProduct && (
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role Pricing</label>
+                <RolePriceTable
+                  product={{ id: editingProduct.id, title: editingProduct.title, sku: editingProduct.sku || undefined, unitPrice: Number(editingProduct.unitPrice) }}
+                />
+              </div>
+            )}
+
             {/* Images */}
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Product Images (max 5)</label>
               <div className="flex flex-wrap gap-3 mb-3">
-                {imagePreviews.map((src, i) => (
-                  <div key={i} className="relative w-20 h-20 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden group">
-                    <img src={src} alt={`Preview ${i + 1}`} className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => removeImage(i)} className="absolute top-0.5 right-0.5 bg-white dark:bg-gray-800 rounded-full p-0.5 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition shadow-sm"><X size={12} /></button>
+                {imageItems.map((it, i) => (
+                  <div
+                    key={it.key}
+                    draggable
+                    onDragStart={() => setDragIndex(i)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => { if (dragIndex !== null) moveImage(dragIndex, i); setDragIndex(null) }}
+                    onDragEnd={() => setDragIndex(null)}
+                    className={`relative w-24 h-24 rounded-lg border overflow-hidden cursor-move ${dragIndex === i ? "opacity-40" : ""} ${i === 0 ? "border-primary-500 ring-1 ring-primary-500" : "border-gray-200 dark:border-gray-700"}`}
+                  >
+                    <img src={it.src} alt={`Image ${i + 1}`} className="w-full h-full object-cover pointer-events-none" />
+                    <span className="absolute top-0.5 left-0.5 bg-black/60 text-white text-[10px] leading-none px-1.5 py-1 rounded">{i === 0 ? "Main" : i + 1}</span>
+                    <button type="button" aria-label="Remove image" onClick={() => removeImage(i)} className="absolute top-0.5 right-0.5 bg-white dark:bg-gray-800 rounded-full p-1 text-gray-600 dark:text-gray-300 hover:text-red-500 dark:hover:text-red-400 shadow"><X size={12} /></button>
+                    <div className="absolute bottom-0 inset-x-0 flex justify-between bg-black/50 text-white">
+                      <button type="button" aria-label="Move earlier" disabled={i === 0} onClick={() => moveImage(i, i - 1)} className="px-2 py-0.5 text-xs disabled:opacity-30">◀</button>
+                      <button type="button" aria-label="Move later" disabled={i === imageItems.length - 1} onClick={() => moveImage(i, i + 1)} className="px-2 py-0.5 text-xs disabled:opacity-30">▶</button>
+                    </div>
                   </div>
                 ))}
-                {imagePreviews.length < 5 && (
-                  <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
+                {imageItems.length < 5 && (
+                  <label className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
                     <ImagePlus size={20} className="text-gray-400 dark:text-gray-500" />
                     <input type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
                   </label>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Click + to add images. Supports JPG, PNG, WebP.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Click + to add images. Drag images or use the arrows to set the order; the first image is the main one. Supports JPG, PNG, WebP.</p>
             </div>
 
-            <div className="sm:col-span-2 flex justify-end gap-3">
-              <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageFiles([]); setImagePreviews([]); setTierRows([]) }} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
+            <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-3">
+              <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageItems([]); setTierRows([]) }} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
               <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">{uploading ? "Saving..." : editingProduct ? "Save Changes" : "Add Product"}</button>
             </div>
           </form>
         </div>
       )}
+
+      <ProductFilterBar filters={filters} onFilters={setFilters} sort={sort} onSort={setSort} categories={categories} companies={uniqueCompanies(products)} resultCount={filtered.length} totalCount={products.length} />
 
       {/* Product List */}
       {loading ? (
@@ -529,7 +630,7 @@ function AdminProductsContent() {
                       <Link href={`/products/${p.handle}`} className="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400">{p.title}</Link>
                       {p.vendorName && <p className="text-xs text-gray-500 dark:text-gray-400">{p.vendorName}</p>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{p.category?.name || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{p.categories?.length ? p.categories.map((c) => c.name).join(", ") : p.category?.name || "—"}</td>
                     <td className="px-4 py-3">
                       <span className="font-medium text-gray-900 dark:text-gray-100">{formatPrice(p.unitPrice)}</span>
                       {p.compareAtPrice && <span className="text-xs text-gray-400 dark:text-gray-500 line-through ml-1">{formatPrice(p.compareAtPrice)}</span>}

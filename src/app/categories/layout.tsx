@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   description:
     "Explore wholesale product categories — electronics, fashion, industrial supplies, and more. Bulk orders at the best prices.",
   openGraph: {
-    title: "Product Categories — WholesaleX Pro",
+    title: "Product Categories — Wholesale Center",
     description:
       "Explore wholesale product categories — electronics, fashion, industrial supplies, and more.",
   },

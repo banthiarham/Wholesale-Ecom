@@ -50,12 +50,26 @@ export class CreateProductDto {
   vendorId?: string;
 
   @IsOptional()
+  @IsString()
+  companyName?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  sizeGb?: number | null;
+
+  @IsOptional()
   @IsArray()
   tags?: string[];
 
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  // Every category the product is listed under. The first one becomes the primary categoryId.
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
 
   @IsOptional()
   tierPrices?: { minQty: number; maxQty?: number | null; price: number }[];

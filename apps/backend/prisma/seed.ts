@@ -36,7 +36,7 @@ interface SeedCategory {
 }
 
 const img = (seed: string, n: number, size = 800) =>
-  `https://picsum.photos/seed/wholesalex-${seed}-${n}/${size}/${size}`;
+  `https://picsum.photos/seed/wholesalecenter-${seed}-${n}/${size}/${size}`;
 
 const CATALOG: SeedCategory[] = [
   {

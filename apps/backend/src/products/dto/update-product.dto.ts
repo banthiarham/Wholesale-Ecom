@@ -55,12 +55,26 @@ export class UpdateProductDto {
   vendorId?: string;
 
   @IsOptional()
+  @IsString()
+  companyName?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  sizeGb?: number | null;
+
+  @IsOptional()
   @IsArray()
   tags?: string[];
 
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  // Every category the product is listed under. The first one becomes the primary categoryId.
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
 
   /** Replaces the product's tier (bulk) prices; an empty array removes them all. */
   @IsOptional()

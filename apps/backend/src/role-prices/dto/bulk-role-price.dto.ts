@@ -13,6 +13,10 @@ export class RolePriceEntryDto {
   @IsInt()
   @Min(1)
   minQty?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class BulkRolePriceDto {

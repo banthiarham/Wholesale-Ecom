@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Plus, Trash2, FileText } from "lucide-react"
@@ -21,6 +21,15 @@ export default function NewRfqPage() {
   const [notes, setNotes] = useState("")
   const [items, setItems] = useState<RfqItem[]>([{ productId: "", description: "", quantity: 1, unit: "units", targetPrice: "", notes: "" }])
   const [submitting, setSubmitting] = useState(false)
+
+  // Prefill from the product page's "Add to Quotation" link (?productId=...&quantity=...)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const productId = q.get("productId")
+    if (!productId) return
+    const quantity = Math.max(1, Number(q.get("quantity")) || 1)
+    setItems([{ productId, description: "", quantity, unit: "units", targetPrice: "", notes: "" }])
+  }, [])
 
   const addItem = () => {
     setItems([...items, { productId: "", description: "", quantity: 1, unit: "units", targetPrice: "", notes: "" }])

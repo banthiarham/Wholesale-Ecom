@@ -146,7 +146,7 @@ export default function HeroBannerCarousel({ heightClass = "h-[430px] sm:h-[500p
                     <div className="max-w-2xl">
                       <div className="inline-flex items-center gap-2.5 mb-6 px-4 py-2 bg-white/15 backdrop-blur-md rounded-full border border-white/25 shadow-[0_2px_12px_rgba(0,0,0,0.12)]">
                         <Icon size={16} className="text-white" />
-                        <span className="text-xs font-bold text-white uppercase tracking-widest">WholesaleX Pro</span>
+                        <span className="text-xs font-bold text-white uppercase tracking-widest">Wholesale Center</span>
                       </div>
                       <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-5 lg:mb-6 leading-[1.05] tracking-tight text-balance">
                         {hero.title}

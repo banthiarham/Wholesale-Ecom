@@ -1,4 +1,4 @@
-# WholesaleX Pro — Documentation Index
+# Wholesale Center — Documentation Index
 
 ## Quick Links
 

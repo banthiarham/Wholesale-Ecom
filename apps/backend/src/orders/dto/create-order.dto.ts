@@ -74,6 +74,11 @@ export class CreateOrderDto {
   @IsOptional()
   couponCode?: string;
 
+  @ApiPropertyOptional({ description: 'Payment method the customer chose (COD, BANK_TRANSFER, ...) — COD/BANK_TRANSFER are refused if an admin disabled them' })
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
   @ApiPropertyOptional({ description: 'Selected bank/UPI payment offer to apply — re-validated server-side' })
   @IsString()
   @IsOptional()

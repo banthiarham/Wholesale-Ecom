@@ -239,7 +239,8 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products          Product[]
+  products          Product[]          @relation("ProductCategories")
+  primaryProducts   Product[]          @relation("PrimaryCategory")
   seasonalDiscounts SeasonalDiscount[]
   paymentOffers     PaymentOffer[]
   homeSections      HomeSection[]
@@ -267,6 +268,9 @@ model Product {
   thumbnail         String?
   vendorName        String?
   vendorId          String?
+  // Optional extra product details (admin product form): maker/company name and size in GB.
+  companyName       String?
+  sizeGb            Float?
   rating            Float         @default(0)
   reviewCount       Int           @default(0)
   tags              String[]
@@ -275,8 +279,11 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // categoryId is the product's primary category (used by pricing/offer/loyalty rules);
+  // categories is the full set it is listed under (primary one included).
   categoryId String?
-  category   Category? @relation(fields: [categoryId], references: [id])
+  category   Category?  @relation("PrimaryCategory", fields: [categoryId], references: [id])
+  categories Category[] @relation("ProductCategories")
 
   tierPrices           TierPrice[]
   seasonalDiscounts    SeasonalDiscount[]
@@ -548,7 +555,8 @@ model BulkOrderStatusHistory {
 
 model PaymentGateway {
   id               String   @id @default(uuid())
-  provider         String   @unique
+  // Not unique: Bank Transfer can have several rows (one per bank account). Other providers are kept to one row in the service.
+  provider         String
   label            String
   description      String?
   isActive         Boolean  @default(false)
@@ -1026,7 +1034,7 @@ model SmtpSettings {
   port              Int      @default(587)
   username          String
   passwordEncrypted String   @db.Text
-  fromName          String   @default("WholesaleX Pro")
+  fromName          String   @default("Wholesale Center")
   fromEmail         String
   replyToEmail      String?
   isActive          Boolean  @default(true)

@@ -13,7 +13,7 @@ export interface PolicySection {
 }
 
 export interface PolicyDoc {
-  slug: "about" | "privacy" | "terms" | "shipping"
+  slug: "about" | "privacy" | "terms" | "shipping" | "cancellation" | "returns"
   /** Short label used in navigation / breadcrumbs */
   label: string
   eyebrow: string
@@ -194,4 +194,153 @@ export const shippingInformation: PolicyDoc = {
   ],
 }
 
-export const policyDocs: PolicyDoc[] = [aboutUs, privacyPolicy, termsAndConditions, shippingInformation]
+export const cancellationPolicy: PolicyDoc = {
+  slug: "cancellation",
+  label: "Cancellation Policy",
+  eyebrow: "Orders",
+  title: "Cancellation Policy",
+  description:
+    "How to request cancellation of an order placed on wholesalecenter.in, and how cancellations relate to payment and returns.",
+  intro: [
+    "This Cancellation Policy applies to orders placed through www.wholesalecenter.in and should be read together with the website Terms and Conditions and Shipping Information.",
+  ],
+  sections: [
+    {
+      heading: "1. Cancellation of Orders",
+      paragraphs: [
+        "Customers may request cancellation of an order as early as possible after placing the order. Because orders are executed after payment realization in favour of Arham Communication, cancellation requests are subject to the status of the order at the time the request is received.",
+      ],
+      items: [
+        "A cancellation request should be submitted before the order has been processed for dispatch, wherever possible.",
+        "Once an order has been processed or dispatched, cancellation may no longer be possible and the matter may be treated under the applicable return terms.",
+        "Customers are encouraged to review product, order, shipping and billing information carefully before placing an order.",
+      ],
+    },
+    {
+      heading: "2. How to Request Cancellation",
+      paragraphs: [
+        "To request cancellation, contact us at contact@wholesalecenter.in with the order reference, customer name, registered contact details and the reason for cancellation. The request will be reviewed against the current order status.",
+      ],
+    },
+    {
+      heading: "3. Cancellation and Payment",
+      paragraphs: [
+        "All orders are executed after payment realization. Where a cancellation is accepted, any applicable payment reversal or adjustment will be handled based on the order status and the applicable terms of the transaction.",
+        "A cancellation request does not automatically confirm a refund. Confirmation of the cancellation and any resulting payment adjustment will be communicated after the order has been reviewed.",
+      ],
+    },
+    {
+      heading: "4. On-Order Products",
+      paragraphs: [
+        "Certain products may be supplied on an on-order basis. Customers should carefully consider such products before placing an order. The existing Terms and Conditions state that a returned On-order category product is subject to a 10% restocking fee. This provision applies to returns of such products and is separate from the initial submission of a cancellation request.",
+      ],
+    },
+    {
+      heading: "5. Important Order Conditions",
+      items: [
+        "Product prices can change frequently and the website does not provide price protection.",
+        "Products may have minimum and maximum order quantity limits.",
+        "Product images may vary from the actual product, and customers are encouraged to verify product information from the manufacturer before ordering.",
+        "For warranty-related matters, manufacturer warranty terms and authorised service procedures continue to apply.",
+      ],
+    },
+    {
+      heading: "6. Policy Changes",
+      paragraphs: [
+        "We may update this policy from time to time. The latest version published on www.wholesalecenter.in will apply to future requests, subject to applicable order terms.",
+      ],
+    },
+    {
+      heading: "Questions or requests",
+      paragraphs: [
+        "Please contact us at contact@wholesalecenter.in. Include your order details and the reason for the request so that we can review the matter efficiently.",
+      ],
+    },
+  ],
+}
+
+export const returnsPolicy: PolicyDoc = {
+  slug: "returns",
+  label: "Returns & Refunds",
+  eyebrow: "Returns",
+  title: "Returns and Refunds Policy",
+  description:
+    "Return, Dead-on-Arrival (DOA), warranty and refund terms for orders placed on wholesalecenter.in.",
+  intro: [
+    "This Returns and Refunds Policy reflects the existing wholesale sales and warranty terms of Arham Communication and should be read together with the website Terms and Conditions and Shipping Information.",
+  ],
+  sections: [
+    {
+      heading: "1. General Return Policy",
+      paragraphs: [
+        "All sales are final. As stated in the existing Terms and Conditions, returns are not allowed after 7 days from the billing date. Customers should inspect products promptly after delivery and raise any eligible issue within the applicable period.",
+      ],
+    },
+    {
+      heading: "2. Dead on Arrival (DOA)",
+      paragraphs: [
+        "Any product that is dead on arrival (DOA) must be sent to us within 10 days from the billing date. The customer should contact us promptly so that the case can be reviewed and the appropriate next step can be communicated.",
+      ],
+      items: [
+        "The DOA provision is separate from the general 7-day return restriction stated in the Terms and Conditions.",
+        "The product should be returned with its applicable packaging and accessories so that the case can be evaluated.",
+      ],
+    },
+    {
+      heading: "3. Condition of Returned Products",
+      paragraphs: [
+        "To be considered for return, the product must be in good condition and fully packed. Mishandled products will not be accepted.",
+      ],
+      items: [
+        "Keep the original product packaging, accessories and related contents until the issue has been resolved.",
+        "Damage caused by mishandling is not eligible for acceptance under the existing return terms.",
+      ],
+    },
+    {
+      heading: "4. Manufacturer Warranty",
+      paragraphs: [
+        "All products carry manufacturer warranty as stated in the Terms and Conditions. Within the warranty period, a defective product must be sent to the manufacturer or its authorised service provider. Arham Communication is not responsible for providing the manufacturer warranty itself.",
+        "Customers should check the manufacturer website for warranty coverage, service-centre details and the applicable warranty procedure before raising a warranty-related request.",
+      ],
+    },
+    {
+      heading: "5. On-Order Category Products",
+      paragraphs: [
+        "If an On-order category product is returned, the existing Terms and Conditions provide for a 10% restocking fee. This fee is applicable to the return of an On-order category product and should be considered before requesting a return.",
+      ],
+    },
+    {
+      heading: "6. Refunds and Order Adjustments",
+      paragraphs: [
+        "Where a return is accepted after review, any applicable refund or order adjustment will be determined based on the reason for return, the condition of the product and the applicable order terms. Customers will be informed of the outcome after the returned product or claim has been evaluated.",
+        "This policy does not create a general right to return products beyond the return, DOA and warranty provisions described above.",
+      ],
+    },
+    {
+      heading: "7. How to Raise a Return or Refund Request",
+      paragraphs: [
+        "Contact contact@wholesalecenter.in with your order reference, billing details, product name, date of billing and a clear description of the issue. Where relevant, provide supporting photographs or other information that helps us assess the condition of the product.",
+      ],
+    },
+    {
+      heading: "8. Shipping and Delivery Considerations",
+      paragraphs: [
+        "Customers are encouraged to review order, shipping and billing information carefully before placing an order. Orders are shipped through standard shipping companies with tracking numbers, freight is charged on each shipment based on distance and number of parcels, and transport shipments are sent on a To Pay basis. Delivery issues should first be raised with the courier directly before contacting us.",
+      ],
+    },
+    {
+      heading: "9. Policy Changes",
+      paragraphs: [
+        "We may update this policy from time to time. Customers should review the latest version published on www.wholesalecenter.in.",
+      ],
+    },
+    {
+      heading: "Questions or requests",
+      paragraphs: [
+        "Please contact us at contact@wholesalecenter.in. Include your order details and the reason for the request so that we can review the matter efficiently.",
+      ],
+    },
+  ],
+}
+
+export const policyDocs: PolicyDoc[] = [aboutUs, privacyPolicy, termsAndConditions, shippingInformation, returnsPolicy, cancellationPolicy]

@@ -15,7 +15,8 @@ import { useCategories, flattenCategories } from "@/lib/categories/CategoriesPro
 import { ProductCard } from "@/components/ui/ProductCard"
 import { ProductGridSkeleton } from "@/components/ui/ProductGridSkeleton"
 import { EmptyState } from "@/components/ui/EmptyState"
-import { FilterSidebar } from "@/components/storefront/FilterSidebar"
+import { ProductFilterPanel } from "@/components/storefront/ProductFilterPanel"
+import { ProductFilterState, SortKey, applyProductFilters, countActiveFilters, defaultFilters, uniqueCompanies } from "@/components/admin/ProductFilters"
 import { ListingToolbar, SortOption, ViewMode } from "@/components/storefront/ListingToolbar"
 import { useInfiniteScroll, ScrollSentinel } from "@/lib/useInfiniteScroll"
 
@@ -30,6 +31,9 @@ interface Product {
   moq: number
   inventoryQuantity: number
   rating: number
+  reviewCount?: number
+  companyName?: string | null
+  sizeGb?: number | null
   vendorName: string | null
   tags: string[]
   tierPrices: { minQty: number; maxQty: number | null; price: number }[]
@@ -50,7 +54,7 @@ export default function ProductsPageInner() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [addingId, setAddingId] = useState<string | null>(null)
-  const [filters, setFilters] = useState({ category: "", minPrice: "", maxPrice: "", inStock: false })
+  const [filters, setFilters] = useState<ProductFilterState>(defaultFilters)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set())
   const [discounts, setDiscounts] = useState<SeasonalDiscount[]>([])
@@ -120,16 +124,12 @@ export default function ProductsPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const loadProducts = (overrideFilters?: any, overrideSearch?: string) => {
+  // Filters (category, price, stock, rating) apply instantly on the loaded catalogue; only the search text goes to the server.
+  const loadProducts = (_unused?: undefined, overrideSearch?: string) => {
     setLoading(true)
-    const f = overrideFilters || filters
     const s = overrideSearch !== undefined ? overrideSearch : search
     const params = new URLSearchParams()
     if (s) params.set("q", s)
-    if (f.category) params.set("category", f.category)
-    if (f.minPrice) params.set("min_price", f.minPrice)
-    if (f.maxPrice) params.set("max_price", f.maxPrice)
-    if (f.inStock) params.set("in_stock", "true")
     params.set("limit", "2000") // whole catalogue — the list reveals it as you scroll
 
     fetch(`/api/products?${params.toString()}`)
@@ -182,38 +182,21 @@ export default function ProductsPageInner() {
     } catch (err) { console.error(err) }
   }
 
-  const hasActiveFilters = filters.category || filters.minPrice || filters.maxPrice || filters.inStock
+  const hasActiveFilters = countActiveFilters(filters, true) > 0
 
   // Sort & paginate visible products
   const visibleProducts = useMemo(() => {
-    let filtered = products.filter((p) => !hiddenProductIds.has(p.id))
-    switch (sort) {
-      case "price_asc":
-        filtered.sort((a, b) => a.unitPrice - b.unitPrice)
-        break
-      case "price_desc":
-        filtered.sort((a, b) => b.unitPrice - a.unitPrice)
-        break
-      case "rating":
-        filtered.sort((a, b) => b.rating - a.rating)
-        break
-      case "name":
-        filtered.sort((a, b) => a.title.localeCompare(b.title))
-        break
-      default: // newest — keep original order
-        break
-    }
-    return filtered
-  }, [products, hiddenProductIds, sort])
+    const sortKey: SortKey = sort === "price_asc" ? "price-asc" : sort === "price_desc" ? "price-desc" : sort === "name" ? "name-asc" : sort === "name_desc" ? "name-desc" : "default"
+    const filtered = products.filter((p) => !hiddenProductIds.has(p.id)).map((p) => ({ ...p, categoryId: p.categoryId || p.category?.id }))
+    return applyProductFilters(filtered, filters, sortKey)
+  }, [products, hiddenProductIds, sort, filters])
+
+  const companyNames = useMemo(() => uniqueCompanies(products), [products])
 
   const { visibleCount, hasMore, sentinelRef } = useInfiniteScroll(visibleProducts.length, visibleProducts, BATCH_SIZE)
   const shownProducts = visibleProducts.slice(0, visibleCount)
 
-  const clearFilters = () => {
-    const r = { category: "", minPrice: "", maxPrice: "", inStock: false }
-    setFilters(r)
-    loadProducts(r)
-  }
+  const clearFilters = () => setFilters(defaultFilters)
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -244,17 +227,14 @@ export default function ProductsPageInner() {
           </div>
         </div>
 
-        {/* The same filter fields, now in a popup opened by the Filters button */}
-        <FilterSidebar
-          variant="popup"
+        <ProductFilterPanel
+          open={mobileFiltersOpen}
+          onClose={() => setMobileFiltersOpen(false)}
           filters={filters}
-          onChange={(f) => setFilters({ ...f, category: f.category ?? "" })}
-          onApply={() => { loadProducts(); setMobileFiltersOpen(false) }}
-          onClear={() => { clearFilters(); setMobileFiltersOpen(false) }}
-          hasActiveFilters={!!hasActiveFilters}
+          onFilters={setFilters}
           categories={categories}
-          mobileOpen={mobileFiltersOpen}
-          onMobileClose={() => setMobileFiltersOpen(false)}
+          companies={companyNames}
+          resultCount={visibleProducts.length}
         />
 
         <div className="min-w-0">
@@ -270,7 +250,7 @@ export default function ProductsPageInner() {
           ) : (
             <>
               {/* Product grid (5 per row, same compact cards as the home page) / list */}
-              <div className={view === "grid" ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4" : "space-y-3"}>
+              <div className={view === "grid" ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4" : "grid grid-cols-1 lg:grid-cols-2 gap-4"}>
                 {shownProducts.map((product) => (
                   <ProductCard
                     key={product.id}

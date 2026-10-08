@@ -31,8 +31,8 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wholesalecenter.in"
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "WholesaleX Pro — B2B Wholesale E-Commerce Platform",
-    template: "%s | WholesaleX Pro",
+    default: "Wholesale Center — B2B Wholesale E-Commerce Platform",
+    template: "%s | Wholesale Center",
   },
   description:
     "India's trusted B2B wholesale marketplace. Buy bulk products at the best prices with tier pricing, contract deals, and fast shipping across India.",
@@ -48,20 +48,20 @@ export const metadata: Metadata = {
     "wholesale fashion",
     "industrial supplies",
   ],
-  authors: [{ name: "WholesaleX Pro" }],
-  creator: "WholesaleX Pro",
+  authors: [{ name: "Wholesale Center" }],
+  creator: "Wholesale Center",
   openGraph: {
     type: "website",
     locale: "en_IN",
     url: siteUrl,
-    siteName: "WholesaleX Pro",
-    title: "WholesaleX Pro — B2B Wholesale E-Commerce Platform",
+    siteName: "Wholesale Center",
+    title: "Wholesale Center — B2B Wholesale E-Commerce Platform",
     description:
       "India's trusted B2B wholesale marketplace. Buy bulk products at the best prices with tier pricing and fast shipping.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "WholesaleX Pro — B2B Wholesale E-Commerce Platform",
+    title: "Wholesale Center — B2B Wholesale E-Commerce Platform",
     description:
       "India's trusted B2B wholesale marketplace. Buy bulk products at the best prices.",
   },

@@ -5,7 +5,7 @@ CREATE TABLE "SmtpSettings" (
     "port" INTEGER NOT NULL DEFAULT 587,
     "username" TEXT NOT NULL,
     "passwordEncrypted" TEXT NOT NULL,
-    "fromName" TEXT NOT NULL DEFAULT 'WholesaleX Pro',
+    "fromName" TEXT NOT NULL DEFAULT 'Wholesale Center',
     "fromEmail" TEXT NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

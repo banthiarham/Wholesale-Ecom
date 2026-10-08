@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useRef, Fragment } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { BankAccountsCarousel } from "@/components/storefront/BankAccounts"
 import { ArrowLeft, MapPin, CreditCard, Tag, Smartphone, Banknote, Wallet, Zap, Shield, Gift, AlertTriangle, Percent, Layers, Truck, ShoppingCart, Landmark } from "lucide-react"
 import { formatPrice, getCartSessionId, COUNTRIES } from "@/lib/utils"
 import { INDIAN_STATES, lookupPincode } from "@/lib/indian-address"
@@ -37,6 +38,7 @@ interface EnabledGateway {
   isDefault: boolean
   testMode: boolean
   gatewayUrl?: string | null
+  settings?: Record<string, string> | null
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -44,7 +46,12 @@ const PROVIDER_LABELS: Record<string, string> = {
   RAZORPAY: "Razorpay",
   STRIPE: "Stripe",
   PAYU: "PayU",
+  COD: "Cash on Delivery",
+  BANK_TRANSFER: "Bank Transfer",
 }
+
+// Offline methods are shown as their own options, not in the online-gateway list.
+const OFFLINE_PROVIDERS = ["COD", "BANK_TRANSFER"]
 
 const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   CCAVENUE: "Credit/Debit card, UPI, NetBanking, Wallets",
@@ -53,7 +60,7 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   PAYU: "Cards, UPI, NetBanking",
 }
 
-type PaymentMethod = "COD" | "ONLINE" | "WALLET"
+type PaymentMethod = "COD" | "ONLINE" | "WALLET" | "BANK_TRANSFER"
 
 interface SavedAddress {
   id: string
@@ -119,6 +126,7 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD")
   const [selectedProvider, setSelectedProvider] = useState<string>("")
   const [gateways, setGateways] = useState<EnabledGateway[]>([])
+  const [showBankDialog, setShowBankDialog] = useState(false)
   const [redirectData, setRedirectData] = useState<{ url: string; method: string; params: Record<string, string> } | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [loyalty, setLoyalty] = useState<LoyaltyData | null>(null)
@@ -147,7 +155,7 @@ export default function CheckoutPage() {
     checkoutRestrictions, quantityDiscounts, extraCharges,
     availablePaymentMethods,
   } = useStorefrontRules(cartItemsForRules, undefined, {
-    paymentMethod: paymentMethod === "COD" ? "COD" : selectedProvider || undefined,
+    paymentMethod: paymentMethod === "COD" ? "COD" : paymentMethod === "BANK_TRANSFER" ? "BANK_TRANSFER" : selectedProvider || undefined,
     shippingRegion: address.state || undefined,
   })
 
@@ -188,9 +196,15 @@ export default function CheckoutPage() {
       .then((data) => {
         const list: EnabledGateway[] = Array.isArray(data) ? data : data.gateways ?? []
         setGateways(list)
-        if (list.length > 0) {
-          const defaultGw = list.find((g) => g.isDefault)
-          setSelectedProvider(defaultGw?.provider || list[0].provider)
+        const online = list.filter((g) => !OFFLINE_PROVIDERS.includes(g.provider))
+        if (online.length > 0) {
+          const defaultGw = online.find((g) => g.isDefault)
+          setSelectedProvider(defaultGw?.provider || online[0].provider)
+        }
+        // Cash on Delivery can be switched off by the admin: start on the first method that is still offered.
+        if (!list.some((g) => g.provider === "COD")) {
+          if (list.some((g) => g.provider === "BANK_TRANSFER")) setPaymentMethod("BANK_TRANSFER")
+          else if (online.length > 0) setPaymentMethod("ONLINE")
         }
       })
       .catch((err) => { console.error("Failed to fetch payment gateways:", err) })
@@ -272,7 +286,7 @@ export default function CheckoutPage() {
       const options: any = {
         key: data.keyId,
         order_id: data.providerOrderId,
-        name: "WholesaleX",
+        name: "Wholesale Center",
         amount: data.extra?.amount,
         currency: data.extra?.currency || "INR",
         prefill: {
@@ -363,6 +377,18 @@ export default function CheckoutPage() {
 
   const walletInsufficient = paymentMethod === "WALLET" && cart && walletCreditInfo && (cart.totals.total - couponDiscount) > walletCreditInfo.availableCredit
 
+  // Bank transfer: show the bank details first; the order is only placed once the customer continues.
+  const handleCheckoutClick = () => {
+    if (paymentMethod !== "BANK_TRANSFER") { placeOrder(); return }
+    const shippingErrors = validateAddress(address)
+    if (Object.keys(shippingErrors).length > 0) { setErrors(shippingErrors); return }
+    if (!billingSameAsShipping) {
+      const bErrors = validateAddress(billingAddress)
+      if (Object.keys(bErrors).length > 0) { setBillingErrors(bErrors); return }
+    }
+    setShowBankDialog(true)
+  }
+
   const placeOrder = async () => {
     if (!cart || placing) return
     const token = localStorage.getItem("token")
@@ -396,6 +422,7 @@ export default function CheckoutPage() {
           billingAddress: billingSameAsShipping ? undefined : billingAddress,
           couponCode: couponCode || undefined,
           bankOfferId: selectedBankOfferEntry?.eligible ? selectedBankOfferId : undefined,
+          paymentMethod: paymentMethod === "COD" || paymentMethod === "BANK_TRANSFER" ? paymentMethod : undefined,
         }),
       })
       const data = await parseApiResponse(res)
@@ -434,6 +461,18 @@ export default function CheckoutPage() {
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {})
         showToast("success", "Order placed and paid from wallet!")
+        router.push(`/orders/${orderId}`)
+        return
+      }
+
+      if (paymentMethod === "BANK_TRANSFER") {
+        // Record the payment as Bank Transfer / Pending so the order shows how the customer chose to pay.
+        try {
+          await fetch(`/api/payments/bank-transfer/${orderId}`, { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+        } catch (err) {
+          console.error("Failed to record bank transfer payment:", err)
+        }
+        showToast("success", "Order placed! Please complete the bank transfer to confirm payment.")
         router.push(`/orders/${orderId}`)
         return
       }
@@ -553,6 +592,13 @@ export default function CheckoutPage() {
     if (rule.minQty === null) return true
     return totalCartQty >= rule.minQty
   }
+
+  const codGateway = gateways.find((g) => g.provider === "COD")
+  const bankGateways = gateways.filter((g) => g.provider === "BANK_TRANSFER")
+  const bankGateway = bankGateways[0]
+  const onlineGateways = gateways.filter((g) => !OFFLINE_PROVIDERS.includes(g.provider) && (isPaymentAllowed(g.provider) || isPaymentAllowed("ONLINE")))
+  const codAvailable = !!codGateway && isPaymentAllowed("COD")
+  const bankAvailable = !!bankGateway && isPaymentAllowed("BANK_TRANSFER")
 
   // Checkout restriction enforcement
   const hasCheckoutRestriction = checkoutRestrictions.some(cr => cr.restricted)
@@ -837,7 +883,7 @@ export default function CheckoutPage() {
                 <h2 className="font-bold text-gray-900">Payment Method</h2>
               </div>
               <div className="space-y-3">
-                {isPaymentAllowed("COD") && (
+                {codAvailable && (
                   <label
                     onClick={() => setPaymentMethod("COD")}
                     className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === "COD" ? "border-primary-600 bg-primary-50 shadow-sm" : "border-gray-200 hover:border-gray-300 hover:shadow-sm"}`}
@@ -879,7 +925,25 @@ export default function CheckoutPage() {
                   </label>
                 )}
 
-                {gateways.filter(gw => isPaymentAllowed(gw.provider) || isPaymentAllowed("ONLINE")).map((gw) => (
+                {bankAvailable && (
+                  <label
+                    onClick={() => setPaymentMethod("BANK_TRANSFER")}
+                    className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === "BANK_TRANSFER" ? "border-primary-600 bg-primary-50 shadow-sm" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <input type="radio" name="payment" checked={paymentMethod === "BANK_TRANSFER"} onChange={() => setPaymentMethod("BANK_TRANSFER")} className="accent-primary-600 w-4 h-4" />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${paymentMethod === "BANK_TRANSFER" ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                        <Landmark size={18} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">Bank Transfer</p>
+                        <p className="text-xs text-gray-500">{bankGateway?.description || (bankGateways.length > 1 ? `Pay by NEFT / IMPS / UPI to one of ${bankGateways.length} bank accounts` : "Pay by NEFT / IMPS / UPI to our bank account")}</p>
+                      </div>
+                    </div>
+                  </label>
+                )}
+
+                {onlineGateways.map((gw) => (
                   <label
                     key={gw.id}
                     onClick={() => { setPaymentMethod("ONLINE"); setSelectedProvider(gw.provider) }}
@@ -908,7 +972,7 @@ export default function CheckoutPage() {
                   </label>
                 ))}
 
-                {!isPaymentAllowed("COD") && gateways.filter(gw => isPaymentAllowed(gw.provider) || isPaymentAllowed("ONLINE")).length === 0 && (
+                {!codAvailable && !bankAvailable && onlineGateways.length === 0 && !walletCreditInfo && (
                   <div className="p-4 border border-gray-200 rounded-xl bg-gray-50 text-center">
                     <p className="text-sm text-gray-500">No payment methods available for your order. Please check order requirements.</p>
                   </div>
@@ -1151,7 +1215,7 @@ export default function CheckoutPage() {
               </div>
               <RoleMinQtyNotice items={cart.cart.items.map((i) => ({ quantity: i.quantity, product: { title: i.product.title }, metadata: (i as any).metadata }))} />
               <button
-                onClick={placeOrder}
+                onClick={handleCheckoutClick}
                 disabled={placing || redirectData !== null || isCheckoutBlocked}
                 className={`w-full mt-5 ${
                   isCheckoutBlocked
@@ -1171,6 +1235,35 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
+
+      {showBankDialog && bankGateway && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Bank transfer details">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !placing && setShowBankDialog(false)} />
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center"><Landmark size={20} /></span>
+              <div>
+                <h3 className="font-bold text-gray-900">Bank Transfer Details</h3>
+                <p className="text-xs text-gray-500">Transfer the order amount to {bankGateways.length > 1 ? "any one of these accounts" : "this account"}</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="rounded-xl bg-primary-50 px-4 py-3 flex items-center justify-between">
+                <span className="text-sm text-gray-600">Amount to transfer</span>
+                <span className="text-lg font-bold text-primary-700">{formatPrice(finalTotal)}</span>
+              </div>
+              <BankAccountsCarousel accounts={bankGateways.map((g) => ({ id: g.id, settings: g.settings }))} />
+              <p className="text-xs text-gray-500">Your order will be placed now with payment status <strong>Pending</strong>. We will confirm it once your transfer is received.</p>
+            </div>
+            <div className="p-5 pt-0 flex gap-3">
+              <button type="button" onClick={() => setShowBankDialog(false)} disabled={placing} className="btn-outline flex-1 justify-center disabled:opacity-50">Back</button>
+              <button type="button" onClick={() => { placeOrder().finally(() => setShowBankDialog(false)) }} disabled={placing} className="btn-primary flex-[2] justify-center disabled:opacity-50">
+                {placing ? "Placing Order..." : "Continue & Place Order"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

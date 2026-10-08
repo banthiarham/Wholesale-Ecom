@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Plus, Search, X, Trash2, Edit2, PlusCircle, MinusCircle } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
+import { FormField } from "@/components/admin/FormField"
 
 interface Gateway {
   id: string
@@ -22,6 +23,19 @@ interface Gateway {
 }
 
 const BUILTIN_PROVIDERS = ["CCAVENUE", "RAZORPAY", "STRIPE", "PAYU"] as const
+
+/** Offline methods: no API credentials. COD is built in (can only be switched on/off); Bank Transfer shows bank details at checkout. */
+const OFFLINE_PROVIDERS = ["COD", "BANK_TRANSFER"] as const
+const isOffline = (p: string) => (OFFLINE_PROVIDERS as readonly string[]).includes(p)
+
+const BANK_FIELDS: { key: "bankName" | "accountName" | "accountNumber" | "ifscCode" | "branch"; label: string; placeholder: string }[] = [
+  { key: "bankName", label: "Bank Name", placeholder: "e.g. State Bank of India" },
+  { key: "accountName", label: "Account Name", placeholder: "Name on the bank account" },
+  { key: "accountNumber", label: "Account Number", placeholder: "e.g. 123456789012" },
+  { key: "ifscCode", label: "IFSC Code", placeholder: "e.g. SBIN0001234" },
+  { key: "branch", label: "Branch", placeholder: "e.g. Connaught Place, New Delhi" },
+]
+const emptyBank = { bankName: "", accountName: "", accountNumber: "", ifscCode: "", branch: "" }
 
 const CREDENTIAL_FIELDS: Record<string, { key: string; label: string; required: boolean }[]> = {
   CCAVENUE: [
@@ -51,6 +65,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   RAZORPAY: "Razorpay",
   STRIPE: "Stripe",
   PAYU: "PayU",
+  COD: "Cash on Delivery",
+  BANK_TRANSFER: "Bank Transfer",
 }
 
 interface CustomCredField {
@@ -72,6 +88,7 @@ const defaultForm = {
   customCredFields: [] as CustomCredField[],
   gatewayUrl: "",
   webhookUrl: "",
+  bank: { ...emptyBank },
 }
 
 export default function AdminPaymentGatewaysPage() {
@@ -119,7 +136,7 @@ export default function AdminPaymentGatewaysPage() {
   }
 
   const resetForm = () => {
-    setForm({ ...defaultForm, credentials: {}, customCredFields: [] })
+    setForm({ ...defaultForm, credentials: {}, customCredFields: [], bank: { ...emptyBank } })
     setEditing(null)
     setShowForm(false)
   }
@@ -132,7 +149,8 @@ export default function AdminPaymentGatewaysPage() {
         creds[k] = typeof v === "string" ? v : String(v)
       }
     }
-    const isBuiltin = BUILTIN_PROVIDERS.includes(g.provider as any)
+    const isBuiltin = BUILTIN_PROVIDERS.includes(g.provider as any) || isOffline(g.provider)
+    const savedBank = (g.settings || {}) as Record<string, string>
     setForm({
       providerType: isBuiltin ? "builtin" : "custom",
       provider: isBuiltin ? g.provider : "CCAVENUE",
@@ -146,6 +164,7 @@ export default function AdminPaymentGatewaysPage() {
       customCredFields: g.credentialFields || [],
       gatewayUrl: g.gatewayUrl || "",
       webhookUrl: g.webhookUrl || "",
+      bank: { ...emptyBank, ...Object.fromEntries(Object.entries(savedBank).filter(([k]) => k in emptyBank)) },
     })
     setShowForm(true)
   }
@@ -181,6 +200,16 @@ export default function AdminPaymentGatewaysPage() {
       isDefault: form.isDefault,
       testMode: form.testMode,
       credentials,
+    }
+
+    if (form.providerType === "builtin" && form.provider === "BANK_TRANSFER") {
+      body.settings = Object.fromEntries(Object.entries(form.bank).map(([k, v]) => [k, v.trim()]))
+      body.testMode = false
+      body.isDefault = false
+    }
+    if (form.providerType === "builtin" && form.provider === "COD") {
+      body.testMode = false
+      body.isDefault = false
     }
 
     if (form.providerType === "custom") {
@@ -227,6 +256,26 @@ export default function AdminPaymentGatewaysPage() {
     setGateways((prev) => prev.filter((g) => g.id !== id))
   }
 
+  const toggleActive = async (g: Gateway) => {
+    const t = localStorage.getItem("token")!
+    try {
+      const res = await fetch(`/api/payment-gateways/${g.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+        body: JSON.stringify({ isActive: !g.isActive }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.message || "Failed to update gateway")
+        return
+      }
+      setGateways((prev) => prev.map((x) => (x.id === g.id ? { ...x, isActive: !g.isActive } : x)))
+    } catch (err) {
+      console.error(err)
+      alert("Failed to update gateway")
+    }
+  }
+
   const toggleCredVisibility = (id: string) => {
     setShowCreds((prev) => ({ ...prev, [id]: !prev[id] }))
   }
@@ -236,7 +285,7 @@ export default function AdminPaymentGatewaysPage() {
       ...prev,
       provider,
       credentials: {},
-      label: prev.label || PROVIDER_LABELS[provider] || provider,
+      label: provider === "BANK_TRANSFER" ? "Bank Transfer" : (prev.label && prev.label !== "Bank Transfer" ? prev.label : PROVIDER_LABELS[provider] || provider),
     }))
   }
 
@@ -291,6 +340,8 @@ export default function AdminPaymentGatewaysPage() {
     : (CREDENTIAL_FIELDS[form.provider] || [])
 
   const isCustom = form.providerType === "custom"
+  const isBank = !isCustom && form.provider === "BANK_TRANSFER"
+  const isCod = !isCustom && form.provider === "COD"
 
   return (
     <div className="space-y-6">
@@ -370,7 +421,7 @@ export default function AdminPaymentGatewaysPage() {
                   disabled={!!editing}
                   className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:text-gray-500 dark:disabled:text-gray-500"
                 >
-                  {BUILTIN_PROVIDERS.map((p) => (
+                  {[...BUILTIN_PROVIDERS, "BANK_TRANSFER", ...(editing && editing.provider === "COD" ? ["COD"] : [])].map((p) => (
                     <option key={p} value={p}>
                       {PROVIDER_LABELS[p]}
                     </option>
@@ -393,7 +444,9 @@ export default function AdminPaymentGatewaysPage() {
               <input
                 required
                 placeholder="Label (e.g. Razorpay Test)"
-                value={form.label}
+                value={isBank ? "Bank Transfer" : form.label}
+                readOnly={isBank}
+                title={isBank ? "Bank transfer gateways are always named Bank Transfer" : undefined}
                 onChange={(e) => setForm({ ...form, label: e.target.value })}
                 className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
@@ -479,6 +532,32 @@ export default function AdminPaymentGatewaysPage() {
               </div>
             )}
 
+            {isBank && (
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-4">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bank account details</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Customers who choose Bank Transfer at checkout will see these details (read-only) before placing their order. You can add more than one bank account; customers can browse through all of them.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {BANK_FIELDS.map((f) => (
+                    <FormField key={f.key} label={f.label} required>
+                      <input
+                        required
+                        placeholder={f.placeholder}
+                        value={form.bank[f.key]}
+                        onChange={(e) => setForm((prev) => ({ ...prev, bank: { ...prev.bank, [f.key]: e.target.value } }))}
+                        className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </FormField>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isCod && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
+                Cash on Delivery is a built-in method. Untick <strong>Active</strong> to hide it from customers at checkout.
+              </div>
+            )}
+
             {/* Credential value inputs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {currentCredFields.map((field) => (
@@ -515,7 +594,7 @@ export default function AdminPaymentGatewaysPage() {
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Active</span>
               </label>
-              <label className="flex items-center gap-2 px-3 py-2">
+              {!isBank && !isCod && <label className="flex items-center gap-2 px-3 py-2">
                 <input
                   type="checkbox"
                   checked={form.isDefault}
@@ -523,8 +602,8 @@ export default function AdminPaymentGatewaysPage() {
                   className="rounded border-gray-300 accent-primary-600"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Default Gateway</span>
-              </label>
-              <label className="flex items-center gap-2 px-3 py-2">
+              </label>}
+              {!isBank && !isCod && <label className="flex items-center gap-2 px-3 py-2">
                 <input
                   type="checkbox"
                   checked={form.testMode}
@@ -532,7 +611,7 @@ export default function AdminPaymentGatewaysPage() {
                   className="rounded border-gray-300 accent-primary-600"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Test Mode</span>
-              </label>
+              </label>}
             </div>
 
             <div className="flex gap-3">
@@ -576,7 +655,8 @@ export default function AdminPaymentGatewaysPage() {
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
               {filtered.map((g) => {
-                const isBuiltin = BUILTIN_PROVIDERS.includes(g.provider as any)
+                const isBuiltin = BUILTIN_PROVIDERS.includes(g.provider as any) || isOffline(g.provider)
+                const offline = isOffline(g.provider)
                 return (
                   <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                     <td className="px-4 py-3">
@@ -593,6 +673,17 @@ export default function AdminPaymentGatewaysPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={g.isActive}
+                          aria-label={`${g.isActive ? "Disable" : "Enable"} ${g.label}`}
+                          title={g.isActive ? "Click to disable" : "Click to enable"}
+                          onClick={() => toggleActive(g)}
+                          className={`relative inline-flex h-5 w-10 shrink-0 items-center rounded-full transition-colors ${g.isActive ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                        >
+                          <span className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200" style={{ transform: g.isActive ? "translateX(18px)" : "translateX(2px)" }} />
+                        </button>
                         <span
                           className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                             g.isActive
@@ -610,7 +701,7 @@ export default function AdminPaymentGatewaysPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span
+                      {offline ? <span className="text-xs text-gray-400 dark:text-gray-500">—</span> : <span
                         className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                           g.testMode
                             ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
@@ -618,10 +709,15 @@ export default function AdminPaymentGatewaysPage() {
                         }`}
                       >
                         {g.testMode ? "Test" : "Live"}
-                      </span>
+                      </span>}
                     </td>
                     <td className="px-4 py-3">
-                      {g.credentials && typeof g.credentials === "object" && Object.keys(g.credentials).length > 0 ? (
+                      {g.provider === "BANK_TRANSFER" && g.settings ? (
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          <div className="font-medium text-gray-600 dark:text-gray-400">{g.settings.bankName} <span className="font-normal text-gray-400">({g.settings.accountName})</span></div>
+                          <div className="font-mono">A/C {g.settings.accountNumber}</div>
+                        </div>
+                      ) : g.credentials && typeof g.credentials === "object" && Object.keys(g.credentials).length > 0 ? (
                         <div className="space-y-0.5">
                           {Object.entries(g.credentials).slice(0, showCreds[g.id] ? undefined : 2).map(([k, v]) => (
                             <div key={k} className="text-xs text-gray-500 dark:text-gray-400">
@@ -658,12 +754,12 @@ export default function AdminPaymentGatewaysPage() {
                         >
                           <Edit2 size={14} />
                         </button>
-                        <button
+                        {g.provider !== "COD" && <button
                           onClick={() => handleDelete(g.id)}
                           className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                           <Trash2 size={14} />
-                        </button>
+                        </button>}
                       </div>
                     </td>
                   </tr>

@@ -4,6 +4,21 @@ import { ConfigService } from '@nestjs/config';
 import { PaymentGatewayFactory } from './gateways/gateway.factory';
 import * as CryptoJS from 'crypto-js';
 
+/** Built-in "offline" payment methods: they have no API credentials and never go through a gateway redirect. */
+export const COD_PROVIDER = 'COD';
+export const BANK_TRANSFER_PROVIDER = 'BANK_TRANSFER';
+const OFFLINE_PROVIDERS = [COD_PROVIDER, BANK_TRANSFER_PROVIDER];
+/** Bank Transfer gateways are always named this, whatever the admin types. */
+export const BANK_TRANSFER_LABEL = 'Bank Transfer';
+/** Bank details the admin fills in for Bank Transfer (stored in the gateway's `settings`, shown to customers at checkout). */
+const BANK_FIELDS: { key: string; label: string }[] = [
+  { key: 'bankName', label: 'Bank name' },
+  { key: 'accountName', label: 'Account name' },
+  { key: 'accountNumber', label: 'Account number' },
+  { key: 'ifscCode', label: 'IFSC code' },
+  { key: 'branch', label: 'Branch' },
+];
+
 @Injectable()
 export class PaymentGatewaysService {
   private encryptionKey: string;
@@ -14,6 +29,32 @@ export class PaymentGatewaysService {
     private factory: PaymentGatewayFactory,
   ) {
     this.encryptionKey = this.configService.get<string>('GATEWAY_CREDENTIALS_KEY', 'default-encryption-key-change-in-production-32bytes');
+  }
+
+  /** Cash on Delivery always exists as a built-in method (enabled by default) so admins can switch it on/off. */
+  private async ensureCodGateway() {
+    const existing = await this.prisma.paymentGateway.findFirst({ where: { provider: COD_PROVIDER } });
+    if (existing) return existing;
+    return this.prisma.paymentGateway.create({
+      data: {
+        provider: COD_PROVIDER,
+        label: 'Cash on Delivery',
+        description: 'Pay when your order arrives',
+        isActive: true,
+        isDefault: false,
+        testMode: false,
+      },
+    });
+  }
+
+  private cleanBankDetails(settings?: Record<string, any>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const f of BANK_FIELDS) {
+      const v = String(settings?.[f.key] ?? '').trim();
+      if (!v) throw new BadRequestException(`${f.label} is required for Bank Transfer`);
+      out[f.key] = v;
+    }
+    return out;
   }
 
   async create(data: {
@@ -30,6 +71,32 @@ export class PaymentGatewaysService {
     settings?: Record<string, any>;
   }) {
     const providerName = data.provider.toUpperCase();
+
+    if (providerName === COD_PROVIDER) {
+      throw new BadRequestException('Cash on Delivery is built in. Enable or disable it from the gateway list instead of adding it.');
+    }
+
+    if (providerName === BANK_TRANSFER_PROVIDER) {
+      // Several bank accounts are allowed; each one is its own "Bank Transfer" gateway.
+      return this.prisma.paymentGateway.create({
+        data: {
+          provider: providerName,
+          label: BANK_TRANSFER_LABEL,
+          description: data.description,
+          isActive: data.isActive,
+          isDefault: false,
+          testMode: false,
+          settings: this.cleanBankDetails(data.settings),
+        },
+      });
+    }
+
+    // Online providers are configured once (several Bank Transfer rows are the only exception).
+    const alreadyConfigured = await this.prisma.paymentGateway.findFirst({ where: { provider: providerName } });
+    if (alreadyConfigured) {
+      throw new BadRequestException(`${providerName} is already configured. Edit the existing gateway instead of adding another.`);
+    }
+
     const provider = this.factory.getProvider(providerName);
     if (!provider.validateCredentials(data.credentials)) {
       throw new BadRequestException(`Invalid credentials for ${providerName}. Required fields are missing.`);
@@ -76,6 +143,18 @@ export class PaymentGatewaysService {
     const gateway = await this.prisma.paymentGateway.findUnique({ where: { id } });
     if (!gateway) throw new NotFoundException('Payment gateway not found');
 
+    if (OFFLINE_PROVIDERS.includes(gateway.provider)) {
+      // Offline methods only have a label, description, on/off switch and (for bank transfer) bank details.
+      const offline: any = {};
+      if (data.label !== undefined && gateway.provider !== BANK_TRANSFER_PROVIDER) offline.label = data.label;
+      if (data.description !== undefined) offline.description = data.description;
+      if (data.isActive !== undefined) offline.isActive = data.isActive;
+      if (gateway.provider === BANK_TRANSFER_PROVIDER && data.settings !== undefined) {
+        offline.settings = this.cleanBankDetails(data.settings);
+      }
+      return this.prisma.paymentGateway.update({ where: { id }, data: offline });
+    }
+
     if (data.isDefault) {
       await this.prisma.paymentGateway.updateMany({
         where: { isDefault: true },
@@ -111,11 +190,15 @@ export class PaymentGatewaysService {
   async remove(id: string) {
     const gateway = await this.prisma.paymentGateway.findUnique({ where: { id } });
     if (!gateway) throw new NotFoundException('Payment gateway not found');
+    if (gateway.provider === COD_PROVIDER) {
+      throw new BadRequestException('Cash on Delivery cannot be deleted. Disable it instead.');
+    }
 
     return this.prisma.paymentGateway.delete({ where: { id } });
   }
 
   async findAll() {
+    await this.ensureCodGateway();
     const gateways = await this.prisma.paymentGateway.findMany({ orderBy: { label: 'asc' } });
     return gateways.map((gw) => ({
       ...gw,
@@ -133,8 +216,10 @@ export class PaymentGatewaysService {
   }
 
   async getEnabledGateways() {
+    await this.ensureCodGateway();
     const gateways = await this.prisma.paymentGateway.findMany({
       where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
       select: {
         id: true,
         provider: true,
@@ -156,7 +241,7 @@ export class PaymentGatewaysService {
     gatewayId: string;
     webhookUrl?: string;
   }> {
-    const dbRecord = await this.prisma.paymentGateway.findUnique({
+    const dbRecord = await this.prisma.paymentGateway.findFirst({
       where: { provider },
     });
 
