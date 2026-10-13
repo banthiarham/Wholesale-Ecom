@@ -7,6 +7,7 @@ import { Heart, Star, Package, ShoppingCart, Sparkles, Minus, Plus } from "lucid
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 import { SeasonalDiscount, PaymentOffer, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
 import { getContrastTextColor, isExternalImageUrl } from "@/lib/utils"
+import { useGstRates } from "@/lib/useGstRates"
 import { ProductPriceDisplay, RolePricingInfo, RuleDiscountInfo } from "./ProductPriceDisplay"
 
 export interface ProductCardProduct {
@@ -100,6 +101,8 @@ export function ProductCard({
   const maxQty = product.inventoryQuantity && product.inventoryQuantity > 0 ? product.inventoryQuantity : Infinity
   const clampQty = (n: number) => Math.min(maxQty, Math.max(Math.max(1, product.moq || 1), Math.floor(Number.isFinite(n) ? n : 1)))
   const isOutOfStock = (product.inventoryQuantity ?? Infinity) <= 0
+  const { rateFor } = useGstRates()
+  const gstRate = rateFor(product.id, product.categoryId || product.category?.id)
   const compareAtNum = product.compareAtPrice != null ? Number(product.compareAtPrice) : null
   const discountPct = compareAtNum && compareAtNum > Number(product.unitPrice)
     ? Math.round(((compareAtNum - Number(product.unitPrice)) / compareAtNum) * 100)
@@ -156,6 +159,7 @@ export function ProductCard({
       compareAtPrice={product.compareAtPrice}
       tierPrices={product.tierPrices}
       size={size}
+      gstRate={gstRate}
     />
   )
 

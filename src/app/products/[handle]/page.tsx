@@ -4,12 +4,14 @@ import { useEffect, useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText, X, Store, Sparkles, ChevronLeft, ZoomIn, Tag, Lock, Undo2, Headphones } from "lucide-react"
+import { ShoppingCart, Heart, Star, Truck, Package, ShieldCheck, ChevronRight, ChevronDown, MessageSquare, Flame, Gift, Layers, PlusCircle, AlertTriangle, Minus, Plus, Share2, Check, FileText, X, Store, Sparkles, ChevronLeft, ZoomIn, Tag, Lock, Undo2, Headphones, Receipt } from "lucide-react"
 import { formatPrice, getCartSessionId, getContrastTextColor, isExternalImageUrl } from "@/lib/utils"
 import { PricingBreakdown, SeasonalDiscount, PaymentOffer, TierPrice, fetchPricing, fetchSeasonalDiscounts, fetchPaymentOffers, getProductDiscount, discountBadge, getPaymentOfferBadge, findApplicableTier, getEffectiveUnitPrice, sortTierPrices } from "@/lib/pricing"
 import { useQuantityStepper } from "@/lib/pricing/useQuantityStepper"
 import { useAuth } from "@/lib/auth"
 import { useStorefrontRules } from "@/lib/rules"
+import { useGstRates, withGst, gstLabel } from "@/lib/useGstRates"
+import { useOfferChoice } from "@/lib/offerChoices"
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
@@ -20,6 +22,10 @@ import dynamic from "next/dynamic"
 const PackageConfigurator = dynamic(() => import("@/components/storefront/PackageConfigurator"), { ssr: false })
 
 interface Review { id: string; rating: number; title: string | null; body: string | null; user: { firstName: string | null; lastName: string | null } }
+interface ProductOfferInfo {
+  ruleId: string; name: string; type: string; description: string; summary: string
+  condition: string | null; unitsNeeded: number; eligible: boolean; savings: number; validUntil: string | null
+}
 interface RelatedProduct {
   id: string; title: string; handle: string; thumbnail: string | null; unitPrice: string; compareAtPrice: string | null; moq: number; rating: number; tierPrices: TierPrice[]
 }
@@ -31,23 +37,6 @@ interface Product {
   tierPrices: TierPrice[]; reviews: Review[];
   categoryId?: string
   metadata?: Record<string, unknown> | null
-}
-
-/* Collapsible section helper */
-function CollapsibleSection({ title, icon: Icon, children, defaultOpen = false }: { title: string; icon?: any; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="card-base-static overflow-hidden">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors">
-        <div className="flex items-center gap-2.5">
-          {Icon && <Icon size={18} className="text-gray-400" />}
-          <span className="font-semibold text-gray-900">{title}</span>
-        </div>
-        <ChevronRight size={18} className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
-      </button>
-      {open && <div className="px-5 pb-5">{children}</div>}
-    </div>
-  )
 }
 
 export default function ProductDetailPage() {
@@ -103,6 +92,35 @@ export default function ProductDetailPage() {
   )
   const { customBadges: relatedCustomBadges } = useStorefrontRules(relatedRulesProducts)
 
+  const { rateFor } = useGstRates()
+  const gstRate = rateFor(product?.id, product?.categoryId || product?.category?.id)
+  const gst = (n: number) => withGst(n, gstRate)
+  // Offers for this product: one applies at a time; the shopper can apply, switch or remove it.
+  const [offerChoice, setOfferChoice] = useOfferChoice(product?.id)
+  const [offers, setOffers] = useState<ProductOfferInfo[]>([])
+  const [appliedOfferId, setAppliedOfferId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!product?.id) return
+    let cancelled = false
+    const t = setTimeout(() => {
+      const qs = new URLSearchParams({ productId: product.id, quantity: String(quantity) })
+      if (offerChoice) qs.set("choice", offerChoice)
+      fetch(`/api/rules/product-offers?${qs.toString()}`)
+        .then((r) => (r.ok ? r.json() : { offers: [], appliedId: null }))
+        .then((d) => {
+          if (cancelled) return
+          const list: ProductOfferInfo[] = d.offers || []
+          setOffers(list)
+          setAppliedOfferId(d.appliedId || null)
+          // A picked offer whose condition is no longer met is dropped, not kept "selected".
+          if (offerChoice && offerChoice !== "none" && !list.some((o) => o.ruleId === offerChoice && o.eligible)) {
+            setOfferChoice(null)
+          }
+        })
+        .catch(() => {})
+    }, 200)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [product?.id, quantity, offerChoice])
   const ruleDiscount = productDiscounts?.find((d) => d.productId === product?.id) ?? null
   const productBogo = bogo.filter((b) => b.buyProductId === product?.id)
   const productQtyDiscount = quantityDiscounts.find((qd) => qd.productId === product?.id)
@@ -163,7 +181,7 @@ export default function ProductDetailPage() {
       const token = localStorage.getItem("token")
       const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
       if (token) headers["Authorization"] = `Bearer ${token}`
-      const res = await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId: product.id, quantity }) })
+      const res = await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId: product.id, quantity, ...(offerChoice ? { offerChoice } : {}) }) })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
         window.dispatchEvent(new CustomEvent("cart-updated"))
@@ -398,18 +416,18 @@ export default function ProductDetailPage() {
     ? Object.entries(product.metadata).filter(([k, v]) => !/packageTemplate|package_template/i.test(k) && (typeof v === "string" || typeof v === "number")).map(([k, v]) => [k.replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()), String(v)])
     : []
   const detailRows: { icon: any; label: string; value: React.ReactNode }[] = [
-    ...(product.vendorName ? [{ icon: Store, label: "Seller", value: product.vendorId ? <Link href={`/vendors/${product.vendorId}`} className="hover:text-primary-600 hover:underline">{product.vendorName}</Link> : product.vendorName }] : []),
     ...(product.category ? [{ icon: Layers, label: "Category", value: <Link href={`/categories/${product.category.handle}`} className="hover:text-primary-600 hover:underline">{product.category.name}</Link> }] : []),
     { icon: Package, label: "Min. Order Qty", value: `${roleHeadline?.roleMinQty ?? product.moq} units` },
     { icon: Truck, label: "Availability", value: <span className={isOutOfStock ? "text-red-600" : "text-green-600"}>{isOutOfStock ? "Out of stock" : `${product.inventoryQuantity} units in stock`}</span> },
+    ...(gstRate > 0 ? [{ icon: Receipt, label: "GST", value: <>{Number(gstRate.toFixed(2))}% <span className="font-normal text-gray-500">(Included in price)</span></> }] : []),
     ...metaSpecs.map(([label, value]) => ({ icon: ShieldCheck, label, value })),
   ]
   const detailsTable = (
-    <div className="flex flex-col h-full rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-100 text-sm lg:text-base">
+    <div className="flex flex-col rounded-lg border border-gray-100 overflow-hidden divide-y divide-gray-100 text-[13px]">
       {detailRows.map((r) => (
-        <div key={r.label} className="flex-1 flex items-center gap-3 px-3.5 py-2 lg:py-2.5 odd:bg-gray-50/70">
-          <r.icon size={16} className="text-gray-400 shrink-0" />
-          <span className="w-28 sm:w-36 lg:w-40 shrink-0 text-gray-600">{r.label}</span>
+        <div key={r.label} className="flex items-center gap-2.5 px-3 py-1.5 odd:bg-gray-50/70">
+          <r.icon size={14} className="text-gray-400 shrink-0" />
+          <span className="w-28 sm:w-32 shrink-0 text-gray-600">{r.label}</span>
           <span className="min-w-0 flex-1 text-gray-800 font-medium break-words">{r.value}</span>
         </div>
       ))}
@@ -427,9 +445,9 @@ export default function ProductDetailPage() {
     <>
       {productJsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />}
       <div className="min-h-screen bg-gray-50/50">
-        <main className="section-container py-4 sm:py-8">
+        <main className="section-container py-3 sm:py-5">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-4 sm:mb-6 overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
+          <div className="flex items-center gap-2 text-xs text-gray-500 mb-3 overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
             <Link href="/" className="hover:text-primary-600 transition-colors shrink-0">Home</Link>
             <ChevronRight size={14} className="shrink-0" />
             <Link href="/products" className="hover:text-primary-600 transition-colors shrink-0">Products</Link>
@@ -438,15 +456,14 @@ export default function ProductDetailPage() {
             <span className="text-gray-900 font-medium truncate">{product.title}</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[4fr_5fr_4fr] gap-3 lg:gap-4 items-start lg:items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)_minmax(0,3.6fr)] gap-3 items-stretch">
                 {/* Gallery */}
-                <div className="card-base-static p-3 min-w-0 flex flex-col">
-                  <div className="relative rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden lg:flex-1 lg:min-h-[280px]">
-                    <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 max-w-[calc(100%-1.5rem)]">
-                      {shownDiscountPct > 0 && !isPriceHidden && <span className="chip-sale">{shownDiscountPct}% OFF</span>}
-                      {productCustomBadges[0] && (
+                <div className="card-base-static p-2.5 min-w-0 flex flex-col lg:self-start lg:sticky lg:top-40">
+                  <div className="relative rounded-xl bg-gray-50 border border-gray-100 overflow-hidden aspect-[4/3]">
+                    <div className="absolute top-2.5 left-2.5 z-10 flex flex-col items-start gap-1.5 max-w-[calc(100%-1.5rem)]">
+                                            {productCustomBadges[0] && (
                         <span
-                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-md shadow-sm max-w-full truncate"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md shadow-sm max-w-full truncate"
                           style={{ backgroundColor: productCustomBadges[0].badgeColor || "#7c3aed", color: getContrastTextColor(productCustomBadges[0].badgeColor || "#7c3aed") }}
                           title={productCustomBadges[0].badgeLabel}
                         >
@@ -457,7 +474,7 @@ export default function ProductDetailPage() {
                     </div>
                     {mainImage ? (
                       <div
-                        className="relative w-full aspect-[4/3] lg:aspect-auto lg:absolute lg:inset-0 overflow-hidden cursor-zoom-in"
+                        className="absolute inset-0 overflow-hidden cursor-zoom-in"
                         onMouseMove={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect()
                           setZoomOrigin(`${((e.clientX - rect.left) / rect.width) * 100}% ${((e.clientY - rect.top) / rect.height) * 100}%`)
@@ -478,24 +495,24 @@ export default function ProductDetailPage() {
                         />
                       </div>
                     ) : (
-                      <div className="w-full aspect-[4/3] lg:aspect-auto lg:absolute lg:inset-0 flex items-center justify-center">
-                        <Package size={64} className="text-gray-200" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Package size={48} className="text-gray-200" />
                       </div>
                     )}
                     {galleryImages.length > 1 && (
                       <>
-                        <button type="button" onClick={() => stepImage(-1)} aria-label="Previous image" className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 active:scale-95 transition"><ChevronLeft size={18} /></button>
-                        <button type="button" onClick={() => stepImage(1)} aria-label="Next image" className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 active:scale-95 transition"><ChevronRight size={18} /></button>
+                        <button type="button" onClick={() => stepImage(-1)} aria-label="Previous image" className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 active:scale-95 transition"><ChevronLeft size={16} /></button>
+                        <button type="button" onClick={() => stepImage(1)} aria-label="Next image" className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 active:scale-95 transition"><ChevronRight size={16} /></button>
                       </>
                     )}
                     {mainImage && (
-                      <button type="button" onClick={() => setLightboxOpen(true)} aria-label="Zoom image" className="absolute right-3 bottom-3 w-9 h-9 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 transition"><ZoomIn size={17} /></button>
+                      <button type="button" onClick={() => setLightboxOpen(true)} aria-label="Zoom image" className="absolute right-2.5 bottom-2.5 w-8 h-8 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center text-gray-700 hover:bg-gray-50 transition"><ZoomIn size={17} /></button>
                     )}
                   </div>
                   {galleryImages.length > 1 && (
-                    <div className="flex gap-2.5 overflow-x-auto pt-3 pb-1 [scrollbar-width:thin]">
+                    <div className="flex gap-2 overflow-x-auto pt-2.5 pb-0.5 [scrollbar-width:thin]">
                       {galleryImages.map((img, idx) => (
-                        <button key={idx} type="button" onClick={() => setMainImage(img)} aria-label={`Show image ${idx + 1}`} className={`flex-shrink-0 w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-xl border-2 bg-white overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
+                        <button key={idx} type="button" onClick={() => setMainImage(img)} aria-label={`Show image ${idx + 1}`} className={`flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-lg border-2 bg-white overflow-hidden transition-all duration-200 ${mainImage === img ? "border-primary-600 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
                           <Image src={img} alt={`${product.title} ${idx + 1}`} width={80} height={80} unoptimized={isExternalImageUrl(img)} className="w-full h-full object-contain p-1" />
                         </button>
                       ))}
@@ -503,43 +520,136 @@ export default function ProductDetailPage() {
                   )}
                 </div>
 
+                <div className="min-w-0 flex flex-col gap-3">
                 {/* Product info */}
-                <div className="card-base-static p-4 min-w-0 flex flex-col">
+                <div className="card-base-static p-3.5 min-w-0 flex flex-col">
                   <div className="flex items-start justify-between gap-3">
-                    <h1 className="text-xl sm:text-2xl lg:text-[28px] font-bold text-gray-900 leading-tight tracking-tight">{product.title}</h1>
+                    <h1 className="text-lg sm:text-xl font-bold text-gray-900 leading-snug tracking-tight">{product.title}</h1>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button type="button" onClick={toggleWishlist} disabled={wishlistLoading} aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"} className={`w-10 h-10 rounded-full border flex items-center justify-center transition ${inWishlist ? "border-red-200 bg-red-50 text-red-500" : "border-gray-200 text-gray-500 hover:text-red-500 hover:bg-gray-50"}`}>
-                        <Heart size={18} fill={inWishlist ? "currentColor" : "none"} />
+                      <button type="button" onClick={toggleWishlist} disabled={wishlistLoading} aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"} className={`w-8 h-8 rounded-full border flex items-center justify-center transition ${inWishlist ? "border-red-200 bg-red-50 text-red-500" : "border-gray-200 text-gray-500 hover:text-red-500 hover:bg-gray-50"}`}>
+                        <Heart size={15} fill={inWishlist ? "currentColor" : "none"} />
                       </button>
-                      <button type="button" onClick={handleShare} aria-label="Share" className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition"><Share2 size={18} /></button>
+                      <button type="button" onClick={handleShare} aria-label="Share" className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition"><Share2 size={15} /></button>
                     </div>
                   </div>
-                  {(product.sku || product.vendorName) && <p className="text-sm text-gray-500 mt-1">{product.sku && <>SKU: {product.sku}</>}{product.sku && product.vendorName && <span className="mx-2 text-gray-300">|</span>}{product.vendorName && <>Seller: {product.vendorName}</>}</p>}
-                  <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                    <div className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={17} fill={i <= Math.round(product.rating) ? "currentColor" : "none"} className={i <= Math.round(product.rating) ? "text-amber-400" : "text-gray-300"} />)}</div>
-                    {product.reviewCount > 0 && <span className="text-sm font-bold text-gray-900">{Number(product.rating).toFixed(1)}</span>}
-                    <span className="text-sm text-gray-500">({product.reviewCount} {product.reviewCount === 1 ? "review" : "reviews"})</span>
+                  {(product.sku || product.vendorName) && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {product.sku && <>SKU: {product.sku}</>}
+                      {product.sku && product.vendorName && <span className="mx-2 text-gray-300">|</span>}
+                      {product.vendorName && <>Seller: {product.vendorId
+                        ? <Link href={`/vendors/${product.vendorId}`} className="font-semibold text-primary-600 hover:underline">{product.vendorName}</Link>
+                        : <span className="font-semibold text-primary-600">{product.vendorName}</span>}</>}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <div className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={14} fill={i <= Math.round(product.rating) ? "currentColor" : "none"} className={i <= Math.round(product.rating) ? "text-amber-400" : "text-gray-300"} />)}</div>
+                    {product.reviewCount > 0 && <span className="text-xs font-bold text-gray-900">{Number(product.rating).toFixed(1)}</span>}
+                    <span className="text-xs text-gray-500">({product.reviewCount} {product.reviewCount === 1 ? "review" : "reviews"})</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap text-xs">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-semibold ${isOutOfStock ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${isOutOfStock ? "bg-red-500" : "bg-green-500"}`} />
+                      {isOutOfStock ? "Out of Stock" : "In Stock"}
+                    </span>
+                    {!isOutOfStock && <span className="text-gray-500">{product.inventoryQuantity} units available</span>}
+                    {isLowStock && <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Only {product.inventoryQuantity} left</span>}
                   </div>
                   {product.description && (
-                    <p className="text-gray-600 leading-relaxed mt-3 line-clamp-3 whitespace-pre-line text-sm lg:text-base">{product.description}</p>
+                    <p className="text-gray-600 leading-relaxed mt-2.5 line-clamp-3 whitespace-pre-line text-[13px]">{product.description}</p>
                   )}
-                  <div className="hidden md:flex flex-col flex-1 mt-4">{detailsTable}</div>
+                  <div className="mt-3">{detailsTable}</div>
+                </div>
+            {/* Available Offers */}
+                <div className="card-base-static p-3.5 min-w-0 flex-1 flex flex-col">
+              <h2 className="text-base font-bold text-gray-900">Available Offers</h2>
+              <span className="block mt-1 mb-2.5 h-0.5 w-8 rounded bg-primary-600" />
+              <div className="flex-1 flex flex-col gap-2.5">
+                {offers.map((o) => {
+                  const applied = o.ruleId === appliedOfferId
+                  // Applying an offer also meets its condition: the quantity is raised to the offer's minimum.
+                  const targetQty = o.eligible ? quantity : quantity + o.unitsNeeded
+                  const canApply = targetQty <= effectiveMaxQty
+                  return (
+                    <div key={o.ruleId} className={`rounded-lg border p-3 transition-colors ${applied ? "border-primary-300 bg-primary-50/60" : "border-gray-200 bg-white"}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Tag size={14} className={applied ? "text-primary-600" : "text-gray-400"} />
+                            <p className="text-sm font-semibold text-gray-900">{o.name}</p>
+                            {applied && <span className="text-[10px] font-bold uppercase tracking-wide rounded-full bg-green-100 text-green-700 px-2 py-0.5">Applied</span>}
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1 leading-relaxed">{o.description}</p>
+                          <p className="text-[11px] mt-1.5 text-gray-500">
+                            {o.condition
+                              ? o.eligible
+                                ? <span className="text-green-700">{o.condition} · condition met</span>
+                                : <span className="text-amber-700">{o.condition} · applying sets quantity to {targetQty}</span>
+                              : "No conditions"}
+                            {o.validUntil && <span> · Valid till {new Date(o.validUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                          </p>
+                        </div>
+                        {applied ? (
+                          <button type="button" onClick={() => setOfferChoice("none")} className="shrink-0 text-xs font-semibold rounded-md border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1.5 transition">
+                            Remove
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!canApply}
+                            title={canApply ? undefined : "Not enough stock to meet this offer's condition"}
+                            onClick={() => {
+                              if (!o.eligible && o.unitsNeeded > 0) { setTyped(targetQty); flush() }
+                              setOfferChoice(o.ruleId)
+                            }}
+                            className="shrink-0 text-xs font-semibold rounded-md bg-primary-600 text-white hover:bg-primary-700 px-3 py-1.5 transition disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                          >
+                            {appliedOfferId ? "Switch" : "Apply"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+                {paymentOffers.length > 0 && !isPriceHidden && (
+                  <div className="space-y-2">
+                    {offers.length > 0 && <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-1">Bank &amp; payment offers</h3>}
+                    {paymentOffers.slice(0, 3).map((offer) => (
+                      <BankOfferCard key={offer.id} offer={offer} />
+                    ))}
+                    {paymentOffers.length > 3 && (
+                      <button onClick={() => setShowOffersModal(true)} className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors">
+                        View all {paymentOffers.length} offers
+                      </button>
+                    )}
+                  </div>
+                )}
+                {offers.length === 0 && !(paymentOffers.length > 0 && !isPriceHidden) && (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center gap-1.5 rounded-lg bg-gray-50 border border-dashed border-gray-200 px-4 py-5">
+                    <Tag size={20} className="text-gray-300" />
+                    <p className="text-sm font-medium text-gray-600">No offers available on this product right now</p>
+                    <p className="text-xs text-gray-400">Check back soon for new offers.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
                 </div>
 
             {/* Right column: price + bulk pricing */}
-            <div className="md:col-span-2 lg:col-span-1 space-y-3 min-w-0">
-              <div className="card-base-static p-4 space-y-3">
+            <div className="md:col-span-2 lg:col-span-1 flex flex-col gap-3 min-w-0 lg:self-start lg:sticky lg:top-40">
+              <div className="card-base-static p-3.5 space-y-2.5">
                 {/* Price */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     {isPriceHidden ? (
-                      <span className="text-xl text-gray-500 italic">Contact us for pricing</span>
+                      <span className="text-base text-gray-500 italic">Contact us for pricing</span>
                     ) : (
                       <div className="flex items-baseline gap-2.5 flex-wrap">
-                        <span className="text-3xl sm:text-[34px] font-extrabold text-primary-700 tracking-tight">{formatPrice(shownPrice)}</span>
-                        {strikePrice != null && <span className="text-base sm:text-lg text-gray-400 line-through">{formatPrice(strikePrice)}</span>}
+                        <span className="text-2xl font-extrabold text-primary-700 tracking-tight">{formatPrice(gst(shownPrice))}</span>
+                        {strikePrice != null && <span className="text-sm text-gray-400 line-through">{formatPrice(gst(strikePrice))}</span>}
                       </div>
                     )}
+                    {!isPriceHidden && gstRate > 0 && <p className="text-xs text-gray-500 mt-0.5">{gstLabel(gstRate)}</p>}
                     {!isPriceHidden && headlineLabel && (
                       <span className="inline-block mt-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full" style={{ backgroundColor: role?.color || "#7c3aed", color: getContrastTextColor(role?.color || "#7c3aed") }}>{headlineLabel} Price</span>
                     )}
@@ -552,35 +662,21 @@ export default function ProductDetailPage() {
                     <p className="text-xs text-gray-500">Min quantity - {roleHeadline.roleMinQty}</p>
                     {roleBelowMin && (
                       <p className="text-xs text-amber-600 mt-0.5">
-                        Below {roleHeadline.roleMinQty} units you are charged the retail price of {formatPrice(Number(product.unitPrice))}/unit.
+                        Below {roleHeadline.roleMinQty} units you are charged the retail price of {formatPrice(gst(Number(product.unitPrice)))}/unit.
                       </p>
                     )}
                   </div>
                 )}
 
-                {/* Stock */}
-                <div className="flex items-center justify-between gap-2 text-sm font-semibold">
-                  <span className="inline-flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${isOutOfStock ? "bg-red-500" : "bg-green-500"}`} />
-                    <span className={isOutOfStock ? "text-red-600" : "text-green-600"}>{isOutOfStock ? "Out of Stock" : "In Stock"}</span>
-                  </span>
-                  {isLowStock && <span className="inline-flex items-center gap-1.5 text-xs text-amber-600"><span className="w-2 h-2 rounded-full bg-amber-400" />Only {product.inventoryQuantity} left</span>}
-                </div>
-
-                {/* MOQ */}
-                <div className="flex items-center gap-2.5 rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-3 text-sm font-bold text-gray-700">
-                  <Package size={17} className="text-gray-400" /> MOQ: {roleHeadline?.roleMinQty ?? product.moq} units
-                </div>
-
                 {/* Price warnings */}
                 {isNonPurchasable && (
-                  <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                  <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                     <span className="text-sm text-red-700 font-medium">{nonPurchasableMsg || "This product is not available for purchase"}</span>
                   </div>
                 )}
                 {ruleDiscount && !isPriceHidden && savingsPerUnit === 0 && (
-                  <div className="bg-green-50 border border-green-100 rounded-xl px-4 py-3">
-                    <span className="text-sm text-green-700 font-medium">{ruleDiscount.ruleName}: {ruleDiscount.discountPercent}% off — save {formatPrice(ruleDiscount.discountAmount)}/unit</span>
+                  <div className="bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+                    <span className="text-sm text-green-700 font-medium">{ruleDiscount.ruleName}: {Number(ruleDiscount.discountPercent.toFixed(1))}% off — save {formatPrice(gst(ruleDiscount.discountAmount))}/unit</span>
                   </div>
                 )}
 
@@ -589,25 +685,25 @@ export default function ProductDetailPage() {
                   <PackageConfigurator pkg={packageData} userId={user?.id} />
                 ) : (
                   <>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
                         <button
                           onClick={decrement}
                           disabled={atMin}
                           title={atMin ? `Minimum order quantity is ${product.moq}` : undefined}
-                          className="px-3 sm:px-3.5 py-2.5 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                        ><Minus size={16} /></button>
+                          className="px-2.5 py-2 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        ><Minus size={14} /></button>
                         <input
                           type="number" min={effectiveMinQty} max={effectiveMaxQty} value={quantity}
                           onChange={(e) => setTyped(Number(e.target.value))}
                           onBlur={flush}
                           onKeyDown={(e) => { if (e.key === "Enter") flush() }}
-                          className="w-12 sm:w-16 text-center border-x border-gray-200 py-2.5 text-sm font-medium focus:outline-none"
+                          className="w-12 text-center border-x border-gray-200 py-2 text-sm font-medium focus:outline-none"
                         />
-                        <button onClick={increment} className="px-3 sm:px-3.5 py-2.5 hover:bg-gray-50 transition-colors"><Plus size={16} /></button>
+                        <button onClick={increment} className="px-2.5 py-2 hover:bg-gray-50 transition-colors"><Plus size={14} /></button>
                       </div>
-                      <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < effectiveMinQty || quantity > effectiveMaxQty || isNonPurchasable} className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                        {added ? <><Check size={18} /> Added!</> : adding ? "Adding..." : isNonPurchasable ? (nonPurchasableMsg || "Not Available") : quantity < effectiveMinQty ? "Adjust Quantity" : <><ShoppingCart size={18} /> Add to Cart</>}
+                      <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < effectiveMinQty || quantity > effectiveMaxQty || isNonPurchasable} className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-semibold hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {added ? <><Check size={16} /> Added!</> : adding ? "Adding..." : isNonPurchasable ? (nonPurchasableMsg || "Not Available") : quantity < effectiveMinQty ? "Adjust Quantity" : <><ShoppingCart size={16} /> Add to Cart</>}
                       </button>
                     </div>
                     {quantity < effectiveMinQty && (
@@ -622,9 +718,9 @@ export default function ProductDetailPage() {
                 {!packageData && !isNonPurchasable && (
                   <Link
                     href={`/rfqs/new?productId=${product.id}&quantity=${quantity}`}
-                    className="flex items-center justify-center gap-2 h-12 rounded-xl border border-primary-200 bg-primary-50/60 text-primary-700 hover:bg-primary-50 hover:border-primary-300 transition-all text-sm font-bold"
+                    className="flex items-center justify-center gap-2 h-9 rounded-lg border border-primary-200 bg-primary-50/60 text-primary-700 hover:bg-primary-50 hover:border-primary-300 transition-all text-[13px] font-bold"
                   >
-                    <FileText size={17} /> Add to Quotation
+                    <FileText size={15} /> Add to Quotation
                   </Link>
                 )}
 
@@ -642,58 +738,110 @@ export default function ProductDetailPage() {
                 />
               </div>
 
-              {/* Bulk quantity pricing */}
-              {displayTierPrices.length > 0 && !isPriceHidden && (() => {
-                const sortedTiers = sortTierPrices(displayTierPrices)
+              {/* Bulk quantity pricing — always rendered so the column keeps the same shape */}
+              {!isPriceHidden && !packageData && (() => {
+                const hasTiers = displayTierPrices.length > 0
+                const sortedTiers = hasTiers
+                  ? sortTierPrices(displayTierPrices)
+                  : [{ id: "base", minQty: effectiveMinQty, maxQty: null, price: displayPrice } as TierPrice]
                 return (
-                  <div className="card-base-static p-4">
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <h2 className="flex items-center gap-2.5 font-bold text-gray-900"><Layers size={20} className="text-gray-500" /> Bulk Quantity Pricing</h2>
-                      <span className="text-sm font-semibold text-gray-500">Per Unit</span>
+                  <div className="card-base-static p-3.5 flex flex-col">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900"><Layers size={16} className="text-gray-500" /> Bulk Quantity Pricing</h2>
+                      <span className="text-xs font-semibold text-gray-500">Per Unit</span>
                     </div>
                     {roleTierPrices.length > 0 && (
                       <p className="text-xs text-primary-600 font-medium mb-2 flex items-center gap-1.5">
                         <Layers size={12} /> Special pricing for your account{priceLabel ? ` (${priceLabel})` : ""}
                       </p>
                     )}
-                    <div className="rounded-xl bg-gray-50 border border-gray-100 p-1.5 space-y-1">
+                    <div className="rounded-lg bg-gray-50 border border-gray-100 p-1 space-y-0.5">
                       {sortedTiers.map((tp, idx) => {
-                        const isActive = tp === activeTier
+                        const isActive = hasTiers ? tp === activeTier : true
                         return (
-                          <div key={tp.id ?? `${tp.minQty}-${idx}`} className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive ? "bg-primary-600 text-white font-bold shadow-sm" : "bg-white text-gray-700"}`}>
+                          <div key={tp.id ?? `${tp.minQty}-${idx}`} className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${isActive ? "bg-primary-600 text-white font-bold shadow-sm" : "bg-white text-gray-700"}`}>
                             <span>{tp.minQty}{tp.maxQty ? ` - ${tp.maxQty}` : "+"} units</span>
-                            <span className="font-bold">{formatPrice(Number(tp.price))}</span>
+                            <span className="font-bold">{formatPrice(gst(Number(tp.price)))}</span>
                           </div>
                         )
                       })}
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-2 text-sm">
-                      <span className="text-gray-500">Total for {quantity} units</span>
-                      <span className="font-bold text-gray-900">{formatPrice(totalCost)}</span>
+                    {!hasTiers && <p className="mt-2 text-xs text-gray-400">No bulk discounts on this product — same price at any quantity.</p>}
+                    <div className="mt-3">
+                      <div className="border-t border-gray-100 pt-2.5 space-y-1.5 text-[13px]">
+                        {gstRate > 0 && (
+                          <>
+                            <div className="flex items-center justify-between gap-2 text-gray-500">
+                              <span>{quantity} × {formatPrice(displayPrice)} (excl. GST)</span>
+                              <span className="text-gray-700">{formatPrice(totalCost)}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 text-gray-500">
+                              <span>GST ({Number(gstRate.toFixed(2))}%)</span>
+                              <span className="text-gray-700">{formatPrice(gst(totalCost) - totalCost)}</span>
+                            </div>
+                          </>
+                        )}
+                        <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-gray-100">
+                          <span className="font-semibold text-gray-700">Total for {quantity} units{gstRate > 0 ? " (incl. GST)" : ""}</span>
+                          <span className="text-base font-bold text-primary-700">{formatPrice(gst(totalCost))}</span>
+                        </div>
+                        {totalSavings > 0 && <p className="text-xs font-semibold text-green-600 text-right">You save {formatPrice(gst(totalSavings))}</p>}
+                      </div>
                     </div>
-                    {totalSavings > 0 && <p className="mt-1 text-xs font-semibold text-green-600 text-right">You save {formatPrice(totalSavings)}</p>}
                   </div>
                 )
               })()}
 
-              <div className="md:hidden card-base-static p-4">{detailsTable}</div>
             </div>
           </div>
 
-          {/* Description + Reviews */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 mt-3 lg:mt-4 items-stretch">
-            <div className="card-base-static p-4 sm:p-5 min-w-0 h-full">
-              <h2 className="heading-sm">Description</h2>
-              <span className="block mt-1.5 mb-3 h-0.5 w-10 rounded bg-primary-600" />
+          {/* Trust strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-3 mt-3">
+            {trustItems.map((t) => (
+              <div key={t.title} className="card-base-static flex items-center gap-3 p-3">
+                <span className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center ${t.tint}`}><t.icon size={18} /></span>
+                <div className="min-w-0"><p className="text-[13px] font-bold text-gray-900">{t.title}</p><p className="text-[11px] text-gray-500">{t.sub}</p></div>
+              </div>
+            ))}
+          </div>
+
+          {/* Description | Reviews */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 items-stretch">
+            <div className="card-base-static p-3.5 min-w-0 h-full flex flex-col">
+              <h2 className="text-base font-bold text-gray-900">Description</h2>
+              <span className="block mt-1 mb-2.5 h-0.5 w-8 rounded bg-primary-600" />
               {product.description ? (
-                <p className="text-gray-600 whitespace-pre-line leading-relaxed text-sm sm:text-base">{product.description}</p>
+                <p className="text-gray-600 whitespace-pre-line leading-relaxed text-[13px]">{product.description}</p>
               ) : (
                 <p className="text-gray-400 text-sm">No description provided.</p>
               )}
+              {/* Specifications — real product data, keeps this card as full as the Reviews card */}
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Specifications</h3>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-[13px]">
+                  {[
+                    ...(product.sku ? [["SKU", product.sku] as [string, string]] : []),
+                    ...(product.category ? [["Category", product.category.name] as [string, string]] : []),
+                    ...(product.vendorName ? [["Seller", product.vendorName] as [string, string]] : []),
+                    ["Min. order quantity", `${roleHeadline?.roleMinQty ?? product.moq} units`] as [string, string],
+                    ["Stock", isOutOfStock ? "Out of stock" : `${product.inventoryQuantity} units`] as [string, string],
+                    ...(gstRate > 0 ? [["GST", `${Number(gstRate.toFixed(2))}% (included in price)`] as [string, string]] : []),
+                    ...metaSpecs,
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-3 border-b border-gray-50 pb-1.5">
+                      <dt className="text-gray-500">{k}</dt>
+                      <dd className="font-medium text-gray-800 text-right break-words min-w-0">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              {product.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-auto pt-3 border-t border-gray-100">{product.tags.map((tag) => <span key={tag} className="badge bg-gray-100 text-gray-600">{tag}</span>)}</div>
+              )}
             </div>
-            <div className="min-w-0">
+
               {/* Reviews */}
-              <div className="card-base-static p-4 sm:p-5 h-full">
+              <div className="card-base-static p-3.5 h-full min-w-0 flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                   <div><h2 className="heading-sm">Reviews ({product.reviewCount})</h2><span className="block mt-1.5 h-0.5 w-10 rounded bg-primary-600" /></div>
                   {!userHasReviewed && localStorage.getItem("token") && !showReviewForm && (
@@ -737,154 +885,27 @@ export default function ProductDetailPage() {
                 )}
 
                 {product.reviews.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
                     {product.reviews.map((review) => (
                       <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
                         <div className="flex items-center gap-2 mb-1">
                           <div className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={14} fill={i <= review.rating ? "currentColor" : "none"} className={i <= review.rating ? "text-amber-400" : "text-gray-200"} />)}</div>
                           <span className="text-sm font-medium text-gray-900">{review.user.firstName || "Anonymous"} {review.user.lastName || ""}</span>
                         </div>
-                        {review.title && <h4 className="font-semibold text-gray-900 mt-1">{review.title}</h4>}
-                        {review.body && <p className="text-gray-600 text-sm mt-1 leading-relaxed">{review.body}</p>}
+                        {review.title && <h4 className="font-semibold text-sm text-gray-900 mt-1">{review.title}</h4>}
+                        {review.body && <p className="text-gray-600 text-[13px] mt-1 leading-relaxed">{review.body}</p>}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8">
+                  <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
                     <MessageSquare size={36} className="mx-auto text-gray-200 mb-3" />
                     <p className="text-gray-400">No reviews yet. Be the first to review!</p>
                   </div>
                 )}
               </div>
-            </div>
           </div>
 
-          {/* Trust strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 mt-3 lg:mt-4">
-            {trustItems.map((t) => (
-              <div key={t.title} className="card-base-static flex items-center gap-3.5 p-3.5 sm:p-4">
-                <span className={`w-12 h-12 shrink-0 rounded-xl flex items-center justify-center ${t.tint}`}><t.icon size={22} /></span>
-                <div className="min-w-0"><p className="text-sm font-bold text-gray-900">{t.title}</p><p className="text-xs text-gray-500">{t.sub}</p></div>
-              </div>
-            ))}
-          </div>
-
-          {/* Offers, pricing details, bank offers and tags */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 mt-3 lg:mt-4 items-start empty:hidden">
-            <div className="lg:col-span-8 space-y-3 min-w-0 empty:hidden">
-                {/* Available Offers */}
-                {hasOffers && (
-                  <CollapsibleSection title="Available Offers">
-                    <div className="space-y-3">
-                      {productBogo.map((b, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-pink-50">
-                          <Gift size={16} className="text-pink-600 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-medium text-pink-800">Buy {b.buyQuantity}, Get {b.freeQuantity} Free</p>
-                            <p className="text-xs text-pink-600">{b.ruleName}</p>
-                          </div>
-                        </div>
-                      ))}
-                      {productQtyDiscount && (
-                        <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-50">
-                          <Layers size={16} className="text-cyan-600 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-medium text-cyan-800">{productQtyDiscount.ruleName}</p>
-                            <div className="space-y-0.5 mt-1">
-                              {[...productQtyDiscount.tiers].sort((a, b) => a.minQty - b.minQty).map((tier, i) => (
-                                <p key={i} className="text-xs text-cyan-700">{tier.minQty}+ units: {tier.discountType === "PERCENTAGE" ? `${tier.discountValue}% off` : `${formatPrice(tier.discountValue)} off`}</p>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      {productExtraCharges.map((ec, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-amber-50">
-                          <PlusCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-medium text-amber-800">{ec.chargeLabel}: {formatPrice(ec.chargeAmount)}</p>
-                            <p className="text-xs text-amber-600">{ec.ruleName}</p>
-                          </div>
-                        </div>
-                      ))}
-                      {productShipping && (
-                        <div className="flex items-start gap-3 p-3 rounded-lg bg-orange-50">
-                          <Truck size={16} className="text-orange-600 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-medium text-orange-800">{productShipping.ruleName}</p>
-                            <p className="text-xs text-orange-600">Shipping: {productShipping.cost > 0 ? formatPrice(productShipping.cost) : "Free"}</p>
-                          </div>
-                        </div>
-                      )}
-                      {productTaxes.map((tax, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
-                          <AlertTriangle size={16} className="text-gray-500 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">{tax.taxLabel}: {tax.taxRate}%</p>
-                            <p className="text-xs text-gray-500">{tax.ruleName}</p>
-                          </div>
-                        </div>
-                      ))}
-                      {minQtyRule && <p className="text-sm text-amber-700 flex items-center gap-1"><AlertTriangle size={14} /> Minimum order: {minQtyRule.minQty} units</p>}
-                      {maxQtyRule && <p className="text-sm text-red-700 flex items-center gap-1"><AlertTriangle size={14} /> Maximum order: {maxQtyRule.maxQty} units</p>}
-                    </div>
-                  </CollapsibleSection>
-                )}
-
-                {/* Pricing Details */}
-                {hasPricingInfo && (
-                  <CollapsibleSection title="Pricing Details">
-                    <div className="space-y-2">
-                      {pricingIsCurrent && pricing!.appliedRule === "role" && pricing!.rolePrice != null && (
-                        <p className="text-sm text-purple-700 font-medium">Your {pricing!.appliedRoleName} Price: {formatPrice(pricing!.rolePrice)}/unit <span className="font-normal text-purple-500">{pricing!.rolePrice < pricing!.basePrice ? `(saved ${formatPrice(pricing!.basePrice - pricing!.rolePrice)}/unit)` : ""}</span></p>
-                      )}
-                      {pricingIsCurrent && pricing!.appliedRule === "contract" && pricing!.contractPrice != null && (
-                        <p className="text-sm text-blue-700 font-medium">Contract Price: {formatPrice(pricing!.contractPrice)}/unit <span className="font-normal text-blue-500">{pricing!.contractPrice < pricing!.basePrice ? `(saved ${formatPrice(pricing!.basePrice - pricing!.contractPrice)}/unit)` : ""}</span></p>
-                      )}
-                      {pricingIsCurrent && (pricing?.seasonalDiscount ?? 0) > 0 && (
-                        <p className="text-sm text-orange-700 font-medium">Seasonal Discount: -{formatPrice(pricing!.seasonalDiscount)}/unit ({pricing!.discountPercent.toFixed(1)}% off)</p>
-                      )}
-                      {ruleDiscount && (
-                        <p className="text-sm text-green-700 font-medium">{ruleDiscount.ruleName}: {ruleDiscount.discountPercent}% off — save {formatPrice(ruleDiscount.discountAmount)}/unit</p>
-                      )}
-                      {pricingIsCurrent && pricing!.appliedDiscounts && pricing!.appliedDiscounts.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {pricing!.appliedDiscounts.map((d, i) => (
-                            <span key={i} className="badge badge-primary">{d}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </CollapsibleSection>
-                )}
-            </div>
-            <div className="lg:col-span-4 space-y-3 min-w-0 empty:hidden">
-              {/* Bank & UPI Offers — shown directly below price, Amazon/Flipkart style */}
-              {paymentOffers.length > 0 && !isPriceHidden && (
-                <div className="border border-gray-100 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Bank Offers</span>
-                    <button onClick={() => setShowOffersModal(true)} className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors">
-                      View All Offers
-                    </button>
-                  </div>
-                  <div className="p-3 space-y-2.5">
-                    {paymentOffers.slice(0, 3).map((offer) => (
-                      <BankOfferCard key={offer.id} offer={offer} />
-                    ))}
-                  </div>
-                  {paymentOffers.length > 3 && (
-                    <button onClick={() => setShowOffersModal(true)} className="w-full text-center py-2.5 text-xs font-semibold text-primary-600 hover:bg-primary-50 border-t border-gray-100 transition-colors">
-                      +{paymentOffers.length - 3} more offer{paymentOffers.length - 3 !== 1 ? "s" : ""}
-                    </button>
-                  )}
-                </div>
-              )}
-              {product.tags.length > 0 && (
-                <div className="card-base-static p-4 flex flex-wrap gap-2">{product.tags.map((tag) => <span key={tag} className="badge bg-gray-100 text-gray-600">{tag}</span>)}</div>
-              )}
-            </div>
-          </div>
           {/* Related Products */}
           {related.length > 0 && (
             <div className="mt-12">

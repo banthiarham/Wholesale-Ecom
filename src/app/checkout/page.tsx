@@ -1,5 +1,6 @@
 "use client"
 
+import { isFreeItem, freeLinesFor } from "@/lib/freeItems"
 import { useEffect, useState, useMemo, useRef, Fragment } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -1041,29 +1042,26 @@ export default function CheckoutPage() {
             <div className="card-base-static p-6">
               <h2 className="font-bold text-gray-900 mb-4">Order Summary</h2>
               <div className="space-y-2 text-sm mb-4">
-                {cart.cart.items.map((item) => {
+                {cart.cart.items.filter((item) => !isFreeItem(item)).map((item) => {
                   const disc = ruleProductDiscountMap.get(item.product.id)
                   const unitPrice = disc ? Number(item.unitPrice) - disc.discountAmount : Number(item.unitPrice)
+                  const free = freeLinesFor(cart.cart.items, item.product.id).filter((f) => f.quantity > 0)
                   return (
-                    <div key={item.id} className="flex justify-between">
-                      <span className="text-gray-600">{item.product.title} x{item.quantity}</span>
-                      <span className="font-medium">{formatPrice(calcLineTotal(unitPrice, item.quantity))}</span>
+                    <div key={item.id}>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">{item.product.title} x{item.quantity}</span>
+                        <span className="font-medium">{formatPrice(calcLineTotal(unitPrice, item.quantity))}</span>
+                      </div>
+                      {free.map((f, i) => (
+                        <div key={i} className="mt-1 flex items-center justify-between gap-2 text-xs text-pink-700">
+                          <span className="flex min-w-0 items-center gap-1.5"><Gift size={11} className="shrink-0" /><span className="truncate">{f.title} x{f.quantity} · {f.ruleName}</span></span>
+                          <span className="shrink-0 font-bold uppercase tracking-wide">Free</span>
+                        </div>
+                      ))}
                     </div>
                   )
                 })}
               </div>
-
-              {/* BOGO free items */}
-              {bogo.length > 0 && (
-                <div className="mb-2 space-y-1">
-                  {bogo.map((b, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span className="text-pink-600 font-medium flex items-center gap-1"><Gift size={12} /> FREE x{b.freeQuantity} ({b.ruleName})</span>
-                      <span className="text-pink-600 font-medium">{formatPrice(0)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
 
               <hr className="my-4" />
               <div className="space-y-2 text-sm">

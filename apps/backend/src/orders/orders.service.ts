@@ -153,11 +153,12 @@ export class OrdersService {
 
     // Enforce dynamic rules before creating the order
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const cartItemsContext: CartItemContext[] = cart.items.map((item) => ({
+    const cartItemsContext: CartItemContext[] = cart.items.filter((item: any) => item.metadata?.bogo !== true).map((item) => ({
       productId: item.productId,
       categoryId: item.product?.categoryId || undefined,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
+      offerChoice: ((item as any).metadata as any)?.offerChoice || undefined,
     }));
 
     const ruleResult = await this.rulesEnforcement.enforceOrderRules({

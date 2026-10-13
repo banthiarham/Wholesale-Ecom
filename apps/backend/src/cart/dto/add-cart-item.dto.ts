@@ -14,4 +14,9 @@ export class AddCartItemDto {
   @IsOptional()
   @IsString()
   userId?: string;
+
+  /** Offer the shopper picked for this product: a rule id, or "none". */
+  @IsOptional()
+  @IsString()
+  offerChoice?: string;
 }

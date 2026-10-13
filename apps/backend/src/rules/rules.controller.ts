@@ -33,6 +33,30 @@ export class RulesController {
     private readonly settingsService: SettingsService,
   ) {}
 
+  @Get('product-offers')
+  @ApiOperation({ summary: 'Offers available on a product and the one currently applied (public)' })
+  @ApiQuery({ name: 'productId', required: true })
+  @ApiQuery({ name: 'quantity', required: false })
+  @ApiQuery({ name: 'choice', required: false, description: 'Rule id the shopper picked, or "none"' })
+  async productOffers(
+    @Query('productId') productId: string,
+    @Query('quantity') quantity?: string,
+    @Query('choice') choice?: string,
+  ) {
+    const qty = quantity ? parseInt(quantity, 10) : undefined;
+    return this.rulesEngine.getProductOffers({
+      productId,
+      quantity: Number.isFinite(qty as number) ? qty : undefined,
+      offerChoice: choice || undefined,
+    });
+  }
+
+  @Get('tax-rates')
+  @ApiOperation({ summary: 'Active GST rules (public) — lets the storefront show GST-inclusive prices' })
+  async taxRates() {
+    return { rules: await this.rulesEngine.getPublicTaxRates() };
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

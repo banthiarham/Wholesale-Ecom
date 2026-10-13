@@ -3,12 +3,14 @@
 import { useState, useEffect, useMemo } from "react"
 import { useAuth } from "@/lib/auth"
 import { StorefrontRulesResult, emptyStorefrontRules } from "./types"
+import { getOfferChoice, useOfferChoicesVersion } from "@/lib/offerChoices"
 
 interface CartItemContext {
   productId: string
   categoryId?: string
   quantity: number
   unitPrice: number
+  offerChoice?: string
 }
 
 export interface UseStorefrontRulesOptions {
@@ -40,7 +42,9 @@ export function useStorefrontRules(
 
   // Create a stable string key from product IDs for the useEffect dependency
   const productsKey = products.map((p) => p.id).join(",")
-  const optionsKey = `${options?.paymentMethod ?? ""}|${options?.shippingRegion ?? ""}`
+  // Re-evaluate when a shopper picks a different offer for any product.
+  const choicesVersion = useOfferChoicesVersion()
+  const optionsKey = `${options?.paymentMethod ?? ""}|${options?.shippingRegion ?? ""}|${choicesVersion}`
 
   useEffect(() => {
     if (authLoading || !user || products.length === 0) {
@@ -57,6 +61,7 @@ export function useStorefrontRules(
       categoryId: p.categoryId,
       quantity,
       unitPrice: p.unitPrice,
+      offerChoice: getOfferChoice(p.id),
     }))
 
     const subtotal = cartItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)

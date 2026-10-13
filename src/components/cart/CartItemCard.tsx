@@ -1,5 +1,7 @@
 "use client"
 
+import { freeQuantityFor, type FreeLine } from "@/lib/freeItems"
+import FreeItemLine from "@/components/cart/FreeItemLine"
 import { Minus, Plus, Trash2, Link as LinkIcon, Tag, Gift, Layers, AlertTriangle, Loader2 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -23,12 +25,13 @@ interface Props {
   updating: boolean
   ruleProductDiscount?: RuleProductDiscount | null
   bogoOffers?: BogoOffer[]
+  freeLines?: FreeLine[]
   quantityDiscount?: QuantityDiscount | null
   minQtyRule?: { minQty: number; ruleName: string } | null
   maxQtyRule?: { maxQty: number; ruleName: string } | null
 }
 
-export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleProductDiscount, bogoOffers, quantityDiscount, minQtyRule, maxQtyRule }: Props) {
+export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleProductDiscount, bogoOffers, freeLines = [], quantityDiscount, minQtyRule, maxQtyRule }: Props) {
   // Shared stepper: reseeds from the server-confirmed item.quantity whenever it changes,
   // steps by exactly 1 via functional state updates, and debounces the commit to onUpdate.
   const { qty, increment, decrement, setTyped, flush, atMin } = useQuantityStepper(
@@ -149,8 +152,13 @@ export default function CartItemCard({ item, onUpdate, onRemove, updating, ruleP
             </div>
           </div>
 
+          {/* Free items earned by this product: shown here, never as editable rows */}
+          {freeLines.map((f, i) => (
+            <FreeItemLine key={i} line={f} paidQuantity={qty} />
+          ))}
+
           {/* BOGO */}
-          {bogoOffers && bogoOffers.length > 0 && (
+          {bogoOffers && bogoOffers.length > 0 && freeLines.every((f) => freeQuantityFor(f, qty) <= 0) && (
             <div className="mt-2.5 flex items-center gap-2 px-3 py-2 bg-pink-50 rounded-xl">
               <Gift size={14} className="text-pink-500 shrink-0" />
               <p className="text-xs text-pink-700"><span className="font-semibold">BOGO:</span> Buy {bogoOffers[0].buyQuantity}, Get {bogoOffers[0].freeQuantity} Free ({bogoOffers[0].ruleName})</p>

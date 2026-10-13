@@ -164,6 +164,7 @@ export class CartService {
             where: { id: existingBogoItem.id },
             data: {
               quantity: applicableFreeQty,
+              metadata: { ...((existingBogoItem.metadata as any) || {}), buyQuantity: bogo.buyQuantity },
             },
           });
         } else {
@@ -178,6 +179,7 @@ export class CartService {
                 bogo: true,
                 bogoRuleName: bogo.ruleName,
                 buyProductId: bogo.buyProductId,
+                buyQuantity: bogo.buyQuantity,
                 freeProductId: bogo.freeProductId,
                 freeQuantity: bogo.freeQuantity || 1,
               },
@@ -277,6 +279,7 @@ export class CartService {
     packageGroupId?: string,
     packageMetadata?: any,
     userRole?: string,
+    offerChoice?: string,
   ) {
     const cart = await this.getOrCreateCart(userId, sessionId);
     const product = await this.prisma.product.findUnique({
@@ -296,16 +299,20 @@ export class CartService {
     // Evaluate dynamic rules — block non-purchasable products and max quantity violations
     // Build the prospective cart items context including the new item
     const existingItem = cart.items.find(
-      (item) => item.productId === productId && (item as any).packageGroupId === (packageGroupId || null),
+      (item) =>
+        item.productId === productId &&
+        (item as any).packageGroupId === (packageGroupId || null) &&
+        (item.metadata as any)?.bogo !== true,
     );
 
-    const prospectiveCartItems: CartItemContext[] = cart.items.map((item) => ({
+    const prospectiveCartItems: CartItemContext[] = cart.items.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((item) => ({
       productId: item.productId,
       categoryId: (item as any).product?.categoryId || undefined,
       quantity: item.productId === productId
         ? (existingItem ? existingItem.quantity + quantity : quantity)
         : item.quantity,
       unitPrice: Number(item.unitPrice),
+      offerChoice: (item.metadata as any)?.offerChoice || undefined,
     }));
 
     // Add the new item if not already in cart
@@ -315,6 +322,7 @@ export class CartService {
         categoryId: product.categoryId || undefined,
         quantity,
         unitPrice: Number(product.unitPrice),
+        offerChoice,
       });
     }
 
@@ -355,7 +363,7 @@ export class CartService {
         data: {
           quantity: newQuantity,
           unitPrice: newPricing.finalPrice,
-          metadata: { pricing: newPricing },
+          metadata: { pricing: newPricing, ...(offerChoice || (existingItem.metadata as any)?.offerChoice ? { offerChoice: offerChoice || (existingItem.metadata as any)?.offerChoice } : {}) },
         },
       });
     } else {
@@ -365,7 +373,7 @@ export class CartService {
           productId,
           quantity,
           unitPrice: pricing.finalPrice,
-          metadata: packageMetadata || { pricing },
+          metadata: packageMetadata || { pricing, ...(offerChoice ? { offerChoice } : {}) },
           packageGroupId: packageGroupId || null,
         },
       });
@@ -384,6 +392,8 @@ export class CartService {
     });
 
     if (!item) throw new BadRequestException('Cart item not found');
+    if ((item.metadata as any)?.bogo === true)
+      throw new BadRequestException('Free items follow the offer and cannot be edited');
     if (quantity < item.product.moq)
       throw new BadRequestException(
         `Minimum order quantity is ${item.product.moq}`,
@@ -410,11 +420,12 @@ export class CartService {
       });
 
       if (cart) {
-        const cartItemsContext: CartItemContext[] = cart.items.map((ci) => ({
+        const cartItemsContext: CartItemContext[] = cart.items.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((ci) => ({
           productId: ci.productId,
           categoryId: (ci as any).product?.categoryId || undefined,
           quantity: ci.id === itemId ? quantity : ci.quantity,
           unitPrice: Number(ci.unitPrice),
+          offerChoice: (ci.metadata as any)?.offerChoice || undefined,
         }));
 
         const subtotal = cartItemsContext.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
@@ -428,6 +439,9 @@ export class CartService {
 
         // Update BOGO free items after quantity change
         await this.applyBogoFreeItems(cartUserId, userRole, cartItemsContext, subtotal, cart.id);
+        // Lowering the quantity can drop below the offer's buy quantity — remove (or trim)
+        // free items that no longer qualify, otherwise they would stay in the cart.
+        await this.cleanupStaleBogoItems(cartUserId, userRole, cartItemsContext, subtotal, cart.id);
       }
     }
 
@@ -442,7 +456,7 @@ export class CartService {
       data: {
         quantity,
         unitPrice: pricing.finalPrice,
-        metadata: { pricing },
+        metadata: { pricing, ...((item.metadata as any)?.offerChoice ? { offerChoice: (item.metadata as any).offerChoice } : {}) },
       },
     });
 
@@ -450,6 +464,38 @@ export class CartService {
       item.cart.userId || undefined,
       item.cart.sessionId || undefined,
     );
+  }
+
+  /**
+   * Remember which offer the shopper picked for a product (a rule id, or "none"), then
+   * re-sync BOGO free items so only the chosen offer's free goods stay in the cart.
+   */
+  async setOfferChoice(productId: string, choice: string, userId?: string, sessionId?: string, userRole?: string) {
+    const cart = await this.getOrCreateCart(userId, sessionId);
+    const items = await this.prisma.cartItem.findMany({ where: { cartId: cart.id, productId } });
+    const buyItems = items.filter((i) => (i.metadata as any)?.bogo !== true);
+    if (buyItems.length === 0) return cart;
+
+    for (const it of buyItems) {
+      const meta = ((it.metadata as any) || {}) as Record<string, any>;
+      await this.prisma.cartItem.update({
+        where: { id: it.id },
+        data: { metadata: { ...meta, offerChoice: choice } },
+      });
+    }
+
+    const fresh = await this.prisma.cartItem.findMany({ where: { cartId: cart.id }, include: { product: { select: { categoryId: true } } } });
+    const ctx: CartItemContext[] = fresh.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((ci: any) => ({
+      productId: ci.productId,
+      categoryId: ci.product?.categoryId || undefined,
+      quantity: ci.quantity,
+      unitPrice: Number(ci.unitPrice),
+      offerChoice: (ci.metadata as any)?.offerChoice || undefined,
+    }));
+    const subtotal = ctx.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+    await this.applyBogoFreeItems(userId, userRole, ctx, subtotal, cart.id);
+    await this.cleanupStaleBogoItems(userId, userRole, ctx, subtotal, cart.id);
+    return this.getOrCreateCart(userId, sessionId);
   }
 
   async removeItem(itemId: string) {
@@ -480,11 +526,13 @@ export class CartService {
     if (cart) {
       const cartItemsContext: CartItemContext[] = cart.items
         .filter((ci) => ci.id !== item.id) // exclude the removed item
+        .filter(((x: any) => (x.metadata as any)?.bogo !== true)) // free goods never count towards an offer's buy quantity
         .map((ci) => ({
           productId: ci.productId,
           categoryId: (ci as any).product?.categoryId || undefined,
           quantity: ci.quantity,
           unitPrice: Number(ci.unitPrice),
+          offerChoice: (ci.metadata as any)?.offerChoice || undefined,
         }));
       const subtotal = cartItemsContext.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
       await this.cleanupStaleBogoItems(cartUserId, undefined, cartItemsContext, subtotal, cart.id);
@@ -573,15 +621,16 @@ export class CartService {
       0,
     );
     const itemCount = cart.items.reduce(
-      (sum: number, item: any) => sum + item.quantity,
+      (sum: number, item: any) => sum + (item.metadata?.bogo === true ? 0 : item.quantity),
       0,
     );
 
-    const cartItems: CartItemContext[] = cart.items.map((item: any) => ({
+    const cartItems: CartItemContext[] = cart.items.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((item: any) => ({
       productId: item.productId,
       categoryId: item.product?.categoryId || undefined,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
+      offerChoice: (item.metadata as any)?.offerChoice || undefined,
     }));
 
     const settings = await this.settingsService.findAll();
