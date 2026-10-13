@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Shield, User, Ban, Trash2, X, Plus, Upload } from "lucide-react"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { getContrastTextColor } from "@/lib/utils"
@@ -39,6 +40,7 @@ const BUILTIN_ROLE_OPTIONS = [
 ]
 
 export default function AdminUsersPage() {
+  const router = useRouter()
   const [users, setUsers] = useState<UserData[]>([])
   const [roles, setRoles] = useState<RoleData[]>([])
   const [loading, setLoading] = useState(true) // first load only (skeleton)
@@ -66,11 +68,18 @@ export default function AdminUsersPage() {
     email: "",
     password: "",
     phone: "",
-    role: "BUYER",
+    role: "enum:BUYER",
     status: "ACTIVE",
     companyName: "",
     companyAddress: "",
     taxId: "",
+    organizationName: "",
+    contactPersonName: "",
+    gstin: "",
+    panNumber: "",
+    city: "",
+    state: "",
+    pincode: "",
   })
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
@@ -194,7 +203,7 @@ export default function AdminUsersPage() {
   }
 
   const resetAddForm = () => {
-    setAddForm({ firstName: "", lastName: "", email: "", password: "", phone: "", role: "BUYER", status: "ACTIVE", companyName: "", companyAddress: "", taxId: "" })
+    setAddForm({ firstName: "", lastName: "", email: "", password: "", phone: "", role: "enum:BUYER", status: "ACTIVE", companyName: "", companyAddress: "", taxId: "", organizationName: "", contactPersonName: "", gstin: "", panNumber: "", city: "", state: "", pincode: "" })
     setAddError("")
   }
 
@@ -228,16 +237,18 @@ export default function AdminUsersPage() {
         email: addForm.email.trim(),
         firstName: addForm.firstName.trim(),
         lastName: addForm.lastName.trim(),
-        role: addForm.role,
         status: addForm.status,
       }
+      // "enum:X" = built-in role (sent as the legacy enum); anything else is a custom role id.
+      if (addForm.role.startsWith("enum:")) body.role = addForm.role.slice(5)
+      else body.roleId = addForm.role
+      const optional = ["organizationName", "contactPersonName", "gstin", "panNumber", "city", "state", "pincode"] as const
+      for (const k of optional) if (addForm[k].trim()) body[k] = addForm[k].trim()
       if (addForm.password) body.password = addForm.password
       if (addForm.phone) body.phone = addForm.phone.trim()
       if (addForm.companyName) body.companyName = addForm.companyName.trim()
       if (addForm.companyAddress) body.companyAddress = addForm.companyAddress.trim()
       if (addForm.taxId) body.taxId = addForm.taxId.trim()
-      const matchedRole = roles.find((r) => r.name === addForm.role)
-      if (matchedRole) body.roleId = matchedRole.id
 
       const res = await fetch("/api/users", {
         method: "POST",
@@ -382,13 +393,17 @@ export default function AdminUsersPage() {
                   </tr>
                 )}
                 {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                  <tr
+                    key={u.id}
+                    onClick={() => router.push(`/admin/users/${u.id}`)}
+                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 flex items-center justify-center text-xs font-bold">
                           {u.firstName?.[0]}{u.lastName?.[0]}
                         </div>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">{u.firstName} {u.lastName}</span>
+                        <Link href={`/admin/users/${u.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400">{u.firstName} {u.lastName}</Link>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{u.email}</td>
@@ -411,7 +426,7 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{new Date(u.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => { setModalUser(u); setModalAction("role") }}
                           className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 rounded hover:bg-primary-50 dark:hover:bg-primary-900/30"
@@ -603,10 +618,21 @@ export default function AdminUsersPage() {
                 <input type="tel" value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">GSTIN</label>
+                <input type="text" value={addForm.gstin} onChange={(e) => setAddForm((f) => ({ ...f, gstin: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">PAN</label>
+                <input type="text" value={addForm.panNumber} onChange={(e) => setAddForm((f) => ({ ...f, panNumber: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+              </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
                   <select value={addForm.role} onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm">
-                    {roles.map((r) => <option key={r.id} value={r.name}>{r.label}</option>)}
+                    {BUILTIN_ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    {roles.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -625,9 +651,31 @@ export default function AdminUsersPage() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Company Address</label>
                 <input type="text" value={addForm.companyAddress} onChange={(e) => setAddForm((f) => ({ ...f, companyAddress: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
               </div>
+              <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">City</label>
+                <input type="text" value={addForm.city} onChange={(e) => setAddForm((f) => ({ ...f, city: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
+                <input type="text" value={addForm.state} onChange={(e) => setAddForm((f) => ({ ...f, state: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pincode</label>
+                <input type="text" value={addForm.pincode} onChange={(e) => setAddForm((f) => ({ ...f, pincode: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+              </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tax ID</label>
                 <input type="text" value={addForm.taxId} onChange={(e) => setAddForm((f) => ({ ...f, taxId: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Organization</label>
+                <input type="text" value={addForm.organizationName} onChange={(e) => setAddForm((f) => ({ ...f, organizationName: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact Person</label>
+                <input type="text" value={addForm.contactPersonName} onChange={(e) => setAddForm((f) => ({ ...f, contactPersonName: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition" disabled={addSubmitting}>Cancel</button>
