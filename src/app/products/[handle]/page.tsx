@@ -128,11 +128,36 @@ export default function ProductDetailPage() {
   const [offerChoice, setOfferChoice] = useOfferChoice(product?.id)
   const [offers, setOffers] = useState<ProductOfferInfo[]>([])
   const [appliedOfferId, setAppliedOfferId] = useState<string | null>(null)
+  // Units of this product already in the cart (any variant, free items excluded). They count
+  // towards an offer's "Buy N" condition together with the quantity chosen on this page.
+  const [inCartQty, setInCartQty] = useState(0)
+  useEffect(() => {
+    if (!product?.id) return
+    const productId = product.id
+    let cancelled = false
+    const load = () => {
+      const token = localStorage.getItem("token")
+      const headers: Record<string, string> = { "x-session-id": getCartSessionId() }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+      fetch("/api/cart", { headers, cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (cancelled || !d) return
+          const items: any[] = d.cart?.items || []
+          setInCartQty(items.filter((i) => i.productId === productId && i.metadata?.bogo !== true).reduce((sum, i) => sum + (i.quantity || 0), 0))
+        })
+        .catch(() => {})
+    }
+    load()
+    window.addEventListener("cart-updated", load)
+    return () => { cancelled = true; window.removeEventListener("cart-updated", load) }
+  }, [product?.id])
   useEffect(() => {
     if (!product?.id) return
     let cancelled = false
     const t = setTimeout(() => {
       const qs = new URLSearchParams({ productId: product.id, quantity: String(quantity) })
+      if (inCartQty > 0) qs.set("inCart", String(inCartQty))
       if (offerChoice) qs.set("choice", offerChoice)
       fetch(`/api/rules/product-offers?${qs.toString()}`)
         .then((r) => (r.ok ? r.json() : { offers: [], appliedId: null }))
@@ -149,7 +174,7 @@ export default function ProductDetailPage() {
         .catch(() => {})
     }, 200)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [product?.id, quantity, offerChoice])
+  }, [product?.id, quantity, offerChoice, inCartQty])
   const ruleDiscount = productDiscounts?.find((d) => d.productId === product?.id) ?? null
   const productBogo = bogo.filter((b) => b.buyProductId === product?.id)
   const productQtyDiscount = quantityDiscounts.find((qd) => qd.productId === product?.id)

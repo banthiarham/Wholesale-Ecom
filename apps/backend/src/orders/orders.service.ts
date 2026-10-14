@@ -185,6 +185,26 @@ export class OrdersService {
       sellerState: await this.getSellerState(),
     });
 
+    // Free (buy X get Y) lines are only ordered as far as the offer still allows right now: an
+    // offer that expired, was switched off, or whose buy quantity is no longer met since the cart
+    // was last updated must not ship free goods.
+    const freeAllowance = new Map<string, number>();
+    for (const b of ruleResult.bogo || []) {
+      const bought = cartItemsContext.filter((i) => i.productId === b.buyProductId).reduce((sum, i) => sum + i.quantity, 0);
+      const key = `${b.ruleName}|${b.freeProductId}`;
+      freeAllowance.set(key, Math.max(freeAllowance.get(key) || 0, Math.floor(bought / b.buyQuantity) * (b.freeQuantity || 1)));
+    }
+    for (let i = orderItemsData.length - 1; i >= 0; i--) {
+      const meta = (orderItemsData[i].metadata || {}) as any;
+      if (meta.bogo !== true) continue;
+      const key = `${meta.bogoRuleName}|${orderItemsData[i].productId}`;
+      const left = freeAllowance.get(key) || 0;
+      const qty = Math.min(orderItemsData[i].quantity, left);
+      freeAllowance.set(key, left - qty);
+      if (qty <= 0) orderItemsData.splice(i, 1);
+      else orderItemsData[i] = { ...orderItemsData[i], quantity: qty, totalPrice: Number(orderItemsData[i].unitPrice) * qty };
+    }
+
     // Apply coupon discount if provided
     let couponDiscount = 0;
     let appliedCoupon: any = null;

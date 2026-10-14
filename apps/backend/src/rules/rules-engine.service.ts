@@ -12,6 +12,8 @@ export interface CartItemContext {
    * is ever applied.
    */
   offerChoice?: string;
+  /** Variant of this cart line (products with variants have one line per variant). */
+  variantId?: string;
 }
 
 export interface ProductOffer {
@@ -209,7 +211,7 @@ export class RulesEngineService {
   }
 
   /** Public: the offers shown on a product page and which one is currently applied. */
-  async getProductOffers(params: { productId: string; quantity?: number; offerChoice?: string }) {
+  async getProductOffers(params: { productId: string; quantity?: number; offerChoice?: string; inCart?: number }) {
     const product = await this.prisma.product.findUnique({
       where: { id: params.productId },
       select: { id: true, categoryId: true, unitPrice: true, moq: true },
@@ -219,7 +221,8 @@ export class RulesEngineService {
     const item: CartItemContext = {
       productId: product.id,
       categoryId: product.categoryId || undefined,
-      quantity: Math.max(1, params.quantity || product.moq || 1),
+      // Units of this product already in the cart (e.g. other variants) count towards the offer.
+      quantity: Math.max(1, params.quantity || product.moq || 1) + Math.max(0, params.inCart || 0),
       unitPrice: Number(product.unitPrice),
       offerChoice: params.offerChoice,
     };
@@ -238,7 +241,10 @@ export class RulesEngineService {
       const same = (input.cartItems || []).filter((i) => i.productId === item.productId);
       const paid = same.find((i) => i.unitPrice > 0) || same[0];
       const choice = same.find((i) => i.offerChoice)?.offerChoice;
-      winners.set(item.productId, this.resolveOffers(rules, { ...paid, offerChoice: choice }).appliedId);
+      // A product with variants has one cart line per variant; an offer's quantity condition is
+      // about the product, so it is judged on the total across all of its lines.
+      const total = same.reduce((sum, i) => sum + i.quantity, 0);
+      winners.set(item.productId, this.resolveOffers(rules, { ...paid, quantity: total, offerChoice: choice }).appliedId);
     }
 
     const result: RuleEvaluationResult = {
@@ -480,21 +486,32 @@ export class RulesEngineService {
     });
   }
 
+  /**
+   * Buy X get Y: qualifies when the buy product's units in the cart — summed over all of its lines,
+   * so 1 Black + 1 Blue + 1 Red counts as 3 — reach the buy quantity.
+   */
+  private pushBuyXGetY(name: string, c: Record<string, any>, a: Record<string, any>, context: RuleContext, result: RuleEvaluationResult) {
+    if (!context.cartItems || !c.buyProductId || !a.freeProductId) return;
+    const buyQuantity = Number(c.buyQuantity) || 0;
+    if (buyQuantity <= 0) return;
+    const total = context.cartItems
+      .filter((item) => item.productId === c.buyProductId)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    if (total < buyQuantity) return;
+    result.bogo.push({
+      buyProductId: c.buyProductId,
+      buyQuantity,
+      freeProductId: a.freeProductId,
+      freeQuantity: Number(a.freeQuantity) || 1,
+      ruleName: name,
+    });
+  }
+
   private evaluateBogo(
     _id: string, name: string, c: Record<string, any>, a: Record<string, any>,
     context: RuleContext, result: RuleEvaluationResult,
   ) {
-    if (!context.cartItems) return;
-    const matching = context.cartItems.find((item) => item.productId === c.buyProductId && item.quantity >= c.buyQuantity);
-    if (matching) {
-      result.bogo.push({
-        buyProductId: c.buyProductId,
-        buyQuantity: c.buyQuantity,
-        freeProductId: a.freeProductId,
-        freeQuantity: a.freeQuantity || 1,
-        ruleName: name,
-      });
-    }
+    this.pushBuyXGetY(name, c, a, context, result);
   }
 
   private evaluateShippingRule(
@@ -607,17 +624,7 @@ export class RulesEngineService {
     _id: string, name: string, c: Record<string, any>, a: Record<string, any>,
     context: RuleContext, result: RuleEvaluationResult,
   ) {
-    if (!context.cartItems) return;
-    const matching = context.cartItems.find((item) => item.productId === c.buyProductId && item.quantity >= c.buyQuantity);
-    if (matching) {
-      result.bogo.push({
-        buyProductId: c.buyProductId,
-        buyQuantity: c.buyQuantity,
-        freeProductId: a.freeProductId,
-        freeQuantity: a.freeQuantity || 1,
-        ruleName: name,
-      });
-    }
+    this.pushBuyXGetY(name, c, a, context, result);
   }
 
   private evaluateMaxOrderQty(

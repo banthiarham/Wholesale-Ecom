@@ -56,10 +56,15 @@ export class CartController {
     const sessionId = this.getSessionId(req);
     const userId = this.resolveUserId(req);
     const userRole = this.resolveUserRole(req);
-    const cart = await this.cartService.getOrCreateCart(
+    let cart = await this.cartService.getOrCreateCart(
       userId,
       sessionId || undefined,
     );
+    // Free (buy X get Y) items follow the offers as they are now — an offer may have started,
+    // ended or been edited since the cart last changed.
+    if (userId && cart.items.length > 0 && (await this.cartService.syncFreeItems(cart.id, userId, userRole))) {
+      cart = await this.cartService.getOrCreateCart(userId, sessionId || undefined);
+    }
     const totals = await this.cartService.calculateTotals(cart, undefined, userId, userRole);
     return { cart, totals };
   }

@@ -38,16 +38,20 @@ export class RulesController {
   @ApiQuery({ name: 'productId', required: true })
   @ApiQuery({ name: 'quantity', required: false })
   @ApiQuery({ name: 'choice', required: false, description: 'Rule id the shopper picked, or "none"' })
+  @ApiQuery({ name: 'inCart', required: false, description: 'Units of this product already in the cart (e.g. other variants)' })
   async productOffers(
     @Query('productId') productId: string,
     @Query('quantity') quantity?: string,
     @Query('choice') choice?: string,
+    @Query('inCart') inCart?: string,
   ) {
     const qty = quantity ? parseInt(quantity, 10) : undefined;
+    const already = inCart ? parseInt(inCart, 10) : undefined;
     return this.rulesEngine.getProductOffers({
       productId,
       quantity: Number.isFinite(qty as number) ? qty : undefined,
       offerChoice: choice || undefined,
+      inCart: Number.isFinite(already as number) ? already : undefined,
     });
   }
 
