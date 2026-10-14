@@ -8,7 +8,7 @@ import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 
 interface Address { name?: string; company?: string; street?: string; line1?: string; line2?: string; city?: string; state?: string; zip?: string; postalCode?: string; country?: string; gstin?: string; gstNumber?: string }
 interface InvoiceOrder {
-  id: string; orderNumber: string; totalAmount: number; subtotal?: number | null; taxAmount?: number | null
+  id: string; orderNumber: string; status: string; totalAmount: number; subtotal?: number | null; taxAmount?: number | null
   cgstAmount?: number | null; sgstAmount?: number | null; igstAmount?: number | null
   shippingAmount?: number | null; discountAmount?: number | null; roundOffAmount?: number | null
   createdAt: string; shippingAddress: Address | null; billingAddress: Address | null
@@ -46,6 +46,9 @@ export default function InvoicePage() {
   }, [params.id, router])
   if (loading) return <div className="min-h-screen grid place-items-center"><div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-200 border-b-primary-600" /></div>
   if (!order) return <div className="min-h-screen grid place-items-center text-center"><div><Package className="mx-auto text-gray-300" size={40}/><p className="mt-3 text-gray-500">Order not found</p><Link href="/orders" className="text-primary-600">Back to orders</Link></div></div>
+
+  // No invoice is issued for a cancelled order (also covers someone opening the URL directly).
+  if (order.status === "CANCELLED") return <div className="min-h-screen grid place-items-center text-center"><div><Package className="mx-auto text-gray-300" size={40}/><p className="mt-3 text-gray-500">This order was cancelled, so no invoice is available.</p><Link href={`/orders/${order.id}`} className="text-primary-600">Back to order</Link></div></div>
 
   const billed = order.billingAddress || order.shippingAddress
   const subtotal = Number(order.subtotal ?? order.items.reduce((s, i) => s + Number(i.totalPrice), 0))

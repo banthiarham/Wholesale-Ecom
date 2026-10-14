@@ -61,14 +61,14 @@ export default function AdminContractPricesPage() {
   }, [])
 
   const loadPrices = async () => { setLoading(true); try { const res = await fetch("/api/pricing/contract-prices", { headers: { Authorization: `Bearer ${token}` } }); const data = await res.json(); const list = Array.isArray(data) ? data : data.contracts ?? data.contractPrices ?? []; setPrices(list); setFiltered(list) } catch (e) { console.error(e) } finally { setLoading(false) } }
-  const loadProducts = async () => { try { const res = await fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED", { headers: { Authorization: `Bearer ${token}` } }); const data = await res.json(); setProducts(data.products ?? []) } catch (e) { console.error(e) } }
+  const loadProducts = async () => { try { const res = await fetch("/api/products?status=PUBLISHED,DRAFT,ARCHIVED&limit=2000", { headers: { Authorization: `Bearer ${token}` } }); const data = await res.json(); setProducts(data.products ?? []) } catch (e) { console.error(e) } }
   // Every registered buyer account, straight from the database — server-side role
   // filter (not a client-side slice of a paginated "all users" call) with a take
   // large enough to cover realistic buyer counts, independent of who's online.
   const loadBuyers = async () => {
     setLoadingBuyers(true)
     try {
-      const res = await fetch("/api/users?role=BUYER&take=10000", { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch("/api/users?take=10000", { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       setBuyers(data.users ?? [])
     } catch (e) {
@@ -102,7 +102,7 @@ export default function AdminContractPricesPage() {
     e.preventDefault()
     if (!form.userId) { alert("Please select a buyer"); return }
     setSaving(true)
-    const body: any = { productId: form.productId, userId: form.userId, price: Number(form.price), minQty: Number(form.minQty), validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined }
+    const body: any = { productId: form.productId, userId: form.userId, price: Number(form.price), minQty: Number(form.minQty), validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : null }
     const t = localStorage.getItem("token")!
     try {
       const res = await fetch(editing ? `/api/pricing/contract-prices/${editing.id}` : "/api/pricing/contract-prices", { method: editing ? "PUT" : "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(body) })

@@ -356,7 +356,10 @@ export class DeliveryPartnersService {
       });
 
       if (result.status === 'DELIVERED') {
-        await this.prisma.order.update({ where: { id: orderId }, data: { status: 'DELIVERED' } });
+        await this.prisma.order.update({
+          where: { id: orderId },
+          data: { status: 'DELIVERED', ...(order.status !== 'DELIVERED' ? { deliveredAt: new Date() } : {}) },
+        });
       } else if (result.status === 'PICKED_UP' && order.status === 'PROCESSING') {
         await this.prisma.order.update({ where: { id: orderId }, data: { status: 'SHIPPED' } });
       }

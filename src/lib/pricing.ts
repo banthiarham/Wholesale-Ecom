@@ -72,6 +72,11 @@ export interface PricingBreakdown {
   /** false while the buyer is below roleMinQty — finalPrice is then still the retail price. */
   roleQtyReached?: boolean
   contractPrice: number | null
+  /** The buyer's contract price to display (even below its min quantity) and that min quantity. */
+  contractDisplayPrice?: number | null
+  contractMinQty?: number | null
+  /** false while below contractMinQty — finalPrice is then not the contract price yet. */
+  contractQtyReached?: boolean
   seasonalDiscount: number
   finalPrice: number
   discountAmount: number
@@ -122,7 +127,11 @@ export async function fetchPricing(
   try {
     const params = new URLSearchParams({ productId, quantity: String(quantity) })
     if (userId) params.set("userId", userId)
-    const res = await fetch(`/api/pricing/calculate?${params.toString()}`)
+    // Contract/role prices are resolved from the signed-in user, so send the token along.
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const res = await fetch(`/api/pricing/calculate?${params.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
     if (!res.ok) return null
     const data = await res.json()
     return data.pricing || data

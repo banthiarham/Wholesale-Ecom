@@ -347,7 +347,7 @@ export default function ProductDetailPage() {
   const totalCost = displayPrice * quantity
   const savingsPerUnit = Number(product.unitPrice) - displayPrice
   const totalSavings = savingsPerUnit * quantity
-  const priceLabel = pricingIsCurrent && (pricing!.appliedRule === "role" || pricing!.appliedRule === "contract") ? pricing!.appliedRoleName : null
+  const priceLabel = pricingIsCurrent && pricing!.appliedRule === "contract" ? "Contract" : pricingIsCurrent && pricing!.appliedRule === "role" ? pricing!.appliedRoleName : null
 
   // A buyer whose role has a wholesale price for this product always sees that price in the
   // headline, with its min quantity underneath — even while `quantity` is below the minimum.
@@ -356,8 +356,11 @@ export default function ProductDetailPage() {
     pricingProductId === product.id && pricing?.roleDisplayPrice != null && pricing.appliedRule !== "contract"
       ? pricing
       : null
-  const headlinePrice = roleHeadline ? roleHeadline.roleDisplayPrice! : displayPrice
-  const headlineLabel = roleHeadline ? roleHeadline.appliedRoleName : priceLabel
+  // A contract price the buyer has not reached the minimum quantity for is still the price they are shown.
+  const contractHeadline =
+    pricingProductId === product.id && pricing?.contractDisplayPrice != null && pricing.appliedRule !== "contract" ? pricing : null
+  const headlinePrice = contractHeadline ? contractHeadline.contractDisplayPrice! : roleHeadline ? roleHeadline.roleDisplayPrice! : displayPrice
+  const headlineLabel = contractHeadline ? "Contract" : roleHeadline ? roleHeadline.appliedRoleName : priceLabel
   const roleBelowMin = !!roleHeadline && roleHeadline.roleQtyReached === false
 
   if (pricingIsCurrent) {
@@ -657,7 +660,11 @@ export default function ProductDetailPage() {
                   {!isPriceHidden && shownDiscountPct > 0 && <span className="chip-sale shrink-0">{shownDiscountPct}% OFF</span>}
                 </div>
 
-                {!isPriceHidden && roleHeadline?.roleMinQty != null && (
+                {!isPriceHidden && contractHeadline?.contractMinQty != null && contractHeadline.contractMinQty > 1 && (
+                  <p className="-mt-2 text-xs text-gray-500">Contract price applies from {contractHeadline.contractMinQty} units</p>
+                )}
+
+                {!isPriceHidden && roleHeadline?.roleMinQty != null && !contractHeadline && (
                   <div className="-mt-2">
                     <p className="text-xs text-gray-500">Min quantity - {roleHeadline.roleMinQty}</p>
                     {roleBelowMin && (

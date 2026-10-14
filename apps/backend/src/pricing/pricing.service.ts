@@ -23,6 +23,11 @@ export class PricingService {
     /** false while the buyer is below roleMinQty, i.e. finalPrice is still the retail price. */
     roleQtyReached: boolean;
     contractPrice: number | null;
+    /** The buyer's contract price to *display* (even below its min quantity) and that min quantity. */
+    contractDisplayPrice: number | null;
+    contractMinQty: number | null;
+    /** false while the buyer is below contractMinQty, i.e. finalPrice is not the contract price yet. */
+    contractQtyReached: boolean;
     seasonalDiscount: number;
     finalPrice: number;
     discountAmount: number;
@@ -95,18 +100,26 @@ export class PricingService {
 
     // Contract Price (priority 0 — a per-user negotiated price, more specific than role pricing)
     let contractPrice: number | null = null;
+    let contractDisplayPrice: number | null = null;
+    let contractMinQty: number | null = null;
     if (userId) {
+      // "Valid until" is a calendar date: the contract is usable through the end of that day.
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
       const contract = await this.prisma.contractPrice.findFirst({
         where: {
           productId,
           userId,
           isActive: true,
-          OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
-          minQty: { lte: quantity },
+          OR: [{ validUntil: null }, { validUntil: { gte: startOfToday } }],
         },
-        orderBy: { price: 'asc' },
       });
-      if (contract) contractPrice = Number(contract.price);
+      if (contract) {
+        contractDisplayPrice = Number(contract.price);
+        contractMinQty = contract.minQty;
+        // Charged only once the contract's minimum quantity is reached.
+        if (quantity >= contract.minQty) contractPrice = contractDisplayPrice;
+      }
     }
 
     // Product Discount (priority 4) — seasonal/product discount off the base price.
@@ -194,6 +207,9 @@ export class PricingService {
       roleMinQty,
       roleQtyReached,
       contractPrice,
+      contractDisplayPrice,
+      contractMinQty,
+      contractQtyReached: contractPrice !== null,
       seasonalDiscount,
       finalPrice,
       discountAmount,

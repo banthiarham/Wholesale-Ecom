@@ -99,7 +99,34 @@ export class CartService {
       });
     }
 
+    if (userId && cart && cart.items.length > 0) await this.repriceItems(cart, userId);
+
     return cart;
+  }
+
+  /**
+   * Cart lines remember the price they were added at. Contract, role or tier prices can change
+   * afterwards (e.g. an admin assigns this buyer a contract price), so refresh each line to the
+   * current effective price whenever the cart is loaded. Free (BOGO) and package lines are left alone.
+   */
+  private async repriceItems(cart: any, userId: string) {
+    for (const item of cart.items as any[]) {
+      const meta = (item.metadata || {}) as Record<string, any>;
+      if (meta.bogo === true || meta.packageId || item.packageGroupId) continue;
+      try {
+        const pricing = await this.pricingService.calculateEffectivePrice(item.productId, item.quantity, userId);
+        if (Number(item.unitPrice) !== Number(pricing.finalPrice)) {
+          await this.prisma.cartItem.update({
+            where: { id: item.id },
+            data: { unitPrice: pricing.finalPrice, metadata: { ...meta, pricing } },
+          });
+          item.unitPrice = pricing.finalPrice;
+          item.metadata = { ...meta, pricing };
+        }
+      } catch {
+        /* leave the line as it was */
+      }
+    }
   }
 
   /**

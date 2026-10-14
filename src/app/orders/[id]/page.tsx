@@ -1,4 +1,6 @@
 "use client"
+import { returnWindow, parseWindowDays } from "@/lib/returnWindow"
+import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { paymentModeLabel } from "@/lib/paymentMode"
 import { BankAccountsCarousel, fetchBankAccounts, type BankAccount } from "@/components/storefront/BankAccounts"
 
@@ -149,6 +151,7 @@ export default function OrderDetailPage() {
   const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
+  const returnWindowDaysSetting = useSetting("returnWindowDays", "15")
   const [order, setOrder] = useState<OrderDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
@@ -392,7 +395,8 @@ export default function OrderDetailPage() {
   )
 
   const canCancel = !["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)
-  const canReturn = order.status === "DELIVERED"
+  const returnWin = returnWindow(order as any, parseWindowDays(returnWindowDaysSetting))
+  const canReturn = returnWin.open
   const canReorder = !["CANCELLED"].includes(order.status)
   const isCancelled = ["CANCELLED", "REFUNDED"].includes(order.status)
   const timelineIdx = getTimelineStepIndex(order)
@@ -410,20 +414,26 @@ export default function OrderDetailPage() {
   const discountAmount = hasPersistedBreakdown ? Number(order.discountAmount ?? 0) : 0
   const roundOffAmount = hasPersistedBreakdown ? Number(order.roundOffAmount ?? 0) : 0
 
+  // Once the return/replacement window has passed (counted from delivery) the two tabs are hidden.
   const TABS: { key: TabKey; label: string; icon: any }[] = [
     { key: "details", label: "Order Details", icon: Package },
-    { key: "return", label: "Return", icon: RotateCcw },
-    { key: "replacement", label: "Replacement", icon: Repeat },
+    ...(returnWin.expired ? [] : [
+      { key: "return" as TabKey, label: "Return", icon: RotateCcw },
+      { key: "replacement" as TabKey, label: "Replacement", icon: Repeat },
+    ]),
   ]
+  const visibleTab: TabKey = TABS.some((t) => t.key === activeTab) ? activeTab : "details"
 
   return (
     <div className="min-h-screen bg-gray-50/60">
       <main className="section-container max-w-5xl py-8">
         <div className="flex items-center justify-between mb-6">
           <Link href="/orders" className="flex items-center gap-1 text-gray-600 hover:text-primary-600 text-sm font-medium"><ArrowLeft size={16} /> Back to orders</Link>
-          <Link href={`/orders/${order.id}/invoice`} target="_blank" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
-            <Download size={15} /> Download Invoice
-          </Link>
+          {order.status !== "CANCELLED" && (
+            <Link href={`/orders/${order.id}/invoice`} target="_blank" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+              <Download size={15} /> Download Invoice
+            </Link>
+          )}
         </div>
 
         {paymentAlert && (
@@ -454,7 +464,7 @@ export default function OrderDetailPage() {
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors ${
-                  activeTab === tab.key
+                  visibleTab === tab.key
                     ? "border-primary-600 text-primary-700"
                     : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
@@ -465,7 +475,7 @@ export default function OrderDetailPage() {
           })}
         </div>
 
-        {activeTab === "details" && (
+        {visibleTab === "details" && (
           <>
             {/* Visual tracking timeline */}
             <div id="tracking" className="card-base-static p-6 mb-6 scroll-mt-24">
@@ -787,7 +797,7 @@ export default function OrderDetailPage() {
           </>
         )}
 
-        {activeTab === "return" && (
+        {visibleTab === "return" && (
           <div className="card-base-static p-6">
             <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><RotateCcw size={16} className="text-primary-600" /> Request a Return</h2>
             {!canReturn ? (
@@ -811,7 +821,7 @@ export default function OrderDetailPage() {
           </div>
         )}
 
-        {activeTab === "replacement" && (
+        {visibleTab === "replacement" && (
           <div className="card-base-static p-6">
             <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><Repeat size={16} className="text-primary-600" /> Request a Replacement</h2>
             {!canReturn ? (

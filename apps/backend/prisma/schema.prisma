@@ -471,6 +471,8 @@ model Order {
   trackingNumber  String?
   carrier         String?
   shippingEta     DateTime?
+  // When the order was marked delivered; the return/replacement window counts from here.
+  deliveredAt     DateTime?
 
   deliveryPartnerId String?
   deliveryPartner   DeliveryPartner? @relation(fields: [deliveryPartnerId], references: [id])

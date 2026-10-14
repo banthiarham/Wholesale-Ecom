@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateSettingsDto {
@@ -136,4 +136,10 @@ export class UpdateSettingsDto {
   @IsString()
   @IsOptional()
   businessState?: string;
+
+  @ApiProperty({ required: false, description: 'Days after delivery a customer can request a return/replacement (0 = off)' })
+  @IsString()
+  @IsOptional()
+  @Matches(/^\d{1,3}$/, { message: 'Return window must be a whole number of days (0-999)' })
+  returnWindowDays?: string;
 }

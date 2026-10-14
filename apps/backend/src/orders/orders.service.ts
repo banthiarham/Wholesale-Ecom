@@ -446,7 +446,7 @@ export class OrdersService {
   async updateStatus(id: string, status: OrderStatus) {
     const order = await this.prisma.order.update({
       where: { id },
-      data: { status },
+      data: { status, ...(status === 'DELIVERED' ? { deliveredAt: new Date() } : {}) },
       include: {
         items: { include: { product: { select: { id: true, title: true, categoryId: true } } } },
         payment: true,
