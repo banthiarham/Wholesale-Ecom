@@ -3,9 +3,12 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { X, ShoppingCart, ShoppingBag, Minus, Plus, Trash2, Package, ArrowRight } from "lucide-react"
+import { X, ShoppingCart, ShoppingBag, Minus, Plus, Trash2, Package, ArrowRight, Gift } from "lucide-react"
 import { formatPrice, getCartSessionId } from "@/lib/utils"
 import { clampQuantity, calcLineTotal } from "@/lib/pricing"
+import { useGstRates, withGst } from "@/lib/useGstRates"
+import { isFreeItem, freeLinesFor, type FreeLine } from "@/lib/freeItems"
+import FreeItemLine from "@/components/cart/FreeItemLine"
 import { useQuantityStepper } from "@/lib/pricing/useQuantityStepper"
 import { useToast } from "./Toast"
 import { EmptyState } from "./EmptyState"
@@ -21,6 +24,7 @@ interface DrawerCartItem {
     thumbnail: string | null
     moq: number
     inventoryQuantity: number
+    categoryId?: string | null
   }
   metadata?: any
 }
@@ -51,12 +55,16 @@ function buildHeaders(extra?: Record<string, string>): Record<string, string> {
 // the parent's .map() callback — hooks can't be called conditionally/in a loop.
 function CartDrawerRow({
   item,
+  gstRate,
+  freeLines,
   updating,
   onCommitQty,
   onRemove,
   onNavigate,
 }: {
   item: DrawerCartItem
+  gstRate: number
+  freeLines: FreeLine[]
   updating: boolean
   onCommitQty: (quantity: number) => void
   onRemove: () => void
@@ -97,7 +105,10 @@ function CartDrawerRow({
             <Trash2 size={15} />
           </button>
         </div>
-        <p className="text-xs text-gray-400 mt-0.5">{formatPrice(item.unitPrice)} / unit</p>
+        <p className="text-xs text-gray-400 mt-0.5">{formatPrice(withGst(Number(item.unitPrice), gstRate))} / unit{gstRate > 0 ? " (incl. GST)" : ""}</p>
+        {freeLines.map((f, i) => (
+          <FreeItemLine key={i} line={f} paidQuantity={qty} onNavigate={onNavigate} />
+        ))}
         {unitsToWholesale > 0 && (
           <p className="text-xs text-amber-600 mt-0.5">
             Add {unitsToWholesale} more {unitsToWholesale === 1 ? "product" : "products"} to get at {formatPrice(Number(pricing.roleDisplayPrice))}/unit
@@ -130,7 +141,7 @@ function CartDrawerRow({
               <Plus size={12} />
             </button>
           </div>
-          <span className="text-sm font-semibold text-gray-900">{formatPrice(calcLineTotal(item.unitPrice, qty))}</span>
+          <span className="text-sm font-semibold text-gray-900">{formatPrice(withGst(Number(calcLineTotal(item.unitPrice, qty)), gstRate))}</span>
         </div>
       </div>
     </div>
@@ -221,8 +232,17 @@ export function CartDrawerProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const items = data?.cart.items ?? []
+  const allItems = data?.cart.items ?? []
+  const items = allItems.filter((it) => !isFreeItem(it))
   const totals = data?.totals ?? { subtotal: 0, itemCount: 0, total: 0 }
+  // Drawer prices are shown GST-inclusive, matching the product listings.
+  const { rateFor } = useGstRates()
+  const itemGstRate = (item: DrawerCartItem) => rateFor(item.product.id, item.product.categoryId)
+  const subtotalWithGst = items.reduce(
+    (sum, item) => sum + withGst(Number(calcLineTotal(item.unitPrice, item.quantity)), itemGstRate(item)),
+    0
+  )
+  const hasGst = items.some((item) => itemGstRate(item) > 0)
 
   return (
     <CartDrawerContext.Provider value={{ openCartDrawer, closeCartDrawer }}>
@@ -277,6 +297,8 @@ export function CartDrawerProvider({ children }: { children: ReactNode }) {
                   <CartDrawerRow
                     key={item.id}
                     item={item}
+                    gstRate={itemGstRate(item)}
+                    freeLines={freeLinesFor(allItems, item.product.id)}
                     updating={updatingId === item.id}
                     onCommitQty={(newQty) => updateQty(item, newQty)}
                     onRemove={() => removeItem(item)}
@@ -290,10 +312,10 @@ export function CartDrawerProvider({ children }: { children: ReactNode }) {
           {items.length > 0 && (
             <div className="border-t border-gray-100 p-5 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Subtotal</span>
-                <span className="text-lg font-bold text-gray-900">{formatPrice(totals.subtotal)}</span>
+                <span className="text-sm text-gray-500">Subtotal{hasGst ? " (incl. GST)" : ""}</span>
+                <span className="text-lg font-bold text-gray-900">{formatPrice(hasGst ? subtotalWithGst : totals.subtotal)}</span>
               </div>
-              <p className="text-xs text-gray-400">Taxes, discounts, and shipping calculated at checkout.</p>
+              <p className="text-xs text-gray-400">{hasGst ? "Discounts and shipping calculated at checkout." : "Taxes, discounts, and shipping calculated at checkout."}</p>
               <div className="flex gap-2.5 pt-1">
                 <Link href="/cart" onClick={closeCartDrawer} className="btn-outline flex-1 justify-center">
                   View Cart

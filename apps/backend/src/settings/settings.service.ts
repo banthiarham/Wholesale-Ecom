@@ -82,6 +82,7 @@ export class SettingsService {
       heroCarouselAutoplay: 'true',
       roundOffEnabled: 'false',
       businessState: '',
+      returnWindowDays: '15',
     };
   }
 
@@ -114,6 +115,7 @@ export class SettingsService {
       { key: 'heroCarouselAutoplay', value: 'true', label: 'Auto-rotate Carousel', type: 'text', group: 'homepage' },
       { key: 'roundOffEnabled', value: 'false', label: 'Round Off Order Totals', type: 'boolean', group: 'commerce' },
       { key: 'businessState', value: '', label: 'Business State (for GST)', type: 'text', group: 'commerce' },
+      { key: 'returnWindowDays', value: '15', label: 'Return & Replacement Window (days after delivery)', type: 'number', group: 'policy' },
     ];
   }
 

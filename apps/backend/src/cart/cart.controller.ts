@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { CartService } from './cart.service';
+import { SetOfferChoiceDto } from './dto/set-offer-choice.dto';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { RemoveCartItemDto } from './dto/remove-cart-item.dto';
@@ -55,10 +56,15 @@ export class CartController {
     const sessionId = this.getSessionId(req);
     const userId = this.resolveUserId(req);
     const userRole = this.resolveUserRole(req);
-    const cart = await this.cartService.getOrCreateCart(
+    let cart = await this.cartService.getOrCreateCart(
       userId,
       sessionId || undefined,
     );
+    // Free (buy X get Y) items follow the offers as they are now — an offer may have started,
+    // ended or been edited since the cart last changed.
+    if (userId && cart.items.length > 0 && (await this.cartService.syncFreeItems(cart.id, userId, userRole))) {
+      cart = await this.cartService.getOrCreateCart(userId, sessionId || undefined);
+    }
     const totals = await this.cartService.calculateTotals(cart, undefined, userId, userRole);
     return { cart, totals };
   }
@@ -86,6 +92,8 @@ export class CartController {
       (dto as any).packageGroupId,
       (dto as any).packageMetadata,
       userRole,
+      dto.offerChoice,
+      dto.variantId,
     );
     const totals = await this.cartService.calculateTotals(cart, undefined, resolvedUserId, userRole);
     return { cart, totals };
@@ -103,6 +111,21 @@ export class CartController {
     const userId = this.resolveUserId(req);
     const userRole = this.resolveUserRole(req);
     const cart = await this.cartService.updateItem(dto.itemId, dto.quantity, undefined, userRole);
+    const totals = await this.cartService.calculateTotals(cart, undefined, userId, userRole);
+    return { cart, totals };
+  }
+
+  @Put('offer')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Choose which offer applies to a product in the cart (one at a time, or "none")' })
+  @ApiBody({ type: SetOfferChoiceDto })
+  @ApiHeader({ name: 'x-session-id', required: false, description: 'Guest cart session identifier' })
+  @ApiBearerAuth()
+  async setOfferChoice(@Body() dto: SetOfferChoiceDto, @Req() req: any) {
+    const userId = this.resolveUserId(req);
+    const userRole = this.resolveUserRole(req);
+    const sessionId = this.getSessionId(req);
+    const cart = await this.cartService.setOfferChoice(dto.productId, dto.choice, userId, sessionId || undefined, userRole);
     const totals = await this.cartService.calculateTotals(cart, undefined, userId, userRole);
     return { cart, totals };
   }

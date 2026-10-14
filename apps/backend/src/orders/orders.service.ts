@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { variantLabel } from '../products/variant-sync';
 import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
@@ -130,7 +131,7 @@ export class OrdersService {
 
     const cart = await this.prisma.cart.findUnique({
       where: { id: cartId },
-      include: { items: { include: { product: true } } },
+      include: { items: { include: { product: true, variant: true } } },
     });
 
     if (!cart || cart.items.length === 0) {
@@ -141,23 +142,38 @@ export class OrdersService {
     const orderItemsData = cart.items.map((item) => {
       const totalPrice = Number(item.unitPrice) * item.quantity;
       totalAmount += totalPrice;
+      const variant = (item as any).variant;
       return {
         productId: item.productId,
+        variantId: item.variantId || null,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: totalPrice,
-        metadata: item.metadata, // Preserve package composition and pricing data
+        // Preserve package composition and pricing data; for a variant also keep what was bought
+        // (label, SKU, options) so the order reads correctly even if the variant changes later.
+        metadata: variant
+          ? {
+              ...((item.metadata as any) || {}),
+              variant: {
+                id: variant.id,
+                sku: variant.sku,
+                options: variant.options,
+                label: variantLabel(variant.options as any, (item.product as any).variantOptions as any),
+              },
+            }
+          : (item.metadata as any),
       };
     });
     const subtotal = totalAmount;
 
     // Enforce dynamic rules before creating the order
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const cartItemsContext: CartItemContext[] = cart.items.map((item) => ({
+    const cartItemsContext: CartItemContext[] = cart.items.filter((item: any) => item.metadata?.bogo !== true).map((item) => ({
       productId: item.productId,
       categoryId: item.product?.categoryId || undefined,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
+      offerChoice: ((item as any).metadata as any)?.offerChoice || undefined,
     }));
 
     const ruleResult = await this.rulesEnforcement.enforceOrderRules({
@@ -168,6 +184,26 @@ export class OrdersService {
       shippingRegion: data.shippingAddress?.state || undefined,
       sellerState: await this.getSellerState(),
     });
+
+    // Free (buy X get Y) lines are only ordered as far as the offer still allows right now: an
+    // offer that expired, was switched off, or whose buy quantity is no longer met since the cart
+    // was last updated must not ship free goods.
+    const freeAllowance = new Map<string, number>();
+    for (const b of ruleResult.bogo || []) {
+      const bought = cartItemsContext.filter((i) => i.productId === b.buyProductId).reduce((sum, i) => sum + i.quantity, 0);
+      const key = `${b.ruleName}|${b.freeProductId}`;
+      freeAllowance.set(key, Math.max(freeAllowance.get(key) || 0, Math.floor(bought / b.buyQuantity) * (b.freeQuantity || 1)));
+    }
+    for (let i = orderItemsData.length - 1; i >= 0; i--) {
+      const meta = (orderItemsData[i].metadata || {}) as any;
+      if (meta.bogo !== true) continue;
+      const key = `${meta.bogoRuleName}|${orderItemsData[i].productId}`;
+      const left = freeAllowance.get(key) || 0;
+      const qty = Math.min(orderItemsData[i].quantity, left);
+      freeAllowance.set(key, left - qty);
+      if (qty <= 0) orderItemsData.splice(i, 1);
+      else orderItemsData[i] = { ...orderItemsData[i], quantity: qty, totalPrice: Number(orderItemsData[i].unitPrice) * qty };
+    }
 
     // Apply coupon discount if provided
     let couponDiscount = 0;
@@ -295,7 +331,7 @@ export class OrdersService {
     // Reserve inventory for each order item
     for (const item of order.items) {
       try {
-        await this.inventoryService.reserveStock(item.productId, item.quantity, order.id, userId);
+        await this.inventoryService.reserveStock(item.productId, item.quantity, order.id, userId, (item as any).variantId);
       } catch (err) {
         console.error(`Failed to reserve stock for product ${item.productId}:`, err.message);
       }
@@ -406,12 +442,30 @@ export class OrdersService {
     return { order, errors: errors.length > 0 ? errors : undefined };
   }
 
+  /**
+   * Items bought as a variant show it through the existing product fields, so every order view
+   * (customer, admin, invoice) needs no changes: "Phone (Black / 128 GB)" and the variant's SKU,
+   * taken from the snapshot saved on the order item.
+   */
+  private withVariantDetails<T extends { items?: any[] }>(order: T): T {
+    for (const item of order?.items || []) {
+      const v = item.metadata?.variant;
+      if (!v || !item.product) continue;
+      item.product = {
+        ...item.product,
+        title: v.label ? `${item.product.title} (${v.label})` : item.product.title,
+        ...(v.sku ? { sku: v.sku } : {}),
+      };
+    }
+    return order;
+  }
+
   async findAll(userId?: string, status?: OrderStatus) {
     const where: any = {};
     if (userId) where.userId = userId;
     if (status) where.status = status;
 
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where,
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true } } } },
@@ -422,6 +476,7 @@ export class OrdersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return orders.map((o) => this.withVariantDetails(o));
   }
 
   async findById(id: string, userId?: string) {
@@ -439,13 +494,13 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     if (userId && order.userId !== userId) throw new NotFoundException('Order not found');
 
-    return order;
+    return this.withVariantDetails(order);
   }
 
   async updateStatus(id: string, status: OrderStatus) {
     const order = await this.prisma.order.update({
       where: { id },
-      data: { status },
+      data: { status, ...(status === 'DELIVERED' ? { deliveredAt: new Date() } : {}) },
       include: {
         items: { include: { product: { select: { id: true, title: true, categoryId: true } } } },
         payment: true,
@@ -545,7 +600,7 @@ export class OrdersService {
     // Release reserved inventory
     for (const item of updated.items) {
       try {
-        await this.inventoryService.releaseStock(item.productId, item.quantity, updated.id, userId);
+        await this.inventoryService.releaseStock(item.productId, item.quantity, updated.id, userId, (item as any).variantId);
       } catch (err) {
         console.error(`Failed to release stock for product ${item.productId}:`, err.message);
       }

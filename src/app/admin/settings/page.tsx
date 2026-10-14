@@ -14,6 +14,7 @@ import {
   X,
   ImageIcon,
   Calculator,
+  RotateCcw,
 } from "lucide-react"
 import { generateShades } from "@/lib/settings/color-utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
@@ -43,6 +44,7 @@ const TABS = [
   { key: "homepage", label: "Homepage", icon: ImageIcon },
   { key: "header_footer", label: "Header & Footer", icon: Navigation },
   { key: "commerce", label: "Commerce", icon: Calculator },
+  { key: "policies", label: "Policies", icon: RotateCcw },
 ] as const
 
 type TabKey = (typeof TABS)[number]["key"]
@@ -68,6 +70,7 @@ interface SettingsState {
   socialLinks: { facebook: string; twitter: string; instagram: string; linkedin: string }
   copyrightText: string
   roundOffEnabled: boolean
+  returnWindowDays: string
 }
 
 const DEFAULT_SETTINGS: SettingsState = {
@@ -91,6 +94,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   socialLinks: { facebook: "", twitter: "", instagram: "", linkedin: "" },
   copyrightText: "Wholesale Center. All rights reserved.",
   roundOffEnabled: false,
+  returnWindowDays: "15",
 }
 
 export default function AdminSettingsPage() {
@@ -137,6 +141,7 @@ export default function AdminSettingsPage() {
             socialLinks,
             copyrightText: s.copyrightText || DEFAULT_SETTINGS.copyrightText,
             roundOffEnabled: s.roundOffEnabled === "true",
+            returnWindowDays: s.returnWindowDays ?? DEFAULT_SETTINGS.returnWindowDays,
           })
         }
       })
@@ -184,6 +189,7 @@ export default function AdminSettingsPage() {
         socialLinks: JSON.stringify(settings.socialLinks),
         copyrightText: settings.copyrightText,
         roundOffEnabled: String(settings.roundOffEnabled),
+        returnWindowDays: String(Math.max(0, Math.floor(Number(settings.returnWindowDays) || 0))),
       }
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -568,6 +574,33 @@ export default function AdminSettingsPage() {
                 onChange={(e) => update("copyrightText", e.target.value)}
                 className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
+            </div>
+          </div>
+        )}
+
+        {activeTab === "policies" && (
+          <div className="space-y-6">
+            <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <label htmlFor="returnWindowDays" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Return &amp; Replacement Window (days)
+              </label>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                How many days after an order is marked <b>Delivered</b> a customer can request a return or a replacement.
+                Once the window has passed, the Return and Replacement tabs are hidden for that order and new requests are
+                refused. Enter <b>0</b> to turn returns and replacements off.
+              </p>
+              <div className="mt-3 flex items-center gap-3">
+                <input
+                  id="returnWindowDays"
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={settings.returnWindowDays}
+                  onChange={(e) => update("returnWindowDays", e.target.value)}
+                  className="w-32 px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm"
+                />
+                <span className="text-sm text-gray-500 dark:text-gray-400">days after delivery</span>
+              </div>
             </div>
           </div>
         )}

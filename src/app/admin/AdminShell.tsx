@@ -153,7 +153,9 @@ function buildBreadcrumbs(pathname: string): { label: string; href?: string }[] 
     const isLast = i === segments.length - 1
     // Try to find a label from nav items
     const navItem = navGroups.flatMap(g => g.items).find(n => n.href === path)
-    const label = navItem?.label || segments[i].charAt(0).toUpperCase() + segments[i].slice(1)
+    // Dynamic id segments (e.g. /admin/users/<uuid>) read as "Details" rather than the raw id.
+    const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(segments[i]) || /^\d+$/.test(segments[i])
+    const label = navItem?.label || (isId ? "Details" : segments[i].charAt(0).toUpperCase() + segments[i].slice(1))
     crumbs.push(isLast ? { label } : { label, href: path })
   }
   return crumbs

@@ -58,4 +58,39 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   taxId?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  organizationName?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  gstin?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  panNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  contactPersonName?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  city?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  state?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  pincode?: string;
 }

@@ -110,7 +110,7 @@ export default function ProductRuleBadge({
       {discountLabel && discountPercent !== undefined && discountPercent > 0 && (
         <span className={`inline-flex items-center gap-1 ${sizeClasses} rounded-full bg-green-50 text-green-700 font-medium border border-green-200`}>
           <Percent size={iconSize} />
-          {discountPercent}% off
+          {Number(Number(discountPercent).toFixed(1))}% off
         </span>
       )}
       {bogoLabel && (

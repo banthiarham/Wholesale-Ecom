@@ -67,10 +67,15 @@ export class OrdersController {
   @ApiOperation({ summary: 'List orders (Admins see all, users see their own)' })
   @ApiResponse({ status: 200, description: 'Orders retrieved' })
   @ApiQuery({ name: 'status', enum: OrderStatus, required: false })
-  async findAll(@CurrentUser() user: any, @Query('status') status?: OrderStatus) {
+  @ApiQuery({ name: 'userId', type: String, required: false, description: 'Admin only: limit to one customer orders' })
+  async findAll(
+    @CurrentUser() user: any,
+    @Query('status') status?: OrderStatus,
+    @Query('userId') userId?: string,
+  ) {
     const isAdmin = user.role === UserRole.ADMIN;
     const orders = await this.ordersService.findAll(
-      isAdmin ? undefined : user.id,
+      isAdmin ? userId || undefined : user.id,
       status,
     );
     return { orders };

@@ -1,3 +1,4 @@
+import { SettingsService } from '../settings/settings.service';
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReturnStatus, ReturnType, OrderStatus, UserRole, RmaTicketStatus } from '@prisma/client';
@@ -27,6 +28,7 @@ export class ReturnsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private settingsService: SettingsService,
   ) {}
 
   async create(userId: string, data: { orderId: string; reason: string; notes?: string; type?: ReturnType; items: { orderItemId: string; quantity: number; reason?: string }[] }) {
@@ -38,6 +40,21 @@ export class ReturnsService {
     if (!order) throw new NotFoundException('Order not found');
     if (order.userId !== userId) throw new NotFoundException('Order not found');
     if (order.status !== OrderStatus.DELIVERED) throw new BadRequestException('Can only request returns for delivered orders');
+
+    // Return / replacement window (Admin -> Settings -> Policies), counted from delivery.
+    const settings = await this.settingsService.findAll();
+    const windowDays = Number.parseInt(settings.returnWindowDays, 10);
+    if (Number.isFinite(windowDays)) {
+      const deliveredAt = (order as any).deliveredAt || order.updatedAt;
+      const deadline = new Date(new Date(deliveredAt).getTime() + windowDays * 24 * 60 * 60 * 1000);
+      if (windowDays <= 0 || Date.now() > deadline.getTime()) {
+        throw new BadRequestException(
+          windowDays <= 0
+            ? 'Returns and replacements are not available for orders.'
+            : `The ${windowDays}-day return and replacement window for this order has ended.`,
+        );
+      }
+    }
 
     for (const item of data.items) {
       const orderItem = order.items.find((oi) => oi.id === item.orderItemId);

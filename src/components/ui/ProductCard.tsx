@@ -2,11 +2,13 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { Heart, Star, Package, ShoppingCart, Sparkles, Minus, Plus } from "lucide-react"
 import ProductRuleBadge from "@/lib/rules/ProductRuleBadge"
 import { SeasonalDiscount, PaymentOffer, discountBadge, getPaymentOfferBadge } from "@/lib/pricing"
 import { getContrastTextColor, isExternalImageUrl } from "@/lib/utils"
+import { useGstRates } from "@/lib/useGstRates"
 import { ProductPriceDisplay, RolePricingInfo, RuleDiscountInfo } from "./ProductPriceDisplay"
 
 export interface ProductCardProduct {
@@ -26,6 +28,8 @@ export interface ProductCardProduct {
   categoryId?: string
   category?: { id?: string; name: string; handle: string }
   tierPrices?: { minQty: number; maxQty: number | null; price: number | string }[]
+  /** Products with variants are added to the cart from the product page, after choosing options. */
+  hasVariants?: boolean
 }
 
 interface BogoInfo {
@@ -96,10 +100,13 @@ export function ProductCard({
   showQuantity = false,
   compact = false,
 }: ProductCardProps) {
+  const router = useRouter()
   const [qty, setQty] = useState<number>(Math.max(1, product.moq || 1))
   const maxQty = product.inventoryQuantity && product.inventoryQuantity > 0 ? product.inventoryQuantity : Infinity
   const clampQty = (n: number) => Math.min(maxQty, Math.max(Math.max(1, product.moq || 1), Math.floor(Number.isFinite(n) ? n : 1)))
   const isOutOfStock = (product.inventoryQuantity ?? Infinity) <= 0
+  const { rateFor } = useGstRates()
+  const gstRate = rateFor(product.id, product.categoryId || product.category?.id)
   const compareAtNum = product.compareAtPrice != null ? Number(product.compareAtPrice) : null
   const discountPct = compareAtNum && compareAtNum > Number(product.unitPrice)
     ? Math.round(((compareAtNum - Number(product.unitPrice)) / compareAtNum) * 100)
@@ -156,11 +163,24 @@ export function ProductCard({
       compareAtPrice={product.compareAtPrice}
       tierPrices={product.tierPrices}
       size={size}
+      gstRate={gstRate}
     />
   )
 
   const addToCartButton = (variant: "list" | "grid") => {
     if (isNonPurchasable) return null
+    if (product.hasVariants) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/products/${product.handle}`) }}
+          disabled={isOutOfStock}
+          className={`${variant === "list" ? "w-full sm:w-auto h-10 px-5 text-sm rounded-lg" : "mt-3 w-full py-2.5 text-xs rounded-xl"} bg-primary-600 text-white font-bold hover:bg-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5`}
+        >
+          {isOutOfStock ? outOfStockLabel : "Select Options"}
+        </button>
+      )
+    }
     const disabled = isAdding || isOutOfStock
     const label = isAdding ? addingLabel : isOutOfStock ? outOfStockLabel : addToCartLabel
     if (variant === "list") {

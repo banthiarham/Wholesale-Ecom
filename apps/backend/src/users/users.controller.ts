@@ -19,6 +19,7 @@ import { UserRole, UserStatus } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -105,6 +106,18 @@ export class UsersController {
     @Body() updateUserDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
     return this.usersService.update(userId, updateUserDto);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update any user profile details (Admin only)' })
+  adminUpdate(
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateUserDto,
+  ): Promise<UserResponseDto> {
+    return this.usersService.adminUpdate(id, dto);
   }
 
   @Patch(':id/role')

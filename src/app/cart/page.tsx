@@ -1,5 +1,7 @@
 "use client"
 
+import { freeLinesFor } from "@/lib/freeItems"
+import { syncOfferChoices } from "@/lib/offerChoices"
 import { useEffect, useState, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { ShoppingCart, ArrowLeft, Package, Trash2 } from "lucide-react"
@@ -59,7 +61,11 @@ export default function CartPage() {
       const headers: Record<string, string> = { "x-session-id": getCartSessionId() }
       if (token) headers["Authorization"] = `Bearer ${token}`
       const res = await fetch("/api/cart", { cache: "no-store", headers })
-      if (res.ok) { const json = await res.json(); setData(json) }
+      if (res.ok) {
+        const json = await res.json()
+        setData(json)
+        void syncOfferChoices(json?.cart?.items || [])
+      }
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }, [])
 
@@ -222,6 +228,7 @@ export default function CartPage() {
 
               for (const item of data.cart.items) {
                 const meta = (item as any).metadata
+                if (meta?.bogo === true) continue // free items are shown under the product that earns them
                 const packageId = meta?.packageId
                 if (packageId) {
                   if (!packageGroups.has(packageId)) packageGroups.set(packageId, [])
@@ -292,6 +299,7 @@ export default function CartPage() {
                       updating={updating}
                       ruleProductDiscount={ruleProductDiscountMap.get(item.product.id) ?? null}
                       bogoOffers={bogoMap.get(item.product.id) || []}
+                      freeLines={freeLinesFor(data.cart.items, item.product.id)}
                       quantityDiscount={qtyDiscountMap.get(item.product.id) ?? null}
                       minQtyRule={minimumOrderQuantities.find(m => m.productId === item.product.id) ?? null}
                       maxQtyRule={maximumOrderQuantities.find(m => m.productId === item.product.id) ?? null}
