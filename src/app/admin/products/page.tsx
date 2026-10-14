@@ -373,6 +373,30 @@ function AdminProductsContent() {
     saveAs(blob, "products_pricing_edit.xlsx")
   }
 
+  // Export every product (all statuses) to an Excel sheet, using the same fields as the product form (minus Size).
+  const handleExportProducts = () => {
+    const data = products.map((p) => ({
+      "Product Title": p.title,
+      "URL Handle": p.handle,
+      SKU: p.sku || "",
+      Categories: (p.categories?.length ? p.categories.map((c) => c.name) : p.category?.name ? [p.category.name] : []).join(", "),
+      "Company Name": p.companyName || "",
+      "Unit Price (Rs.)": p.unitPrice,
+      "Compare At Price (Rs.)": p.compareAtPrice ?? "",
+      "MOQ (Minimum Order Quantity)": p.moq,
+      "Inventory Quantity": p.inventoryQuantity,
+      Status: p.status,
+      Description: p.description || "",
+    }))
+    const ws = XLSX.utils.json_to_sheet(data)
+    ws["!cols"] = [{ wch: 34 }, { wch: 28 }, { wch: 16 }, { wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 60 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Products")
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" })
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    saveAs(blob, `products_export_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
   const handleUploadCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -425,6 +449,13 @@ function AdminProductsContent() {
             className="flex items-center gap-2 px-4 py-2 border border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-400 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition text-sm"
           >
             <Download size={16} /> Bulk Edit
+          </button>
+          <button
+            onClick={handleExportProducts}
+            disabled={products.length === 0}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm disabled:opacity-50"
+          >
+            <Download size={16} /> Export
           </button>
           <button onClick={() => setShowCatForm(!showCatForm)} className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm">
             <FolderPlus size={16} /> Add Category

@@ -41,6 +41,13 @@ export default function InvoicePage() {
   const bankAccount = useSetting("bankAccountNumber", "")
   const bankIfsc = useSetting("bankIfsc", "")
 
+  // The A4 sheet is 794px wide; shrink it to fit narrow (phone) screens so the whole invoice is visible.
+  const [scale, setScale] = useState(1)
+  useEffect(() => {
+    const fit = () => setScale(Math.min(1, (window.innerWidth - 16) / 794))
+    fit(); window.addEventListener("resize", fit)
+    return () => window.removeEventListener("resize", fit)
+  }, [])
   useEffect(() => { const token = localStorage.getItem("token"); if (!token) { router.push("/login"); return }
     fetch(`/api/orders/${params.id}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).then(data => setOrder(data.order || null)).finally(() => setLoading(false))
   }, [params.id, router])
@@ -58,19 +65,19 @@ export default function InvoicePage() {
   const buyerName = order.user.companyName || `${order.user.firstName} ${order.user.lastName}`
   const addressLines = (a: Address | null) => [a?.street || a?.line1, a?.line2, [a?.city, a?.state, a?.zip || a?.postalCode].filter(Boolean).join(", "), a?.country].filter(Boolean)
 
-  return <main className="min-h-screen bg-slate-100 py-6 text-black print:bg-white print:p-0">
+  return <main className="min-h-screen overflow-x-hidden bg-slate-100 py-6 text-black print:bg-white print:p-0">
     <style>{`
       .invoice { font-family: Arial, Helvetica, sans-serif; font-size: 10px; line-height: 1.25; }
       .invoice h1,.invoice h2,.invoice h3 { font-family: Arial, Helvetica, sans-serif; letter-spacing: 0; }
       .rule { border-color:#222; } .cell { border-right:1px solid #222; border-bottom:1px solid #222; }
       @page { size: A4; margin: 8mm; }
-      @media print { header,footer,.no-print{display:none!important} body{background:#fff!important}.invoice-sheet{width:194mm!important;min-height:279mm!important;margin:0!important;box-shadow:none!important} }
+      @media print { header,footer,.no-print{display:none!important} body{background:#fff!important}.invoice-sheet{zoom:1!important;width:194mm!important;min-height:279mm!important;margin:0!important;box-shadow:none!important} }
     `}</style>
     <div className="no-print mx-auto mb-4 flex max-w-[794px] items-center justify-between px-2">
       <Link href={`/orders/${order.id}`} className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600"><ArrowLeft size={16}/> Back to order</Link>
       <button onClick={() => window.print()} className="btn-primary px-5 py-2.5 text-sm"><Printer size={16}/> Print / Save PDF</button>
     </div>
-    <article className="invoice invoice-sheet mx-auto min-h-[1123px] w-[794px] bg-white p-5 shadow-lg">
+    <article style={{ zoom: scale }} className="invoice invoice-sheet mx-auto min-h-[1123px] w-[794px] bg-white p-5 shadow-lg">
       <section className="rule grid grid-cols-2 border border-black">
         <div className="cell min-h-[124px] p-1.5">
           <div className="flex gap-3">{logoUrl ? <img src={logoUrl} alt={`${siteName} logo`} className="h-12 w-24 object-contain"/> : <div className="grid h-12 w-24 place-items-center border text-[9px] font-bold">{siteName}</div>}
