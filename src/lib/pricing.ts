@@ -122,11 +122,13 @@ export interface PaymentOffer {
 export async function fetchPricing(
   productId: string,
   quantity: number = 1,
-  userId?: string
+  userId?: string,
+  variantId?: string | null
 ): Promise<PricingBreakdown | null> {
   try {
     const params = new URLSearchParams({ productId, quantity: String(quantity) })
     if (userId) params.set("userId", userId)
+    if (variantId) params.set("variantId", variantId)
     // Contract/role prices are resolved from the signed-in user, so send the token along.
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
     const res = await fetch(`/api/pricing/calculate?${params.toString()}`, {

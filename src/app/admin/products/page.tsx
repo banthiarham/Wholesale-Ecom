@@ -12,6 +12,7 @@ import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import RolePriceTable from "@/components/admin/RolePriceTable"
+import ProductVariantsEditor, { VariantEditorState, emptyVariantState, validateVariantState, variantStateFromProduct } from "@/components/admin/ProductVariantsEditor"
 import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters, uniqueCompanies } from "@/components/admin/ProductFilters"
 
 interface Product {
@@ -36,6 +37,7 @@ interface Product {
   rating?: number
   companyName?: string | null
   sizeGb?: number | null
+  hasVariants?: boolean
 }
 
 interface Category {
@@ -63,6 +65,10 @@ function AdminProductsContent() {
   const [uploading, setUploading] = useState(false)
   const [tierRows, setTierRows] = useState<{ minQty: string; maxQty: string; price: string }[]>([])
   const [catForm, setCatForm] = useState({ name: "", handle: "", description: "" })
+  // Variants: "Does this product have variants?" plus the options / variant rows being edited.
+  const [hasVariants, setHasVariants] = useState(false)
+  const [variantState, setVariantState] = useState<VariantEditorState>(emptyVariantState)
+  const [variantsLoading, setVariantsLoading] = useState(false)
   const [savingCat, setSavingCat] = useState(false)
 
   // Bulk edit state (CSV download/upload)
@@ -148,6 +154,10 @@ function AdminProductsContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (hasVariants) {
+      const problem = validateVariantState(variantState)
+      if (problem) { alert(problem); return }
+    }
     setUploading(true)
     const body: any = {
       ...form,
@@ -172,8 +182,60 @@ function AdminProductsContent() {
     // On edit, an empty list must still be sent so removing every tier row actually clears them.
     if (body.tierPrices.length === 0 && !editingProduct) delete body.tierPrices
 
+    // Variants: the product's own price and stock are derived from them (lowest price, total stock).
+    // Each variant's new image files are uploaded first (below) and replaced by their stored URLs.
+    const variantOptions = variantState.options
+      .filter((o) => o.name.trim() && o.values.length > 0)
+      .map((o) => ({ name: o.name.trim(), values: o.values }))
+    if (hasVariants) {
+      const active = variantState.rows.filter((r) => r.isActive)
+      const priced = active.length ? active : variantState.rows
+      body.hasVariants = true
+      body.variantOptions = variantOptions
+      body.unitPrice = Math.min(...priced.map((r) => Number(r.price)))
+      body.inventoryQuantity = active.reduce((sum, r) => sum + Number(r.inventoryQuantity), 0)
+      delete body.tierPrices // tier prices are per product; variants use their own prices
+    } else if (editingProduct?.hasVariants) {
+      body.hasVariants = false
+    }
+
     try {
-      let productId = editingProduct?.id
+      // Every new image file is uploaded once. Product images and variant images are then just
+      // lists of URLs, so an image used by several variants is stored (and sent) a single time.
+      const pending = imageItems.filter((it) => it.file)
+      const urlByKey = new Map<string, string>()
+      for (let i = 0; i < pending.length; i += 10) {
+        const batch = pending.slice(i, i + 10)
+        const fd = new FormData()
+        batch.forEach((it) => fd.append("images", it.file as File))
+        const upRes = await fetch("/api/products/variant-images", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd })
+        if (!upRes.ok) {
+          const err = await upRes.json().catch(() => ({}))
+          throw new Error(`Uploading images failed: ${Array.isArray(err.message) ? err.message.join(", ") : err.message || upRes.status}`)
+        }
+        const urls: string[] = (await upRes.json()).uploaded || []
+        batch.forEach((it, n) => { if (urls[n]) urlByKey.set(it.key, urls[n]) })
+      }
+      const urlOf = (it: { key: string; src: string; file?: File }) => (it.file ? urlByKey.get(it.key) : it.src)
+      const finalImages = imageItems.map(urlOf).filter(Boolean) as string[]
+      if (finalImages.length > 0 || editingProduct) {
+        body.images = finalImages
+        body.thumbnail = finalImages[0] ?? null
+      }
+      if (hasVariants) {
+        body.variants = variantState.rows.map((r) => ({
+          id: r.id,
+          options: r.options,
+          sku: r.sku.trim(),
+          price: Number(r.price),
+          inventoryQuantity: Number(r.inventoryQuantity),
+          images: r.imageKeys
+            .map((k) => imageItems.find((it) => it.key === k))
+            .map((it) => (it ? urlOf(it) : undefined))
+            .filter(Boolean) as string[],
+          isActive: r.isActive,
+        }))
+      }
       if (editingProduct) {
         const res = await fetch(`/api/products/${editingProduct.id}`, {
           method: "PUT",
@@ -192,32 +254,6 @@ function AdminProductsContent() {
         })
         const data = await res.json()
         if (!res.ok) throw new Error(Array.isArray(data.message) ? data.message.join(", ") : data.message || `Server returned ${res.status}`)
-        productId = data.product?.id || data.id
-      }
-
-      if (productId && (imageItems.length > 0 || editingProduct)) {
-        // Upload the new files first, then save the final order (also applies deletions).
-        const newFiles = imageItems.filter((it) => it.file)
-        let uploaded: string[] = []
-        if (newFiles.length > 0) {
-          const formData = new FormData()
-          newFiles.forEach((it) => formData.append("images", it.file as File))
-          const upRes = await fetch(`/api/products/${productId}/images`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: formData,
-          })
-          if (!upRes.ok) throw new Error("Product saved, but uploading the new images failed")
-          uploaded = (await upRes.json()).uploaded || []
-        }
-        let next = 0
-        const finalImages = imageItems.map((it) => (it.file ? uploaded[next++] : it.src)).filter(Boolean) as string[]
-        const orderRes = await fetch(`/api/products/${productId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ images: finalImages, thumbnail: finalImages[0] ?? null }),
-        })
-        if (!orderRes.ok) throw new Error("Product saved, but saving the image order failed")
       }
 
       setShowForm(false)
@@ -225,6 +261,8 @@ function AdminProductsContent() {
       setForm(emptyForm)
       setImageItems([])
       setTierRows([])
+      setHasVariants(false)
+      setVariantState(emptyVariantState)
       loadProducts()
     } catch (err) {
       console.error(err)
@@ -296,6 +334,26 @@ function AdminProductsContent() {
       p.tierPrices?.map((tp) => ({ minQty: String(tp.minQty), maxQty: tp.maxQty ? String(tp.maxQty) : "", price: String(tp.price) })) || []
     )
     setImageItems((p.images || []).map((img, i) => ({ key: `old-${i}-${img}`, src: img })))
+    setHasVariants(!!p.hasVariants)
+    setVariantState(emptyVariantState)
+    if (p.hasVariants) {
+      // The product list doesn't carry variants; load them for the form.
+      setVariantsLoading(true)
+      fetch(`/api/products/${encodeURIComponent(p.handle)}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((d) => {
+          // The shared image pool holds the product's images plus every variant's images.
+          const srcs: string[] = [...(d.product?.images || [])]
+          for (const v of d.product?.variants || []) {
+            for (const u of (v.images?.length ? v.images : v.image ? [v.image] : []) as string[]) if (!srcs.includes(u)) srcs.push(u)
+          }
+          const pool = srcs.map((src, i) => ({ key: `old-${i}-${src}`, src }))
+          setImageItems(pool)
+          setVariantState(variantStateFromProduct(pool, d.product?.variantOptions, d.product?.variants))
+        })
+        .catch(() => alert("Could not load this product's variants"))
+        .finally(() => setVariantsLoading(false))
+    }
     setShowForm(true)
   }
 
@@ -304,7 +362,14 @@ function AdminProductsContent() {
     setForm(emptyForm)
     setTierRows([])
     setImageItems([])
+    setHasVariants(false)
+    setVariantState(emptyVariantState)
     setShowForm(true)
+  }
+
+  const changeHasVariants = (yes: boolean) => {
+    if (!yes && editingProduct?.hasVariants && !confirm("Turning variants off removes this product's saved variants and their stock when you save. Continue?")) return
+    setHasVariants(yes)
   }
 
   const addTierRow = () => setTierRows((prev) => [...prev, { minQty: "", maxQty: "", price: "" }])
@@ -313,22 +378,36 @@ function AdminProductsContent() {
     setTierRows((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
   }
 
+  // Products with variants hold the images of all their variants too, so they get a larger limit.
+  const maxPoolImages = hasVariants ? 50 : 5
+
+  /** Adds picked files to the product's images and returns the new items (variants link to them by key). */
+  const addFilesToPool = (files: File[]) => {
+    const room = Math.max(0, maxPoolImages - imageItems.length)
+    if (files.length === 0) return []
+    if (room === 0) { alert(`Maximum ${maxPoolImages} images per product`); return [] }
+    const stamp = Date.now()
+    const added = files.slice(0, room).map((f, i) => ({ key: `new-${stamp}-${i}-${Math.round(Math.random() * 1e6)}`, src: URL.createObjectURL(f), file: f }))
+    setImageItems((prev) => [...prev, ...added])
+    return added
+  }
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     e.target.value = ""
-    if (files.length === 0) return
-    const room = Math.max(0, 5 - imageItems.length)
-    if (room === 0) { alert("Maximum 5 images per product"); return }
-    const added = files.slice(0, room).map((f, i) => ({ key: `new-${Date.now()}-${i}`, src: URL.createObjectURL(f), file: f }))
-    setImageItems((prev) => [...prev, ...added])
+    addFilesToPool(files)
   }
 
   const removeImage = (index: number) => {
-    setImageItems((prev) => {
-      const it = prev[index]
-      if (it?.src.startsWith("blob:")) URL.revokeObjectURL(it.src)
-      return prev.filter((_, i) => i !== index)
-    })
+    const it = imageItems[index]
+    if (!it) return
+    const usedBy = hasVariants ? variantState.rows.filter((r) => r.imageKeys.includes(it.key)) : []
+    if (usedBy.length > 0 && !confirm(`This image is used by ${usedBy.length} variant${usedBy.length > 1 ? "s" : ""}. Removing it also removes it from ${usedBy.length > 1 ? "them" : "that variant"}. Continue?`)) return
+    if (it.src.startsWith("blob:")) URL.revokeObjectURL(it.src)
+    setImageItems((prev) => prev.filter((_, i) => i !== index))
+    if (usedBy.length > 0) {
+      setVariantState((st) => ({ ...st, rows: st.rows.map((r) => ({ ...r, imageKeys: r.imageKeys.filter((k) => k !== it.key) })) }))
+    }
   }
 
   const moveImage = (from: number, to: number) => {
@@ -495,7 +574,7 @@ function AdminProductsContent() {
         <div className="admin-card-static p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingProduct ? "Edit Product" : "New Product"}</h3>
-            <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageItems([]); setTierRows([]) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
+            <button onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageItems([]); setTierRows([]); setHasVariants(false); setVariantState(emptyVariantState) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <FormField label="Product Title" required>
@@ -520,18 +599,18 @@ function AdminProductsContent() {
             <FormField label="Size (GB)" hint="Optional: storage size in GB (1 TB = 1024)">
               <input type="number" min="0" step="any" placeholder="e.g. 128" value={form.sizeGb} onChange={(e) => setForm({ ...form, sizeGb: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </FormField>
-            <FormField label="Unit Price (Rs.)" required hint="Selling price per unit">
+            {!hasVariants && <FormField label="Unit Price (Rs.)" required hint="Selling price per unit">
               <input required type="number" step="0.01" placeholder="Unit Price" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            </FormField>
+            </FormField>}
             <FormField label="Compare At Price (Rs.)" hint="Original / MRP price, shown struck through">
               <input type="number" step="0.01" placeholder="Compare At Price" value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </FormField>
             <FormField label="MOQ (Minimum Order Quantity)" required hint="Smallest quantity a buyer can order">
               <input required type="number" placeholder="MOQ (Minimum Order Quantity)" value={form.moq} onChange={(e) => setForm({ ...form, moq: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </FormField>
-            <FormField label="Inventory Quantity" required hint="Units currently in stock">
+            {!hasVariants && <FormField label="Inventory Quantity" required hint="Units currently in stock">
               <input required type="number" placeholder="Inventory Quantity" value={form.inventoryQuantity} onChange={(e) => setForm({ ...form, inventoryQuantity: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            </FormField>
+            </FormField>}
             <FormField label="Status">
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
               <option value="PUBLISHED">Published</option>
@@ -543,8 +622,34 @@ function AdminProductsContent() {
               <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </FormField>
 
-            {/* Tier Pricing */}
-            <div className="sm:col-span-2 lg:col-span-3">
+            {/* Variants */}
+            <div className="sm:col-span-2 lg:col-span-3 space-y-3">
+              <FormField label="Does this product have variants?" hint={hasVariants ? "Price and stock are set per variant below." : "e.g. different colors, sizes or storage options"}>
+                <select value={hasVariants ? "yes" : "no"} onChange={(e) => changeHasVariants(e.target.value === "yes")} className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 sm:max-w-xs">
+                  <option value="no">No — Single product</option>
+                  <option value="yes">Yes — Product with variants</option>
+                </select>
+              </FormField>
+              {hasVariants && (
+                <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Product Variants</h4>
+                  {variantsLoading ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Loading variants...</p>
+                  ) : (
+                    <ProductVariantsEditor
+                      value={variantState}
+                      onChange={setVariantState}
+                      pool={imageItems}
+                      onAddFiles={addFilesToPool}
+                      defaults={{ skuBase: form.sku || form.handle, price: form.unitPrice }}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Tier Pricing (single products only: variants are priced individually) */}
+            {!hasVariants && <div className="sm:col-span-2 lg:col-span-3">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1"><Tag size={14} /> Tier Pricing (Bulk Discounts)</label>
                 <button type="button" onClick={addTierRow} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">+ Add Tier</button>
@@ -565,10 +670,10 @@ function AdminProductsContent() {
                 </div>
               )}
               <p className="text-xs text-gray-400 dark:text-gray-500">Add quantity-based pricing tiers. Buyers ordering in bulk get discounted rates.</p>
-            </div>
+            </div>}
 
             {/* Role Pricing (edit only — shares data with the Role Pricing page) */}
-            {editingProduct && (
+            {editingProduct && !hasVariants && (
               <div className="sm:col-span-2 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role Pricing</label>
                 <RolePriceTable
@@ -579,7 +684,7 @@ function AdminProductsContent() {
 
             {/* Images */}
             <div className="sm:col-span-2 lg:col-span-3">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Product Images (max 5)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Product Images (max {maxPoolImages}){hasVariants && <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">includes every variant&apos;s images</span>}</label>
               <div className="flex flex-wrap gap-3 mb-3">
                 {imageItems.map((it, i) => (
                   <div
@@ -600,7 +705,7 @@ function AdminProductsContent() {
                     </div>
                   </div>
                 ))}
-                {imageItems.length < 5 && (
+                {imageItems.length < maxPoolImages && (
                   <label className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
                     <ImagePlus size={20} className="text-gray-400 dark:text-gray-500" />
                     <input type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
@@ -611,8 +716,8 @@ function AdminProductsContent() {
             </div>
 
             <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-3">
-              <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageItems([]); setTierRows([]) }} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
-              <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">{uploading ? "Saving..." : editingProduct ? "Save Changes" : "Add Product"}</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditingProduct(null); setForm(emptyForm); setImageItems([]); setTierRows([]); setHasVariants(false); setVariantState(emptyVariantState) }} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm">Cancel</button>
+              <button type="submit" disabled={uploading || variantsLoading} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">{uploading ? "Saving..." : editingProduct ? "Save Changes" : "Add Product"}</button>
             </div>
           </form>
         </div>
@@ -659,6 +764,7 @@ function AdminProductsContent() {
                     </td>
                     <td className="px-4 py-3">
                       <Link href={`/products/${p.handle}`} className="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400">{p.title}</Link>
+                      {p.hasVariants && <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 px-2 py-0.5">Variants</span>}
                       {p.vendorName && <p className="text-xs text-gray-500 dark:text-gray-400">{p.vendorName}</p>}
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{p.categories?.length ? p.categories.map((c) => c.name).join(", ") : p.category?.name || "—"}</td>

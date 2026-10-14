@@ -25,11 +25,13 @@ export class PricingController {
   @ApiQuery({ name: 'productId', required: true, description: 'Product UUID' })
   @ApiQuery({ name: 'quantity', required: true, description: 'Order quantity', type: Number })
   @ApiQuery({ name: 'userId', required: false, description: 'User UUID for contract & role pricing' })
+  @ApiQuery({ name: 'variantId', required: false, description: 'Variant UUID, for products with variants' })
   async calculate(
     @Req() req: any,
     @Query('productId') productId: string,
     @Query('quantity') quantity: string,
     @Query('userId') userId?: string,
+    @Query('variantId') variantId?: string,
   ) {
     // Contract and role prices are private to the buyer: they are resolved from the signed-in
     // user. A `userId` query value is only honoured for admins (price preview), never anonymously.
@@ -39,6 +41,7 @@ export class PricingController {
       productId,
       parseInt(quantity, 10),
       effectiveUserId,
+      variantId || undefined,
     );
     return result;
   }

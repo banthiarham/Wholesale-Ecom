@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { variantLabel } from '../products/variant-sync';
 import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
@@ -130,7 +131,7 @@ export class OrdersService {
 
     const cart = await this.prisma.cart.findUnique({
       where: { id: cartId },
-      include: { items: { include: { product: true } } },
+      include: { items: { include: { product: true, variant: true } } },
     });
 
     if (!cart || cart.items.length === 0) {
@@ -141,12 +142,26 @@ export class OrdersService {
     const orderItemsData = cart.items.map((item) => {
       const totalPrice = Number(item.unitPrice) * item.quantity;
       totalAmount += totalPrice;
+      const variant = (item as any).variant;
       return {
         productId: item.productId,
+        variantId: item.variantId || null,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: totalPrice,
-        metadata: item.metadata, // Preserve package composition and pricing data
+        // Preserve package composition and pricing data; for a variant also keep what was bought
+        // (label, SKU, options) so the order reads correctly even if the variant changes later.
+        metadata: variant
+          ? {
+              ...((item.metadata as any) || {}),
+              variant: {
+                id: variant.id,
+                sku: variant.sku,
+                options: variant.options,
+                label: variantLabel(variant.options as any, (item.product as any).variantOptions as any),
+              },
+            }
+          : (item.metadata as any),
       };
     });
     const subtotal = totalAmount;
@@ -296,7 +311,7 @@ export class OrdersService {
     // Reserve inventory for each order item
     for (const item of order.items) {
       try {
-        await this.inventoryService.reserveStock(item.productId, item.quantity, order.id, userId);
+        await this.inventoryService.reserveStock(item.productId, item.quantity, order.id, userId, (item as any).variantId);
       } catch (err) {
         console.error(`Failed to reserve stock for product ${item.productId}:`, err.message);
       }
@@ -407,12 +422,30 @@ export class OrdersService {
     return { order, errors: errors.length > 0 ? errors : undefined };
   }
 
+  /**
+   * Items bought as a variant show it through the existing product fields, so every order view
+   * (customer, admin, invoice) needs no changes: "Phone (Black / 128 GB)" and the variant's SKU,
+   * taken from the snapshot saved on the order item.
+   */
+  private withVariantDetails<T extends { items?: any[] }>(order: T): T {
+    for (const item of order?.items || []) {
+      const v = item.metadata?.variant;
+      if (!v || !item.product) continue;
+      item.product = {
+        ...item.product,
+        title: v.label ? `${item.product.title} (${v.label})` : item.product.title,
+        ...(v.sku ? { sku: v.sku } : {}),
+      };
+    }
+    return order;
+  }
+
   async findAll(userId?: string, status?: OrderStatus) {
     const where: any = {};
     if (userId) where.userId = userId;
     if (status) where.status = status;
 
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where,
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true } } } },
@@ -423,6 +456,7 @@ export class OrdersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return orders.map((o) => this.withVariantDetails(o));
   }
 
   async findById(id: string, userId?: string) {
@@ -440,7 +474,7 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     if (userId && order.userId !== userId) throw new NotFoundException('Order not found');
 
-    return order;
+    return this.withVariantDetails(order);
   }
 
   async updateStatus(id: string, status: OrderStatus) {
@@ -546,7 +580,7 @@ export class OrdersService {
     // Release reserved inventory
     for (const item of updated.items) {
       try {
-        await this.inventoryService.releaseStock(item.productId, item.quantity, updated.id, userId);
+        await this.inventoryService.releaseStock(item.productId, item.quantity, updated.id, userId, (item as any).variantId);
       } catch (err) {
         console.error(`Failed to release stock for product ${item.productId}:`, err.message);
       }

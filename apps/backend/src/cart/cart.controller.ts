@@ -88,6 +88,7 @@ export class CartController {
       (dto as any).packageMetadata,
       userRole,
       dto.offerChoice,
+      dto.variantId,
     );
     const totals = await this.cartService.calculateTotals(cart, undefined, resolvedUserId, userRole);
     return { cart, totals };

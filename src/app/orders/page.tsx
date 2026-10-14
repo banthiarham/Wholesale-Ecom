@@ -100,7 +100,7 @@ export default function OrdersPage() {
           fetch("/api/cart", {
             method: "POST",
             headers,
-            body: JSON.stringify({ productId: item.productId, quantity: item.quantity }),
+            body: JSON.stringify({ productId: item.productId, quantity: item.quantity, ...((item as any).variantId ? { variantId: (item as any).variantId } : {}) }),
           }).then((res) => res.ok)
         )
       )

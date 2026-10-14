@@ -19,4 +19,9 @@ export class AddCartItemDto {
   @IsOptional()
   @IsString()
   offerChoice?: string;
+
+  /** Required for products with variants: the chosen variant. */
+  @IsOptional()
+  @IsString()
+  variantId?: string;
 }

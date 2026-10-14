@@ -9,6 +9,7 @@ export class PricingService {
     productId: string,
     quantity: number,
     userId?: string,
+    variantId?: string,
   ): Promise<{
     basePrice: number;
     tierPrice: number;
@@ -45,11 +46,20 @@ export class PricingService {
 
     if (!product) throw new Error('Product not found');
 
-    const basePrice = Number(product.unitPrice);
+    // A variant is priced from its own price. Tier, role and contract prices are fixed per-product
+    // amounts set for the single product, so they are not applied to variants (a contract price
+    // for the 128 GB model must not be charged for the 256 GB one); seasonal discounts still apply.
+    let variant: { price: any } | null = null;
+    if (variantId) {
+      variant = await this.prisma.productVariant.findFirst({ where: { id: variantId, productId } });
+      if (!variant) throw new Error('Variant not found');
+    }
+
+    const basePrice = Number(variant ? variant.price : product.unitPrice);
 
     // Product Tier Pricing (priority 3) — computed regardless of what wins, so the
     // UI can still show "bulk pricing available" even when a higher-priority rule applies.
-    const tier = product.tierPrices.find(
+    const tier = (variant ? [] : product.tierPrices).find(
       (tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty),
     );
     const tierPrice = tier ? Number(tier.price) : basePrice;
@@ -66,7 +76,7 @@ export class PricingService {
     let roleMinQty: number | null = null;
     let roleQtyReached = false;
     let loggedInRole: string | null = null;
-    if (userId) {
+    if (userId && !variant) {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         include: { roleRel: true },
@@ -102,7 +112,7 @@ export class PricingService {
     let contractPrice: number | null = null;
     let contractDisplayPrice: number | null = null;
     let contractMinQty: number | null = null;
-    if (userId) {
+    if (userId && !variant) {
       // "Valid until" is a calendar date: the contract is usable through the end of that day.
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);

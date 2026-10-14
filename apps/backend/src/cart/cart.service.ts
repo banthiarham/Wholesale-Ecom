@@ -4,6 +4,32 @@ import { PricingService } from '../pricing/pricing.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
 import { RulesEngineService, CartItemContext } from '../rules/rules-engine.service';
 import { SettingsService } from '../settings/settings.service';
+import { LIVE_VARIANTS_WHERE, variantLabel } from '../products/variant-sync';
+
+const CART_ITEMS_INCLUDE = {
+  include: {
+    product: {
+      select: {
+        id: true,
+        title: true,
+        handle: true,
+        sku: true,
+        thumbnail: true,
+        moq: true,
+        inventoryQuantity: true,
+        unitPrice: true,
+        compareAtPrice: true,
+        categoryId: true,
+        hasVariants: true,
+        variantOptions: true,
+        tierPrices: { select: { minQty: true, maxQty: true, price: true }, orderBy: { minQty: 'asc' as const } },
+      },
+    },
+    variant: {
+      select: { id: true, sku: true, options: true, price: true, image: true, inventoryQuantity: true, reservedQuantity: true, isActive: true },
+    },
+  },
+};
 
 @Injectable()
 export class CartService {
@@ -22,25 +48,7 @@ export class CartService {
       cart = await this.prisma.cart.findUnique({
         where: { userId },
         include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  title: true,
-                  handle: true,
-                  sku: true,
-                  thumbnail: true,
-                  moq: true,
-                  inventoryQuantity: true,
-                  unitPrice: true,
-                  compareAtPrice: true,
-                  categoryId: true,
-                  tierPrices: { select: { minQty: true, maxQty: true, price: true }, orderBy: { minQty: 'asc' } },
-                },
-              },
-            },
-          },
+          items: CART_ITEMS_INCLUDE,
         },
       });
     }
@@ -49,25 +57,7 @@ export class CartService {
       cart = await this.prisma.cart.findUnique({
         where: { sessionId },
         include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  title: true,
-                  handle: true,
-                  sku: true,
-                  thumbnail: true,
-                  moq: true,
-                  inventoryQuantity: true,
-                  unitPrice: true,
-                  compareAtPrice: true,
-                  categoryId: true,
-                  tierPrices: { select: { minQty: true, maxQty: true, price: true }, orderBy: { minQty: 'asc' } },
-                },
-              },
-            },
-          },
+          items: CART_ITEMS_INCLUDE,
         },
       });
     }
@@ -76,32 +66,55 @@ export class CartService {
       cart = await this.prisma.cart.create({
         data: { userId: userId || null, sessionId: sessionId || null },
         include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  title: true,
-                  handle: true,
-                  sku: true,
-                  thumbnail: true,
-                  moq: true,
-                  inventoryQuantity: true,
-                  unitPrice: true,
-                  compareAtPrice: true,
-                  categoryId: true,
-                  tierPrices: { select: { minQty: true, maxQty: true, price: true }, orderBy: { minQty: 'asc' } },
-                },
-              },
-            },
-          },
+          items: CART_ITEMS_INCLUDE,
         },
       });
     }
 
     if (userId && cart && cart.items.length > 0) await this.repriceItems(cart, userId);
 
+    return this.decorateVariantItems(cart);
+  }
+
+  /**
+   * Cart lines for a variant show the variant's details through the existing product fields, so the
+   * cart page, mini cart and checkout need no changes: the title gets the variant label
+   * ("Phone (Black / 128 GB)"), and SKU, image and stock are the variant's own.
+   */
+  private decorateVariantItems(cart: any) {
+    for (const item of cart?.items || []) {
+      const v = item.variant;
+      if (!v || !item.product) continue;
+      const label = variantLabel(v.options, item.product.variantOptions);
+      item.variantLabel = label;
+      item.product = {
+        ...item.product,
+        title: label ? `${item.product.title} (${label})` : item.product.title,
+        sku: v.sku,
+        thumbnail: v.image || item.product.thumbnail,
+        inventoryQuantity: Math.max(0, v.inventoryQuantity - v.reservedQuantity),
+        unitPrice: v.price,
+        tierPrices: [],
+      };
+    }
     return cart;
+  }
+
+  /**
+   * Resolves and checks the variant for a cart line. Products with variants can only be bought as a
+   * specific, active variant; products without variants never take a variant id.
+   */
+  private async resolveVariant(product: any, variantId: string | undefined | null) {
+    if (!product.hasVariants) {
+      if (variantId) throw new BadRequestException('This product has no variants');
+      return null;
+    }
+    if (!variantId) throw new BadRequestException('Please choose the product options before adding it to the cart');
+    const variant = await this.prisma.productVariant.findFirst({
+      where: { id: variantId, productId: product.id, ...LIVE_VARIANTS_WHERE },
+    });
+    if (!variant || !variant.isActive) throw new BadRequestException('This option is not available');
+    return variant;
   }
 
   /**
@@ -114,7 +127,7 @@ export class CartService {
       const meta = (item.metadata || {}) as Record<string, any>;
       if (meta.bogo === true || meta.packageId || item.packageGroupId) continue;
       try {
-        const pricing = await this.pricingService.calculateEffectivePrice(item.productId, item.quantity, userId);
+        const pricing = await this.pricingService.calculateEffectivePrice(item.productId, item.quantity, userId, item.variantId || undefined);
         if (Number(item.unitPrice) !== Number(pricing.finalPrice)) {
           await this.prisma.cartItem.update({
             where: { id: item.id },
@@ -181,7 +194,8 @@ export class CartService {
           where: { id: bogo.freeProductId },
         });
 
-        if (!freeProduct || freeProduct.status !== 'PUBLISHED') continue;
+        // A free product with variants would need a chosen variant, so it can't be auto-added.
+        if (!freeProduct || freeProduct.status !== 'PUBLISHED' || freeProduct.hasVariants) continue;
 
         const addQty = applicableFreeQty - existingBogoQty;
 
@@ -307,6 +321,7 @@ export class CartService {
     packageMetadata?: any,
     userRole?: string,
     offerChoice?: string,
+    variantId?: string,
   ) {
     const cart = await this.getOrCreateCart(userId, sessionId);
     const product = await this.prisma.product.findUnique({
@@ -316,18 +331,22 @@ export class CartService {
     if (!product) throw new BadRequestException('Product not found');
     if (product.status !== 'PUBLISHED')
       throw new BadRequestException('Product is not available');
+    const variant = await this.resolveVariant(product, variantId);
     // Skip MOQ check for package component items — the package determines the purchase quantity
     if (!packageGroupId && quantity < product.moq)
       throw new BadRequestException(`Minimum order quantity is ${product.moq}`);
-    const availableStock = product.inventoryQuantity - product.reservedQuantity;
+    const stockOf = () =>
+      variant ? variant.inventoryQuantity - variant.reservedQuantity : product.inventoryQuantity - product.reservedQuantity;
+    const availableStock = stockOf();
     if (product.manageInventory && quantity > availableStock)
-      throw new BadRequestException('Not enough inventory');
+      throw new BadRequestException(variant && availableStock <= 0 ? 'This option is out of stock' : 'Not enough inventory');
 
     // Evaluate dynamic rules — block non-purchasable products and max quantity violations
     // Build the prospective cart items context including the new item
     const existingItem = cart.items.find(
       (item) =>
         item.productId === productId &&
+        ((item as any).variantId || null) === (variant?.id || null) &&
         (item as any).packageGroupId === (packageGroupId || null) &&
         (item.metadata as any)?.bogo !== true,
     );
@@ -335,9 +354,7 @@ export class CartService {
     const prospectiveCartItems: CartItemContext[] = cart.items.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((item) => ({
       productId: item.productId,
       categoryId: (item as any).product?.categoryId || undefined,
-      quantity: item.productId === productId
-        ? (existingItem ? existingItem.quantity + quantity : quantity)
-        : item.quantity,
+      quantity: existingItem && item.id === existingItem.id ? existingItem.quantity + quantity : item.quantity,
       unitPrice: Number(item.unitPrice),
       offerChoice: (item.metadata as any)?.offerChoice || undefined,
     }));
@@ -348,7 +365,7 @@ export class CartService {
         productId,
         categoryId: product.categoryId || undefined,
         quantity,
-        unitPrice: Number(product.unitPrice),
+        unitPrice: Number(variant ? variant.price : product.unitPrice),
         offerChoice,
       });
     }
@@ -370,11 +387,12 @@ export class CartService {
       productId,
       quantity,
       userId,
+      variant?.id,
     );
 
     if (existingItem) {
       const newQuantity = existingItem.quantity + quantity;
-      const availableStock2 = product.inventoryQuantity - product.reservedQuantity;
+      const availableStock2 = stockOf();
       if (product.manageInventory && newQuantity > availableStock2)
         throw new BadRequestException('Not enough inventory');
 
@@ -383,6 +401,7 @@ export class CartService {
         productId,
         newQuantity,
         userId,
+        variant?.id,
       );
 
       await this.prisma.cartItem.update({
@@ -402,6 +421,7 @@ export class CartService {
           unitPrice: pricing.finalPrice,
           metadata: packageMetadata || { pricing, ...(offerChoice ? { offerChoice } : {}) },
           packageGroupId: packageGroupId || null,
+          variantId: variant?.id || null,
         },
       });
     }
@@ -415,7 +435,7 @@ export class CartService {
   async updateItem(itemId: string, quantity: number, userId?: string, userRole?: string) {
     const item = await this.prisma.cartItem.findUnique({
       where: { id: itemId },
-      include: { product: true, cart: true },
+      include: { product: true, cart: true, variant: true },
     });
 
     if (!item) throw new BadRequestException('Cart item not found');
@@ -425,7 +445,9 @@ export class CartService {
       throw new BadRequestException(
         `Minimum order quantity is ${item.product.moq}`,
       );
-    const availableStock3 = item.product.inventoryQuantity - item.product.reservedQuantity;
+    const availableStock3 = item.variant
+      ? item.variant.inventoryQuantity - item.variant.reservedQuantity
+      : item.product.inventoryQuantity - item.product.reservedQuantity;
     if (item.product.manageInventory && quantity > availableStock3)
       throw new BadRequestException('Not enough inventory');
 
@@ -476,6 +498,7 @@ export class CartService {
       item.productId,
       quantity,
       cartUserId,
+      item.variantId || undefined,
     );
 
     await this.prisma.cartItem.update({
@@ -602,7 +625,10 @@ export class CartService {
     for (const guestItem of guestCart.items) {
       const guestPackageGroupId = (guestItem as any).packageGroupId || null;
       const existingItem = userCart.items.find(
-        (i) => i.productId === guestItem.productId && (i as any).packageGroupId === guestPackageGroupId,
+        (i) =>
+          i.productId === guestItem.productId &&
+          (i.variantId || null) === (guestItem.variantId || null) &&
+          (i as any).packageGroupId === guestPackageGroupId,
       );
       if (existingItem) {
         await this.prisma.cartItem.update({
@@ -617,6 +643,7 @@ export class CartService {
             quantity: guestItem.quantity,
             unitPrice: guestItem.unitPrice,
             packageGroupId: guestPackageGroupId,
+            variantId: guestItem.variantId || null,
             metadata: guestItem.metadata,
           },
         });

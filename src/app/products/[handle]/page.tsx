@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/Toast"
 import { useCartDrawer } from "@/components/ui/CartDrawer"
 import { ProductCard } from "@/components/ui/ProductCard"
 import { BankOfferCard, BankOffersModal } from "@/components/ui/BankOffers"
+import VariantSelector, { ProductVariantInfo, VariantOption, pickInitialVariant, variantImages, variantStock } from "@/components/storefront/VariantSelector"
 import dynamic from "next/dynamic"
 
 const PackageConfigurator = dynamic(() => import("@/components/storefront/PackageConfigurator"), { ssr: false })
@@ -37,11 +38,39 @@ interface Product {
   tierPrices: TierPrice[]; reviews: Review[];
   categoryId?: string
   metadata?: Record<string, unknown> | null
+  hasVariants?: boolean
+  variantOptions?: VariantOption[] | null
+  variants?: ProductVariantInfo[]
 }
 
 export default function ProductDetailPage() {
   const params = useParams()
-  const [product, setProduct] = useState<Product | null>(null)
+  const [baseProduct, setProduct] = useState<Product | null>(null)
+  const [variantId, setVariantId] = useState<string | null>(null)
+  const selectedVariant = baseProduct?.hasVariants
+    ? baseProduct.variants?.find((v) => v.id === variantId && v.isActive) ?? null
+    : null
+  const product = useMemo<Product | null>(() => {
+    if (!baseProduct || !baseProduct.hasVariants) return baseProduct
+    if (!selectedVariant) return { ...baseProduct, inventoryQuantity: 0, tierPrices: [] }
+    return {
+      ...baseProduct,
+      unitPrice: Number(selectedVariant.price),
+      sku: selectedVariant.sku,
+      inventoryQuantity: variantStock(selectedVariant),
+      tierPrices: [],
+    }
+  }, [baseProduct, selectedVariant])
+  const selectVariant = (id: string) => {
+    setVariantId(id)
+    // Only the selected variant's own images are shown; a variant without images uses the product's.
+    const v = baseProduct?.variants?.find((x) => x.id === id)
+    const own = variantImages(v)
+    setMainImage(own[0] || baseProduct?.thumbnail || (baseProduct?.images?.[0] ?? null))
+    const url = new URL(window.location.href)
+    url.searchParams.set("variant", id)
+    window.history.replaceState(null, "", url.toString())
+  }
   const [related, setRelated] = useState<RelatedProduct[]>([])
   const [loading, setLoading] = useState(true)
   // Shared stepper (same one Cart/Mini Cart use): defaults to MOQ, steps by exactly 1,
@@ -138,7 +167,11 @@ export default function ProductDetailPage() {
       .then((data) => {
         if (data.product) {
           setProduct(data.product)
-          setMainImage(data.product.thumbnail || (data.product.images?.[0] ?? null))
+          const initialVariant = data.product.hasVariants
+            ? pickInitialVariant(data.product.variants || [], new URLSearchParams(window.location.search).get("variant"))
+            : null
+          setVariantId(initialVariant?.id ?? null)
+          setMainImage(variantImages(initialVariant)[0] || data.product.thumbnail || (data.product.images?.[0] ?? null))
           loadRelated(data.product)
           checkWishlist(data.product.id)
           checkUserReview(data.product.id)
@@ -181,7 +214,7 @@ export default function ProductDetailPage() {
       const token = localStorage.getItem("token")
       const headers: Record<string, string> = { "Content-Type": "application/json", "x-session-id": getCartSessionId() }
       if (token) headers["Authorization"] = `Bearer ${token}`
-      const res = await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId: product.id, quantity, ...(offerChoice ? { offerChoice } : {}) }) })
+      const res = await fetch("/api/cart", { method: "POST", headers, body: JSON.stringify({ productId: product.id, quantity, ...(selectedVariant ? { variantId: selectedVariant.id } : {}), ...(offerChoice ? { offerChoice } : {}) }) })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
         window.dispatchEvent(new CustomEvent("cart-updated"))
@@ -289,14 +322,14 @@ export default function ProductDetailPage() {
     const userId = JSON.parse(atob(token.split(".")[1]))?.userId || JSON.parse(atob(token.split(".")[1]))?.sub
     if (!userId) { setPricing(null); setPricingQty(null); setPricingProductId(null); return }
     let cancelled = false
-    fetchPricing(product.id, quantity, userId).then((result) => {
+    fetchPricing(product.id, quantity, userId, selectedVariant?.id).then((result) => {
       if (cancelled) return
       setPricing(result)
       setPricingQty(quantity)
-      setPricingProductId(product.id)
+      setPricingProductId(`${product.id}:${selectedVariant?.id ?? ""}`)
     })
     return () => { cancelled = true }
-  }, [quantity, product?.id])
+  }, [quantity, product?.id, selectedVariant?.id])
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" /></div>
   if (!product) return <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50"><Package size={48} className="text-gray-300 mb-4" /><h1 className="heading-lg mb-2">Product not found</h1><p className="body-sm mb-4">This product may have been removed or is unavailable.</p><Link href="/products" className="btn-primary">Browse Products</Link></div>
@@ -321,7 +354,8 @@ export default function ProductDetailPage() {
   // fresh fetch is in flight after a quantity change, fall back to the instantly-computed
   // (client-side) tier price so the displayed price and tier always update immediately,
   // never showing a stale role/contract price left over from the previous quantity.
-  const pricingIsCurrent = pricing != null && pricingQty === quantity
+  const pricingKey = `${product.id}:${selectedVariant?.id ?? ""}`
+  const pricingIsCurrent = pricing != null && pricingQty === quantity && pricingProductId === pricingKey
 
   // If the logged-in buyer's role has its own quantity tiers for this product (Admin ->
   // Role-Based Pricing), show those in "Buy More, Save More" instead of the generic
@@ -329,7 +363,7 @@ export default function ProductDetailPage() {
   // disagree with the actually-charged price. Falls back to the universal product tier
   // ladder when the buyer isn't logged in or their role has no tiers for this product.
   const roleTierPrices: TierPrice[] =
-    pricingProductId === product.id && pricing?.roleTiers && pricing.roleTiers.length > 0
+    pricingProductId === pricingKey && pricing?.roleTiers && pricing.roleTiers.length > 0
       ? pricing.roleTiers.map((rt) => ({ minQty: rt.minQty, maxQty: null, price: rt.price }))
       : []
   const displayTierPrices = roleTierPrices.length > 0 ? roleTierPrices : product.tierPrices
@@ -353,12 +387,12 @@ export default function ProductDetailPage() {
   // headline, with its min quantity underneath — even while `quantity` is below the minimum.
   // (displayPrice above stays the price actually charged: retail until the minimum is reached.)
   const roleHeadline =
-    pricingProductId === product.id && pricing?.roleDisplayPrice != null && pricing.appliedRule !== "contract"
+    pricingProductId === pricingKey && pricing?.roleDisplayPrice != null && pricing.appliedRule !== "contract"
       ? pricing
       : null
   // A contract price the buyer has not reached the minimum quantity for is still the price they are shown.
   const contractHeadline =
-    pricingProductId === product.id && pricing?.contractDisplayPrice != null && pricing.appliedRule !== "contract" ? pricing : null
+    pricingProductId === pricingKey && pricing?.contractDisplayPrice != null && pricing.appliedRule !== "contract" ? pricing : null
   const headlinePrice = contractHeadline ? contractHeadline.contractDisplayPrice! : roleHeadline ? roleHeadline.roleDisplayPrice! : displayPrice
   const headlineLabel = contractHeadline ? "Contract" : roleHeadline ? roleHeadline.appliedRoleName : priceLabel
   const roleBelowMin = !!roleHeadline && roleHeadline.roleQtyReached === false
@@ -393,7 +427,11 @@ export default function ProductDetailPage() {
   const hasPricingInfo = (pricingIsCurrent && (pricing!.rolePrice !== null || pricing!.contractPrice !== null || pricing!.seasonalDiscount > 0)) || ruleDiscount
 
   // ── Product page layout helpers ──
-  const galleryImages = Array.from(new Set([product.thumbnail, ...(product.images || [])].filter((u): u is string => !!u)))
+  // A variant with its own images shows only those; otherwise the product's gallery is used.
+  const ownVariantImages = variantImages(selectedVariant)
+  const galleryImages = ownVariantImages.length > 0
+    ? Array.from(new Set(ownVariantImages))
+    : Array.from(new Set([product.thumbnail, ...(product.images || [])].filter((u): u is string => !!u)))
   const stepImage = (dir: number) => {
     if (galleryImages.length < 2) return
     const i = Math.max(0, galleryImages.indexOf(mainImage || ""))
@@ -557,6 +595,15 @@ export default function ProductDetailPage() {
                     {!isOutOfStock && <span className="text-gray-500">{product.inventoryQuantity} units available</span>}
                     {isLowStock && <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Only {product.inventoryQuantity} left</span>}
                   </div>
+                  {product.hasVariants && product.variantOptions && product.variants && (
+                    <div className="mt-3">
+                      {product.variants.some((v) => v.isActive) ? (
+                        <VariantSelector options={product.variantOptions} variants={product.variants} selectedId={selectedVariant?.id ?? null} onSelect={selectVariant} />
+                      ) : (
+                        <p className="text-xs font-medium text-red-600">This product is currently unavailable.</p>
+                      )}
+                    </div>
+                  )}
                   {product.description && (
                     <p className="text-gray-600 leading-relaxed mt-2.5 line-clamp-3 whitespace-pre-line text-[13px]">{product.description}</p>
                   )}
@@ -709,8 +756,8 @@ export default function ProductDetailPage() {
                         />
                         <button onClick={increment} className="px-2.5 py-2 hover:bg-gray-50 transition-colors"><Plus size={14} /></button>
                       </div>
-                      <button onClick={handleAddToCart} disabled={adding || product.inventoryQuantity <= 0 || quantity < effectiveMinQty || quantity > effectiveMaxQty || isNonPurchasable} className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-semibold hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                        {added ? <><Check size={16} /> Added!</> : adding ? "Adding..." : isNonPurchasable ? (nonPurchasableMsg || "Not Available") : quantity < effectiveMinQty ? "Adjust Quantity" : <><ShoppingCart size={16} /> Add to Cart</>}
+                      <button onClick={handleAddToCart} disabled={adding || (!!product.hasVariants && !selectedVariant) || product.inventoryQuantity <= 0 || quantity < effectiveMinQty || quantity > effectiveMaxQty || isNonPurchasable} className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-semibold hover:bg-primary-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {added ? <><Check size={16} /> Added!</> : adding ? "Adding..." : product.hasVariants && !selectedVariant ? "Select Options" : product.hasVariants && product.inventoryQuantity <= 0 ? "Out of Stock" : isNonPurchasable ? (nonPurchasableMsg || "Not Available") : quantity < effectiveMinQty ? "Adjust Quantity" : <><ShoppingCart size={16} /> Add to Cart</>}
                       </button>
                     </div>
                     {quantity < effectiveMinQty && (
