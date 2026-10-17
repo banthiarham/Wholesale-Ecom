@@ -1,5 +1,7 @@
 "use client"
 
+import { returnWindow, parseWindowDays } from "@/lib/returnWindow"
+import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { memo } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -162,7 +164,8 @@ interface OrderCardProps {
 
 export const OrderCard = memo(function OrderCard({ order, isReordering, isCancelling, onReorder, onCancel, request }: OrderCardProps) {
   const canCancel = !["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)
-  const canReturn = order.status === "DELIVERED"
+  const returnWindowDaysSetting = useSetting("returnWindowDays", "15")
+  const canReturn = returnWindow(order as any, parseWindowDays(returnWindowDaysSetting)).open
   const canReorder = order.status !== "CANCELLED"
 
   const addressPreview = order.shippingAddress
@@ -184,7 +187,8 @@ export const OrderCard = memo(function OrderCard({ order, isReordering, isCancel
   const actions: ActionItem[] = [
     { key: "view", label: "View Details", icon: Eye, href: detailsHref, variant: "solid" },
     { key: "track", label: "Track Order", icon: Truck, href: trackHref, variant: "outline" },
-    { key: "invoice", label: "Download Invoice", icon: Download, href: `/orders/${order.id}/invoice`, external: true, variant: "outline" },
+    // A cancelled order has no invoice to download.
+    ...(order.status !== "CANCELLED" ? [{ key: "invoice", label: "Download Invoice", icon: Download, href: `/orders/${order.id}/invoice`, external: true, variant: "outline" as Variant }] : []),
     ...(canReorder ? [{ key: "reorder", label: isReordering ? "Adding..." : "Reorder", icon: RotateCcw, onClick: (e: React.MouseEvent) => onReorder(e, order), disabled: isReordering, variant: "outline" as Variant }] : []),
     ...(canReturn ? [{ key: "return", label: "Return / Replace", icon: RefreshCcw, href: `/orders/${order.id}?action=return`, variant: "outline" as Variant }] : []),
     ...(canCancel ? [{ key: "cancel", label: isCancelling ? "Cancelling..." : "Cancel Order", icon: XCircle, onClick: (e: React.MouseEvent) => onCancel(e, order), disabled: isCancelling, variant: "danger" as Variant }] : []),

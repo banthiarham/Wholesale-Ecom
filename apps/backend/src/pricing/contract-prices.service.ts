@@ -2,6 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateContractPriceDto } from './dto/create-contract-price.dto';
 
+/** "Valid until" is a calendar date: keep the contract usable through the end of that day. */
+function endOfDay(value: string): Date {
+  const d = new Date(value);
+  d.setUTCHours(23, 59, 59, 999);
+  return d;
+}
+
 @Injectable()
 export class ContractPricesService {
   constructor(private prisma: PrismaService) {}
@@ -33,14 +40,17 @@ export class ContractPricesService {
   }
 
   async create(dto: CreateContractPriceDto) {
-    return this.prisma.contractPrice.create({
-      data: {
-        productId: dto.productId,
-        userId: dto.userId,
-        price: dto.price,
-        minQty: dto.minQty ?? 1,
-        validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
-      },
+    // One contract per buyer and product: saving again replaces (and re-activates) it instead of failing.
+    const data = {
+      price: dto.price,
+      minQty: dto.minQty ?? 1,
+      validUntil: dto.validUntil ? endOfDay(dto.validUntil) : null,
+      isActive: true,
+    };
+    return this.prisma.contractPrice.upsert({
+      where: { productId_userId: { productId: dto.productId, userId: dto.userId } },
+      create: { productId: dto.productId, userId: dto.userId, ...data },
+      update: data,
       include: {
         product: { select: { id: true, title: true } },
         user: { select: { id: true, firstName: true, lastName: true, email: true } },
@@ -50,7 +60,9 @@ export class ContractPricesService {
 
   async update(id: string, dto: Partial<CreateContractPriceDto>) {
     const data: any = { ...dto };
-    if (dto.validUntil) data.validUntil = new Date(dto.validUntil);
+    // undefined = leave as is, null/'' = no expiry, date = valid through the end of that day
+    if (dto.validUntil === null || dto.validUntil === '') data.validUntil = null;
+    else if (dto.validUntil) data.validUntil = endOfDay(dto.validUntil);
     return this.prisma.contractPrice.update({
       where: { id },
       data,

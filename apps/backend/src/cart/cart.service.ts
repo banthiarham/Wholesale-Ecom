@@ -4,6 +4,32 @@ import { PricingService } from '../pricing/pricing.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
 import { RulesEngineService, CartItemContext } from '../rules/rules-engine.service';
 import { SettingsService } from '../settings/settings.service';
+import { LIVE_VARIANTS_WHERE, variantLabel } from '../products/variant-sync';
+
+const CART_ITEMS_INCLUDE = {
+  include: {
+    product: {
+      select: {
+        id: true,
+        title: true,
+        handle: true,
+        sku: true,
+        thumbnail: true,
+        moq: true,
+        inventoryQuantity: true,
+        unitPrice: true,
+        compareAtPrice: true,
+        categoryId: true,
+        hasVariants: true,
+        variantOptions: true,
+        tierPrices: { select: { minQty: true, maxQty: true, price: true }, orderBy: { minQty: 'asc' as const } },
+      },
+    },
+    variant: {
+      select: { id: true, sku: true, options: true, price: true, image: true, inventoryQuantity: true, reservedQuantity: true, isActive: true },
+    },
+  },
+};
 
 @Injectable()
 export class CartService {
@@ -22,25 +48,7 @@ export class CartService {
       cart = await this.prisma.cart.findUnique({
         where: { userId },
         include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  title: true,
-                  handle: true,
-                  sku: true,
-                  thumbnail: true,
-                  moq: true,
-                  inventoryQuantity: true,
-                  unitPrice: true,
-                  compareAtPrice: true,
-                  categoryId: true,
-                  tierPrices: { select: { minQty: true, maxQty: true, price: true }, orderBy: { minQty: 'asc' } },
-                },
-              },
-            },
-          },
+          items: CART_ITEMS_INCLUDE,
         },
       });
     }
@@ -49,25 +57,7 @@ export class CartService {
       cart = await this.prisma.cart.findUnique({
         where: { sessionId },
         include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  title: true,
-                  handle: true,
-                  sku: true,
-                  thumbnail: true,
-                  moq: true,
-                  inventoryQuantity: true,
-                  unitPrice: true,
-                  compareAtPrice: true,
-                  categoryId: true,
-                  tierPrices: { select: { minQty: true, maxQty: true, price: true }, orderBy: { minQty: 'asc' } },
-                },
-              },
-            },
-          },
+          items: CART_ITEMS_INCLUDE,
         },
       });
     }
@@ -76,30 +66,80 @@ export class CartService {
       cart = await this.prisma.cart.create({
         data: { userId: userId || null, sessionId: sessionId || null },
         include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  title: true,
-                  handle: true,
-                  sku: true,
-                  thumbnail: true,
-                  moq: true,
-                  inventoryQuantity: true,
-                  unitPrice: true,
-                  compareAtPrice: true,
-                  categoryId: true,
-                  tierPrices: { select: { minQty: true, maxQty: true, price: true }, orderBy: { minQty: 'asc' } },
-                },
-              },
-            },
-          },
+          items: CART_ITEMS_INCLUDE,
         },
       });
     }
 
+    if (userId && cart && cart.items.length > 0) await this.repriceItems(cart, userId);
+
+    return this.decorateVariantItems(cart);
+  }
+
+  /**
+   * Cart lines for a variant show the variant's details through the existing product fields, so the
+   * cart page, mini cart and checkout need no changes: the title gets the variant label
+   * ("Phone (Black / 128 GB)"), and SKU, image and stock are the variant's own.
+   */
+  private decorateVariantItems(cart: any) {
+    for (const item of cart?.items || []) {
+      const v = item.variant;
+      if (!v || !item.product) continue;
+      const label = variantLabel(v.options, item.product.variantOptions);
+      item.variantLabel = label;
+      item.product = {
+        ...item.product,
+        title: label ? `${item.product.title} (${label})` : item.product.title,
+        sku: v.sku,
+        thumbnail: v.image || item.product.thumbnail,
+        inventoryQuantity: Math.max(0, v.inventoryQuantity - v.reservedQuantity),
+        unitPrice: v.price,
+        tierPrices: [],
+      };
+    }
     return cart;
+  }
+
+  /**
+   * Resolves and checks the variant for a cart line. Products with variants can only be bought as a
+   * specific, active variant; products without variants never take a variant id.
+   */
+  private async resolveVariant(product: any, variantId: string | undefined | null) {
+    if (!product.hasVariants) {
+      if (variantId) throw new BadRequestException('This product has no variants');
+      return null;
+    }
+    if (!variantId) throw new BadRequestException('Please choose the product options before adding it to the cart');
+    const variant = await this.prisma.productVariant.findFirst({
+      where: { id: variantId, productId: product.id, ...LIVE_VARIANTS_WHERE },
+    });
+    if (!variant || !variant.isActive) throw new BadRequestException('This option is not available');
+    return variant;
+  }
+
+  /**
+   * Cart lines remember the price they were added at. Contract, role or tier prices can change
+   * afterwards (e.g. an admin assigns this buyer a contract price), so refresh each line to the
+   * current effective price whenever the cart is loaded. Free (BOGO) and package lines are left alone.
+   */
+  private async repriceItems(cart: any, userId: string) {
+    for (const item of cart.items as any[]) {
+      const meta = (item.metadata || {}) as Record<string, any>;
+      if (meta.bogo === true || meta.packageId || item.packageGroupId) continue;
+      try {
+        const pricing = await this.pricingService.calculateEffectivePrice(item.productId, item.quantity, userId, item.variantId || undefined);
+        if (Number(item.unitPrice) !== Number(pricing.finalPrice)) {
+          await this.prisma.cartItem.update({
+            where: { id: item.id },
+            data: { unitPrice: pricing.finalPrice, metadata: { ...meta, pricing } },
+          });
+          item.unitPrice = pricing.finalPrice;
+          item.metadata = { ...meta, pricing };
+        }
+      } catch {
+        /* leave the line as it was */
+      }
+    }
   }
 
   /**
@@ -133,10 +173,11 @@ export class CartService {
     for (const bogo of result.bogo) {
       // Check how many times this BOGO rule applies
       // (e.g., if buyQuantity is 3 and user has 6, they get 2 free)
-      const buyItem = cartItems.find((item) => item.productId === bogo.buyProductId);
-      if (!buyItem) continue;
+      // Units of the buy product across all its cart lines (one line per variant).
+      const boughtQty = this.boughtQuantity(cartItems, bogo.buyProductId);
+      if (boughtQty === 0) continue;
 
-      const applicableFreeQty = Math.floor(buyItem.quantity / bogo.buyQuantity) * (bogo.freeQuantity || 1);
+      const applicableFreeQty = Math.floor(boughtQty / bogo.buyQuantity) * (bogo.freeQuantity || 1);
 
       // Check how many of this free product are already in the cart as BOGO items
       const existingBogoItem = currentItems.find(
@@ -158,12 +199,28 @@ export class CartService {
 
         const addQty = applicableFreeQty - existingBogoQty;
 
+        // A free product with variants is given as one of its variants (any variant qualifies).
+        let freeVariantId: string | null = null;
+        if (freeProduct.hasVariants && !existingBogoItem) {
+          freeVariantId = await this.pickFreeVariant(cartId, freeProduct, addQty);
+          if (!freeVariantId) continue; // no active variant has stock for the free units
+        } else if (!freeProduct.hasVariants && freeProduct.manageInventory && !freeProduct.allowBackorder) {
+          // A free unit is still stock that ships: only give it if it is available, on top of any
+          // paid units of the same product in this cart.
+          const paidUnits = (await this.prisma.cartItem.findMany({ where: { cartId, productId: freeProduct.id } }))
+            .filter((l) => (l.metadata as any)?.bogo !== true)
+            .reduce((sum, l) => sum + l.quantity, 0);
+          const available = freeProduct.inventoryQuantity - freeProduct.reservedQuantity - paidUnits;
+          if (available < applicableFreeQty) continue;
+        }
+
         if (existingBogoItem) {
           // Update existing BOGO item quantity
           await this.prisma.cartItem.update({
             where: { id: existingBogoItem.id },
             data: {
               quantity: applicableFreeQty,
+              metadata: { ...((existingBogoItem.metadata as any) || {}), buyQuantity: bogo.buyQuantity },
             },
           });
         } else {
@@ -174,10 +231,12 @@ export class CartService {
               productId: bogo.freeProductId,
               quantity: addQty,
               unitPrice: 0,
+              variantId: freeVariantId,
               metadata: {
                 bogo: true,
                 bogoRuleName: bogo.ruleName,
                 buyProductId: bogo.buyProductId,
+                buyQuantity: bogo.buyQuantity,
                 freeProductId: bogo.freeProductId,
                 freeQuantity: bogo.freeQuantity || 1,
               },
@@ -199,6 +258,61 @@ export class CartService {
         });
       }
     }
+  }
+
+  /**
+   * Re-evaluates buy X get Y for a whole cart: adds earned free items and removes stale ones.
+   * Returns true when the free items changed.
+   */
+  async syncFreeItems(cartId: string, userId?: string, userRole?: string): Promise<boolean> {
+    const snapshot = async () =>
+      (await this.prisma.cartItem.findMany({ where: { cartId, metadata: { path: ['bogo'], equals: true } }, orderBy: { id: 'asc' } }))
+        .map((i) => `${i.id}:${i.productId}:${i.variantId}:${i.quantity}`)
+        .join(',');
+    const before = await snapshot();
+    const items = await this.prisma.cartItem.findMany({ where: { cartId }, include: { product: { select: { categoryId: true } } } });
+    const ctx: CartItemContext[] = items
+      .filter((ci) => (ci.metadata as any)?.bogo !== true)
+      .map((ci) => ({
+        productId: ci.productId,
+        categoryId: ci.product?.categoryId || undefined,
+        quantity: ci.quantity,
+        unitPrice: Number(ci.unitPrice),
+        offerChoice: (ci.metadata as any)?.offerChoice || undefined,
+      }));
+    const subtotal = ctx.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+    await this.applyBogoFreeItems(userId, userRole, ctx, subtotal, cartId);
+    await this.cleanupStaleBogoItems(userId, userRole, ctx, subtotal, cartId);
+    return (await snapshot()) !== before;
+  }
+
+  /** Units of a product in the cart, summed over all its (paid) lines — one line per variant. */
+  private boughtQuantity(cartItems: CartItemContext[], productId: string) {
+    return cartItems.filter((item) => item.productId === productId).reduce((sum, item) => sum + item.quantity, 0);
+  }
+
+  /**
+   * Chooses the variant given free. A variant the shopper is already buying comes first (most
+   * units first), then the product's variants in display order; the first active one with enough
+   * stock for the free units, on top of the units of it already in this cart, is used.
+   */
+  private async pickFreeVariant(cartId: string, product: { id: string; manageInventory: boolean; allowBackorder: boolean }, freeQty: number) {
+    const variants = await this.prisma.productVariant.findMany({
+      where: { productId: product.id, isActive: true, ...LIVE_VARIANTS_WHERE },
+      orderBy: { position: 'asc' },
+    });
+    if (variants.length === 0) return null;
+    const lines = await this.prisma.cartItem.findMany({ where: { cartId, productId: product.id } });
+    const paid = lines.filter((l) => (l.metadata as any)?.bogo !== true && l.variantId);
+    const inCart = (variantId: string) => paid.filter((l) => l.variantId === variantId).reduce((sum, l) => sum + l.quantity, 0);
+    const preferred = [...paid].sort((a, b) => b.quantity - a.quantity).map((l) => l.variantId as string);
+    const ordered = [
+      ...preferred.map((id) => variants.find((v) => v.id === id)).filter((v): v is (typeof variants)[number] => !!v),
+      ...variants.filter((v) => !preferred.includes(v.id)),
+    ];
+    const hasStock = (v: (typeof variants)[number]) =>
+      !product.manageInventory || product.allowBackorder || v.inventoryQuantity - v.reservedQuantity >= inCart(v.id) + freeQty;
+    return ordered.find(hasStock)?.id ?? null;
   }
 
   /**
@@ -236,35 +350,27 @@ export class CartService {
       (item) => (item.metadata as any)?.bogo === true,
     );
 
-    // Build a set of valid BOGO free product IDs from current evaluation
-    const validBogoFreeProducts = new Map<string, { qty: number; ruleName: string }>();
-    if (result.bogo) {
-      for (const bogo of result.bogo) {
-        const buyItem = cartItems.find((item) => item.productId === bogo.buyProductId);
-        if (!buyItem) continue;
-        const applicableFreeQty = Math.floor(buyItem.quantity / bogo.buyQuantity) * (bogo.freeQuantity || 1);
-        const existing = validBogoFreeProducts.get(bogo.freeProductId);
-        if (!existing || applicableFreeQty > existing.qty) {
-          validBogoFreeProducts.set(bogo.freeProductId, { qty: applicableFreeQty, ruleName: bogo.ruleName });
-        }
-      }
+    // Free units each offer currently earns, per (offer, free product).
+    const allowance = new Map<string, number>();
+    for (const bogo of result.bogo || []) {
+      const boughtQty = this.boughtQuantity(cartItems, bogo.buyProductId);
+      if (boughtQty === 0) continue;
+      const key = `${bogo.ruleName}|${bogo.freeProductId}`;
+      const qty = Math.floor(boughtQty / bogo.buyQuantity) * (bogo.freeQuantity || 1);
+      allowance.set(key, Math.max(allowance.get(key) || 0, qty));
     }
 
     for (const bogoItem of bogoItems) {
-      const metadata = bogoItem.metadata as any;
-      const freeProductId = bogoItem.productId;
-      const ruleName = metadata?.bogoRuleName;
-
-      const valid = validBogoFreeProducts.get(freeProductId);
-      if (!valid || valid.ruleName !== ruleName) {
-        // This BOGO item is no longer valid — remove it
+      const key = `${(bogoItem.metadata as any)?.bogoRuleName}|${bogoItem.productId}`;
+      const left = allowance.get(key) || 0;
+      if (left <= 0) {
+        // The offer no longer applies (condition not met, offer switched or removed): drop the free item.
         await this.prisma.cartItem.delete({ where: { id: bogoItem.id } });
-      } else if (valid.qty < bogoItem.quantity) {
-        // Reduce quantity
-        await this.prisma.cartItem.update({
-          where: { id: bogoItem.id },
-          data: { quantity: valid.qty },
-        });
+      } else {
+        if (bogoItem.quantity > left) {
+          await this.prisma.cartItem.update({ where: { id: bogoItem.id }, data: { quantity: left } });
+        }
+        allowance.set(key, Math.max(0, left - bogoItem.quantity));
       }
     }
   }
@@ -277,6 +383,8 @@ export class CartService {
     packageGroupId?: string,
     packageMetadata?: any,
     userRole?: string,
+    offerChoice?: string,
+    variantId?: string,
   ) {
     const cart = await this.getOrCreateCart(userId, sessionId);
     const product = await this.prisma.product.findUnique({
@@ -286,26 +394,32 @@ export class CartService {
     if (!product) throw new BadRequestException('Product not found');
     if (product.status !== 'PUBLISHED')
       throw new BadRequestException('Product is not available');
+    const variant = await this.resolveVariant(product, variantId);
     // Skip MOQ check for package component items — the package determines the purchase quantity
     if (!packageGroupId && quantity < product.moq)
       throw new BadRequestException(`Minimum order quantity is ${product.moq}`);
-    const availableStock = product.inventoryQuantity - product.reservedQuantity;
+    const stockOf = () =>
+      variant ? variant.inventoryQuantity - variant.reservedQuantity : product.inventoryQuantity - product.reservedQuantity;
+    const availableStock = stockOf();
     if (product.manageInventory && quantity > availableStock)
-      throw new BadRequestException('Not enough inventory');
+      throw new BadRequestException(variant && availableStock <= 0 ? 'This option is out of stock' : 'Not enough inventory');
 
     // Evaluate dynamic rules — block non-purchasable products and max quantity violations
     // Build the prospective cart items context including the new item
     const existingItem = cart.items.find(
-      (item) => item.productId === productId && (item as any).packageGroupId === (packageGroupId || null),
+      (item) =>
+        item.productId === productId &&
+        ((item as any).variantId || null) === (variant?.id || null) &&
+        (item as any).packageGroupId === (packageGroupId || null) &&
+        (item.metadata as any)?.bogo !== true,
     );
 
-    const prospectiveCartItems: CartItemContext[] = cart.items.map((item) => ({
+    const prospectiveCartItems: CartItemContext[] = cart.items.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((item) => ({
       productId: item.productId,
       categoryId: (item as any).product?.categoryId || undefined,
-      quantity: item.productId === productId
-        ? (existingItem ? existingItem.quantity + quantity : quantity)
-        : item.quantity,
+      quantity: existingItem && item.id === existingItem.id ? existingItem.quantity + quantity : item.quantity,
       unitPrice: Number(item.unitPrice),
+      offerChoice: (item.metadata as any)?.offerChoice || undefined,
     }));
 
     // Add the new item if not already in cart
@@ -314,7 +428,8 @@ export class CartService {
         productId,
         categoryId: product.categoryId || undefined,
         quantity,
-        unitPrice: Number(product.unitPrice),
+        unitPrice: Number(variant ? variant.price : product.unitPrice),
+        offerChoice,
       });
     }
 
@@ -335,11 +450,12 @@ export class CartService {
       productId,
       quantity,
       userId,
+      variant?.id,
     );
 
     if (existingItem) {
       const newQuantity = existingItem.quantity + quantity;
-      const availableStock2 = product.inventoryQuantity - product.reservedQuantity;
+      const availableStock2 = stockOf();
       if (product.manageInventory && newQuantity > availableStock2)
         throw new BadRequestException('Not enough inventory');
 
@@ -348,6 +464,7 @@ export class CartService {
         productId,
         newQuantity,
         userId,
+        variant?.id,
       );
 
       await this.prisma.cartItem.update({
@@ -355,7 +472,7 @@ export class CartService {
         data: {
           quantity: newQuantity,
           unitPrice: newPricing.finalPrice,
-          metadata: { pricing: newPricing },
+          metadata: { pricing: newPricing, ...(offerChoice || (existingItem.metadata as any)?.offerChoice ? { offerChoice: offerChoice || (existingItem.metadata as any)?.offerChoice } : {}) },
         },
       });
     } else {
@@ -365,14 +482,17 @@ export class CartService {
           productId,
           quantity,
           unitPrice: pricing.finalPrice,
-          metadata: packageMetadata || { pricing },
+          metadata: packageMetadata || { pricing, ...(offerChoice ? { offerChoice } : {}) },
           packageGroupId: packageGroupId || null,
+          variantId: variant?.id || null,
         },
       });
     }
 
-    // Auto-add BOGO free items
+    // Auto-add earned free items, and drop free items that no longer apply: adding can change which
+    // offer wins (e.g. reaching "buy 10 get 5" replaces "buy 3 get 1"), and an offer may have ended.
     await this.applyBogoFreeItems(userId, userRole, prospectiveCartItems, subtotal, cart.id);
+    await this.cleanupStaleBogoItems(userId, userRole, prospectiveCartItems, subtotal, cart.id);
 
     return this.getOrCreateCart(userId, sessionId);
   }
@@ -380,15 +500,19 @@ export class CartService {
   async updateItem(itemId: string, quantity: number, userId?: string, userRole?: string) {
     const item = await this.prisma.cartItem.findUnique({
       where: { id: itemId },
-      include: { product: true, cart: true },
+      include: { product: true, cart: true, variant: true },
     });
 
     if (!item) throw new BadRequestException('Cart item not found');
+    if ((item.metadata as any)?.bogo === true)
+      throw new BadRequestException('Free items follow the offer and cannot be edited');
     if (quantity < item.product.moq)
       throw new BadRequestException(
         `Minimum order quantity is ${item.product.moq}`,
       );
-    const availableStock3 = item.product.inventoryQuantity - item.product.reservedQuantity;
+    const availableStock3 = item.variant
+      ? item.variant.inventoryQuantity - item.variant.reservedQuantity
+      : item.product.inventoryQuantity - item.product.reservedQuantity;
     if (item.product.manageInventory && quantity > availableStock3)
       throw new BadRequestException('Not enough inventory');
 
@@ -410,11 +534,12 @@ export class CartService {
       });
 
       if (cart) {
-        const cartItemsContext: CartItemContext[] = cart.items.map((ci) => ({
+        const cartItemsContext: CartItemContext[] = cart.items.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((ci) => ({
           productId: ci.productId,
           categoryId: (ci as any).product?.categoryId || undefined,
           quantity: ci.id === itemId ? quantity : ci.quantity,
           unitPrice: Number(ci.unitPrice),
+          offerChoice: (ci.metadata as any)?.offerChoice || undefined,
         }));
 
         const subtotal = cartItemsContext.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
@@ -428,6 +553,9 @@ export class CartService {
 
         // Update BOGO free items after quantity change
         await this.applyBogoFreeItems(cartUserId, userRole, cartItemsContext, subtotal, cart.id);
+        // Lowering the quantity can drop below the offer's buy quantity — remove (or trim)
+        // free items that no longer qualify, otherwise they would stay in the cart.
+        await this.cleanupStaleBogoItems(cartUserId, userRole, cartItemsContext, subtotal, cart.id);
       }
     }
 
@@ -435,6 +563,7 @@ export class CartService {
       item.productId,
       quantity,
       cartUserId,
+      item.variantId || undefined,
     );
 
     await this.prisma.cartItem.update({
@@ -442,7 +571,7 @@ export class CartService {
       data: {
         quantity,
         unitPrice: pricing.finalPrice,
-        metadata: { pricing },
+        metadata: { pricing, ...((item.metadata as any)?.offerChoice ? { offerChoice: (item.metadata as any).offerChoice } : {}) },
       },
     });
 
@@ -450,6 +579,38 @@ export class CartService {
       item.cart.userId || undefined,
       item.cart.sessionId || undefined,
     );
+  }
+
+  /**
+   * Remember which offer the shopper picked for a product (a rule id, or "none"), then
+   * re-sync BOGO free items so only the chosen offer's free goods stay in the cart.
+   */
+  async setOfferChoice(productId: string, choice: string, userId?: string, sessionId?: string, userRole?: string) {
+    const cart = await this.getOrCreateCart(userId, sessionId);
+    const items = await this.prisma.cartItem.findMany({ where: { cartId: cart.id, productId } });
+    const buyItems = items.filter((i) => (i.metadata as any)?.bogo !== true);
+    if (buyItems.length === 0) return cart;
+
+    for (const it of buyItems) {
+      const meta = ((it.metadata as any) || {}) as Record<string, any>;
+      await this.prisma.cartItem.update({
+        where: { id: it.id },
+        data: { metadata: { ...meta, offerChoice: choice } },
+      });
+    }
+
+    const fresh = await this.prisma.cartItem.findMany({ where: { cartId: cart.id }, include: { product: { select: { categoryId: true } } } });
+    const ctx: CartItemContext[] = fresh.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((ci: any) => ({
+      productId: ci.productId,
+      categoryId: ci.product?.categoryId || undefined,
+      quantity: ci.quantity,
+      unitPrice: Number(ci.unitPrice),
+      offerChoice: (ci.metadata as any)?.offerChoice || undefined,
+    }));
+    const subtotal = ctx.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+    await this.applyBogoFreeItems(userId, userRole, ctx, subtotal, cart.id);
+    await this.cleanupStaleBogoItems(userId, userRole, ctx, subtotal, cart.id);
+    return this.getOrCreateCart(userId, sessionId);
   }
 
   async removeItem(itemId: string) {
@@ -480,11 +641,13 @@ export class CartService {
     if (cart) {
       const cartItemsContext: CartItemContext[] = cart.items
         .filter((ci) => ci.id !== item.id) // exclude the removed item
+        .filter(((x: any) => (x.metadata as any)?.bogo !== true)) // free goods never count towards an offer's buy quantity
         .map((ci) => ({
           productId: ci.productId,
           categoryId: (ci as any).product?.categoryId || undefined,
           quantity: ci.quantity,
           unitPrice: Number(ci.unitPrice),
+          offerChoice: (ci.metadata as any)?.offerChoice || undefined,
         }));
       const subtotal = cartItemsContext.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
       await this.cleanupStaleBogoItems(cartUserId, undefined, cartItemsContext, subtotal, cart.id);
@@ -525,9 +688,15 @@ export class CartService {
     }
 
     for (const guestItem of guestCart.items) {
+      // Free lines are never carried over; they are recomputed for the merged cart below.
+      if ((guestItem.metadata as any)?.bogo === true) continue;
       const guestPackageGroupId = (guestItem as any).packageGroupId || null;
       const existingItem = userCart.items.find(
-        (i) => i.productId === guestItem.productId && (i as any).packageGroupId === guestPackageGroupId,
+        (i) =>
+          (i.metadata as any)?.bogo !== true &&
+          i.productId === guestItem.productId &&
+          (i.variantId || null) === (guestItem.variantId || null) &&
+          (i as any).packageGroupId === guestPackageGroupId,
       );
       if (existingItem) {
         await this.prisma.cartItem.update({
@@ -542,6 +711,7 @@ export class CartService {
             quantity: guestItem.quantity,
             unitPrice: guestItem.unitPrice,
             packageGroupId: guestPackageGroupId,
+            variantId: guestItem.variantId || null,
             metadata: guestItem.metadata,
           },
         });
@@ -550,6 +720,10 @@ export class CartService {
 
     // Delete guest cart after merge
     await this.prisma.cart.delete({ where: { id: guestCart.id } }).catch(() => null);
+
+    // Guests get no free items; now that the cart belongs to a signed-in buyer, give the free
+    // items its (merged) quantities earn.
+    await this.syncFreeItems(userCart.id, userId);
 
     return this.getOrCreateCart(userId, undefined);
   }
@@ -573,15 +747,16 @@ export class CartService {
       0,
     );
     const itemCount = cart.items.reduce(
-      (sum: number, item: any) => sum + item.quantity,
+      (sum: number, item: any) => sum + (item.metadata?.bogo === true ? 0 : item.quantity),
       0,
     );
 
-    const cartItems: CartItemContext[] = cart.items.map((item: any) => ({
+    const cartItems: CartItemContext[] = cart.items.filter(((x: any) => (x.metadata as any)?.bogo !== true)).map((item: any) => ({
       productId: item.productId,
       categoryId: item.product?.categoryId || undefined,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
+      offerChoice: (item.metadata as any)?.offerChoice || undefined,
     }));
 
     const settings = await this.settingsService.findAll();

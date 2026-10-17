@@ -9,6 +9,7 @@ export class PricingService {
     productId: string,
     quantity: number,
     userId?: string,
+    variantId?: string,
   ): Promise<{
     basePrice: number;
     tierPrice: number;
@@ -23,6 +24,11 @@ export class PricingService {
     /** false while the buyer is below roleMinQty, i.e. finalPrice is still the retail price. */
     roleQtyReached: boolean;
     contractPrice: number | null;
+    /** The buyer's contract price to *display* (even below its min quantity) and that min quantity. */
+    contractDisplayPrice: number | null;
+    contractMinQty: number | null;
+    /** false while the buyer is below contractMinQty, i.e. finalPrice is not the contract price yet. */
+    contractQtyReached: boolean;
     seasonalDiscount: number;
     finalPrice: number;
     discountAmount: number;
@@ -40,11 +46,20 @@ export class PricingService {
 
     if (!product) throw new Error('Product not found');
 
-    const basePrice = Number(product.unitPrice);
+    // A variant is priced from its own price. Tier, role and contract prices are fixed per-product
+    // amounts set for the single product, so they are not applied to variants (a contract price
+    // for the 128 GB model must not be charged for the 256 GB one); seasonal discounts still apply.
+    let variant: { price: any } | null = null;
+    if (variantId) {
+      variant = await this.prisma.productVariant.findFirst({ where: { id: variantId, productId } });
+      if (!variant) throw new Error('Variant not found');
+    }
+
+    const basePrice = Number(variant ? variant.price : product.unitPrice);
 
     // Product Tier Pricing (priority 3) — computed regardless of what wins, so the
     // UI can still show "bulk pricing available" even when a higher-priority rule applies.
-    const tier = product.tierPrices.find(
+    const tier = (variant ? [] : product.tierPrices).find(
       (tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty),
     );
     const tierPrice = tier ? Number(tier.price) : basePrice;
@@ -61,7 +76,7 @@ export class PricingService {
     let roleMinQty: number | null = null;
     let roleQtyReached = false;
     let loggedInRole: string | null = null;
-    if (userId) {
+    if (userId && !variant) {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         include: { roleRel: true },
@@ -95,18 +110,26 @@ export class PricingService {
 
     // Contract Price (priority 0 — a per-user negotiated price, more specific than role pricing)
     let contractPrice: number | null = null;
-    if (userId) {
+    let contractDisplayPrice: number | null = null;
+    let contractMinQty: number | null = null;
+    if (userId && !variant) {
+      // "Valid until" is a calendar date: the contract is usable through the end of that day.
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
       const contract = await this.prisma.contractPrice.findFirst({
         where: {
           productId,
           userId,
           isActive: true,
-          OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
-          minQty: { lte: quantity },
+          OR: [{ validUntil: null }, { validUntil: { gte: startOfToday } }],
         },
-        orderBy: { price: 'asc' },
       });
-      if (contract) contractPrice = Number(contract.price);
+      if (contract) {
+        contractDisplayPrice = Number(contract.price);
+        contractMinQty = contract.minQty;
+        // Charged only once the contract's minimum quantity is reached.
+        if (quantity >= contract.minQty) contractPrice = contractDisplayPrice;
+      }
     }
 
     // Product Discount (priority 4) — seasonal/product discount off the base price.
@@ -194,6 +217,9 @@ export class PricingService {
       roleMinQty,
       roleQtyReached,
       contractPrice,
+      contractDisplayPrice,
+      contractMinQty,
+      contractQtyReached: contractPrice !== null,
       seasonalDiscount,
       finalPrice,
       discountAmount,

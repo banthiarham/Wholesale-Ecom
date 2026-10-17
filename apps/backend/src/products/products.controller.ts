@@ -105,6 +105,60 @@ export class ProductsController {
 
   // ── Static POST routes BEFORE parameterized ones ──
 
+  /**
+   * Stores images for variants (resized to WebP like product images) and returns their URLs.
+   * Nothing is attached here: the admin form sends the URLs inside each variant on save, which
+   * also works for variants that do not exist yet.
+   */
+  @Post('variant-images')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.VENDOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Upload images for product variants (Admin / Vendor)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const dir = path.join(process.cwd(), 'uploads', 'products');
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req, file, cb) => {
+          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
+          cb(null, unique);
+        },
+      }),
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (!/^image\//.test(file.mimetype)) return cb(new BadRequestException('Only image files can be uploaded'), false);
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadVariantImages(@UploadedFiles() files: Express.Multer.File[]) {
+    if (!files || files.length === 0) throw new BadRequestException('Choose at least one image');
+    const uploaded: string[] = [];
+    for (const file of files) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const baseName = path.basename(file.filename, ext);
+      const resizedFilename = `${baseName}.webp`;
+      const resizedPath = path.join(path.dirname(file.path), resizedFilename);
+      try {
+        await sharp(file.path)
+          .resize(1200, null, { withoutEnlargement: true, fit: 'inside' })
+          .webp({ quality: 80 })
+          .toFile(resizedPath);
+        fs.unlinkSync(file.path);
+        uploaded.push(`/uploads/products/${resizedFilename}`);
+      } catch (err) {
+        console.error('Variant image resize failed, using original:', err);
+        uploaded.push(`/uploads/products/${file.filename}`);
+      }
+    }
+    return { uploaded };
+  }
+
   @Post('bulk-upload-excel')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

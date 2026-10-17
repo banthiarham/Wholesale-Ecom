@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import * as XLSX from 'xlsx';
 
 @Injectable()
@@ -247,7 +248,7 @@ export class UsersService {
   async findOne(id: string): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { roleRel: true },
+      include: { roleRel: true, addresses: { orderBy: { isDefault: 'desc' } } },
     });
 
     if (!user) {
@@ -285,9 +286,46 @@ export class UsersService {
     return this.excludePassword(user);
   }
 
+  async adminUpdate(id: string, dto: AdminUpdateUserDto): Promise<Omit<User, 'password'>> {
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('User not found');
+
+    if (dto.email && dto.email !== existing.email) {
+      const taken = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      if (taken) throw new ConflictException('Email already exists');
+    }
+
+    const { password, roleId, role, ...rest } = dto;
+    const data: any = { ...rest };
+    if (password) data.password = await bcrypt.hash(password, 10);
+
+    // Keep `role` (legacy enum) and `roleId` (dynamic role) in step, as assignRole() does.
+    if (roleId) {
+      const roleRecord = await this.prisma.role.findUnique({ where: { id: roleId } });
+      if (!roleRecord) throw new BadRequestException('Invalid role selected');
+      data.roleId = roleId;
+      if ((Object.values(UserRole) as string[]).includes(roleRecord.name)) data.role = roleRecord.name;
+    } else if (role) {
+      data.role = role;
+    }
+
+    const user = await this.prisma.user.update({ where: { id }, data });
+    return this.excludePassword(user);
+  }
+
   async remove(id: string): Promise<void> {
     await this.findOne(id);
-    await this.prisma.user.delete({ where: { id } });
+    try {
+      await this.prisma.user.delete({ where: { id } });
+    } catch (err: any) {
+      // Orders, reviews etc. reference the user without cascading — surface a readable reason.
+      if (err?.code === 'P2003' || err?.code === 'P2014') {
+        throw new ConflictException(
+          'This user has orders or other linked records and cannot be deleted. Set the account to Inactive or Suspended instead.',
+        );
+      }
+      throw err;
+    }
   }
 
   async updateLastLogin(id: string): Promise<void> {

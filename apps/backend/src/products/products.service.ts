@@ -1,6 +1,27 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { ProductStatus } from '@prisma/client';
+import { Prisma, ProductStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ARCHIVED_VARIANT_PREFIX, LIVE_VARIANTS_WHERE, syncProductFromVariants } from './variant-sync';
+
+const MAX_OPTIONS = 5;
+const MAX_VALUES_PER_OPTION = 50;
+const MAX_VARIANTS = 500;
+const MAX_VARIANT_IMAGES = 10;
+
+interface VariantPlan {
+  options: { name: string; values: string[] }[];
+  variants: {
+    id?: string;
+    options: Record<string, string>;
+    optionsKey: string;
+    sku: string;
+    price: number;
+    inventoryQuantity: number;
+    images: string[];
+    isActive: boolean;
+    position: number;
+  }[];
+}
 import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
@@ -116,6 +137,7 @@ export class ProductsService {
         category: { select: { id: true, name: true, handle: true } },
         categories: { select: { id: true, name: true, handle: true } },
         tierPrices: { orderBy: { minQty: 'asc' } },
+        variants: { where: LIVE_VARIANTS_WHERE, orderBy: { position: 'asc' } },
         reviews: {
           where: { isVerified: true },
           orderBy: { createdAt: 'desc' },
@@ -135,6 +157,7 @@ export class ProductsService {
         category: true,
         categories: { select: { id: true, name: true, handle: true } },
         tierPrices: true,
+        variants: { where: LIVE_VARIANTS_WHERE, orderBy: { position: 'asc' } },
       },
     });
     if (!product) throw new NotFoundException('Product not found');
@@ -155,30 +178,221 @@ export class ProductsService {
     return { ...rest, categoryId: ids[0] ?? null, categories: isUpdate ? { set: refs } : { connect: refs } };
   }
 
+  private readonly writeInclude = {
+    category: true,
+    categories: { select: { id: true, name: true, handle: true } },
+    tierPrices: true,
+    variants: { where: LIVE_VARIANTS_WHERE, orderBy: { position: 'asc' as const } },
+  };
+
   async create(data: any) {
-    const { tierPrices, ...rest } = this.withCategories(data, false);
-    return this.prisma.product.create({
-      data: {
-        ...rest,
-        tierPrices: tierPrices ? { create: tierPrices } : undefined,
-      },
-      include: { category: true, categories: { select: { id: true, name: true, handle: true } }, tierPrices: true },
+    const { tierPrices, hasVariants, variantOptions, variants, ...rest } = this.withCategories(data, false);
+    const plan = hasVariants ? await this.validateVariants(undefined, variantOptions, variants) : null;
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          ...rest,
+          hasVariants: !!plan,
+          variantOptions: plan ? plan.options : Prisma.JsonNull,
+          tierPrices: tierPrices ? { create: tierPrices } : undefined,
+        },
+      });
+      if (plan) await this.applyVariants(tx, product.id, plan);
+      return tx.product.findUnique({ where: { id: product.id }, include: this.writeInclude });
     });
   }
 
   async update(id: string, data: any) {
-    const { tierPrices, ...rest } = this.withCategories(data, true);
-    if (tierPrices) {
-      await this.prisma.tierPrice.deleteMany({ where: { productId: id } });
-    }
-    return this.prisma.product.update({
-      where: { id },
-      data: {
-        ...rest,
-        tierPrices: tierPrices ? { create: tierPrices } : undefined,
-      },
-      include: { category: true, categories: { select: { id: true, name: true, handle: true } }, tierPrices: true },
+    const { tierPrices, hasVariants, variantOptions, variants, ...rest } = this.withCategories(data, true);
+    // hasVariants left out (e.g. a status-only update) means: leave the variants as they are.
+    const plan = hasVariants === true ? await this.validateVariants(id, variantOptions, variants) : null;
+    return this.prisma.$transaction(async (tx) => {
+      if (tierPrices) await tx.tierPrice.deleteMany({ where: { productId: id } });
+      const variantData =
+        hasVariants === true ? { hasVariants: true, variantOptions: plan!.options }
+        : hasVariants === false ? { hasVariants: false, variantOptions: Prisma.JsonNull }
+        : {};
+      await tx.product.update({
+        where: { id },
+        data: {
+          ...rest,
+          ...variantData,
+          tierPrices: tierPrices ? { create: tierPrices } : undefined,
+        },
+      });
+      if (plan) await this.applyVariants(tx, id, plan);
+      else if (hasVariants === false) await this.applyVariants(tx, id, { options: [], variants: [] }, false);
+      return tx.product.findUnique({ where: { id }, include: this.writeInclude });
     });
+  }
+
+  /**
+   * Validates the admin's option list and variant rows and normalises them. Rejects missing or
+   * duplicate option names/values, variants whose options don't match the option list, duplicate
+   * combinations, duplicate SKUs (within the product, against other products' variants and against
+   * product SKUs), and bad prices / stock.
+   */
+  private async validateVariants(productId: string | undefined, rawOptions: any, rawVariants: any): Promise<VariantPlan> {
+    const bad = (msg: string): never => { throw new BadRequestException(msg); };
+    if (!Array.isArray(rawOptions) || rawOptions.length === 0) bad('Add at least one variant option (e.g. Color)');
+    if (rawOptions.length > MAX_OPTIONS) bad(`A product can have at most ${MAX_OPTIONS} variant options`);
+
+    const options: VariantPlan['options'] = [];
+    const seenNames = new Set<string>();
+    for (const o of rawOptions) {
+      const name = typeof o?.name === 'string' ? o.name.trim() : '';
+      if (!name) bad('Every variant option needs a name');
+      if (name.length > 50) bad(`Option name "${name}" is too long`);
+      if (seenNames.has(name.toLowerCase())) bad(`Option "${name}" is listed twice`);
+      seenNames.add(name.toLowerCase());
+      if (!Array.isArray(o.values) || o.values.length === 0) bad(`Add at least one value for "${name}"`);
+      if (o.values.length > MAX_VALUES_PER_OPTION) bad(`"${name}" can have at most ${MAX_VALUES_PER_OPTION} values`);
+      const values: string[] = [];
+      const seenValues = new Set<string>();
+      for (const v of o.values) {
+        const value = typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '';
+        if (!value) bad(`"${name}" has an empty value`);
+        if (value.length > 50) bad(`Value "${value}" is too long`);
+        if (seenValues.has(value.toLowerCase())) bad(`"${name}" has the value "${value}" twice`);
+        seenValues.add(value.toLowerCase());
+        values.push(value);
+      }
+      options.push({ name, values });
+    }
+
+    if (!Array.isArray(rawVariants) || rawVariants.length === 0) bad('Add at least one variant');
+    if (rawVariants.length > MAX_VARIANTS) bad(`A product can have at most ${MAX_VARIANTS} variants`);
+
+    const existing = productId
+      ? await this.prisma.productVariant.findMany({ where: { productId }, select: { id: true } })
+      : [];
+    const ownIds = new Set(existing.map((v) => v.id));
+
+    const variants: VariantPlan['variants'] = [];
+    const seenKeys = new Set<string>();
+    const seenSkus = new Set<string>();
+    const seenIds = new Set<string>();
+    rawVariants.forEach((v: any, index: number) => {
+      const given = v?.options && typeof v.options === 'object' ? v.options : null;
+      if (!given) bad(`Variant ${index + 1} has no option values`);
+      const givenKeys = Object.keys(given);
+      const normalised: Record<string, string> = {};
+      for (const opt of options) {
+        const key = givenKeys.find((k) => k.trim().toLowerCase() === opt.name.toLowerCase());
+        const raw = key !== undefined ? String(given[key] ?? '').trim() : '';
+        const value = opt.values.find((x) => x.toLowerCase() === raw.toLowerCase());
+        if (!value) bad(`Variant ${index + 1}: choose a valid ${opt.name}`);
+        normalised[opt.name] = value!;
+      }
+      if (givenKeys.length !== options.length) bad(`Variant ${index + 1} has options that are not in the option list`);
+      const label = options.map((o) => normalised[o.name]).join(' / ');
+      const optionsKey = options.map((o) => `${o.name.toLowerCase()}=${normalised[o.name].toLowerCase()}`).join('|');
+      if (seenKeys.has(optionsKey)) bad(`The combination "${label}" is listed twice`);
+      seenKeys.add(optionsKey);
+
+      const sku = typeof v.sku === 'string' ? v.sku.trim() : '';
+      if (!sku) bad(`Variant "${label}" needs a SKU`);
+      if (sku.length > 100) bad(`SKU "${sku}" is too long`);
+      if (seenSkus.has(sku.toLowerCase())) bad(`SKU "${sku}" is used by more than one variant`);
+      seenSkus.add(sku.toLowerCase());
+
+      const price = Number(v.price);
+      if (v.price === '' || v.price === null || v.price === undefined || !Number.isFinite(price) || price < 0) bad(`Variant "${label}" needs a valid price`);
+      const stock = Number(v.inventoryQuantity);
+      if (v.inventoryQuantity === '' || !Number.isInteger(stock) || stock < 0) bad(`Variant "${label}" needs a whole-number stock of 0 or more`);
+
+      let id: string | undefined;
+      if (v.id) {
+        if (!ownIds.has(v.id)) bad(`Variant "${label}" does not belong to this product`);
+        if (seenIds.has(v.id)) bad(`Variant "${label}" is listed twice`);
+        seenIds.add(v.id);
+        id = v.id;
+      }
+      // A variant's own gallery. `image` (a single URL) from older clients is read as a one-image gallery.
+      const rawImages: unknown[] = Array.isArray(v.images) ? v.images : typeof v.image === 'string' && v.image.trim() ? [v.image] : [];
+      if (rawImages.length > MAX_VARIANT_IMAGES) bad(`Variant "${label}" can have at most ${MAX_VARIANT_IMAGES} images`);
+      const images = [...new Set(rawImages.map((u) => (typeof u === 'string' ? u.trim() : '')).filter(Boolean))];
+      if (images.some((u) => u.length > 1000)) bad(`Variant "${label}" has an image address that is too long`);
+      variants.push({
+        id,
+        options: normalised,
+        optionsKey,
+        sku,
+        price: Math.round(price * 100) / 100,
+        inventoryQuantity: stock,
+        images,
+        isActive: v.isActive !== false,
+        position: index,
+      });
+    });
+
+    const skus = variants.map((v) => v.sku);
+    const skuMatch = skus.map((sku) => ({ sku: { equals: sku, mode: 'insensitive' as const } }));
+    const takenByVariant = await this.prisma.productVariant.findFirst({
+      where: { OR: skuMatch, ...(productId ? { productId: { not: productId } } : {}) },
+      select: { sku: true },
+    });
+    if (takenByVariant) bad(`SKU "${takenByVariant.sku}" is already used by another product's variant`);
+    const takenByProduct = await this.prisma.product.findFirst({
+      where: { OR: skuMatch },
+      select: { sku: true, title: true },
+    });
+    if (takenByProduct) bad(`SKU "${takenByProduct.sku}" is already the SKU of product "${takenByProduct.title}"`);
+
+    return { options, variants };
+  }
+
+  /**
+   * Writes the validated variants. Variants that are no longer listed are deleted, unless an order
+   * references them: those are archived (hidden, inactive) so order history keeps its link.
+   */
+  private async applyVariants(tx: Prisma.TransactionClient, productId: string, plan: VariantPlan, sync = true) {
+    const existing = await tx.productVariant.findMany({
+      where: { productId },
+      select: { id: true, sku: true, optionsKey: true, _count: { select: { orderItems: true } } },
+    });
+    const keep = new Set(plan.variants.filter((v) => v.id).map((v) => v.id!));
+
+    for (const v of existing) {
+      if (keep.has(v.id) || v.optionsKey.startsWith(ARCHIVED_VARIANT_PREFIX)) continue;
+      if (v._count.orderItems > 0) {
+        await tx.productVariant.update({
+          where: { id: v.id },
+          data: {
+            isActive: false,
+            optionsKey: `${ARCHIVED_VARIANT_PREFIX}${v.id}`,
+            // Frees the SKU for reuse; orders keep the original SKU in their own snapshot.
+            sku: `${v.sku}~archived-${v.id.slice(0, 8)}`,
+          },
+        });
+      } else {
+        await tx.productVariant.delete({ where: { id: v.id } });
+      }
+    }
+
+    // Two kept variants may swap SKUs or combinations; park them on temporary keys first so the
+    // unique constraints never see a transient clash.
+    for (const id of keep) {
+      await tx.productVariant.update({ where: { id }, data: { sku: `__tmp__${id}`, optionsKey: `__tmp__${id}` } });
+    }
+
+    for (const v of plan.variants) {
+      const data = {
+        options: v.options,
+        optionsKey: v.optionsKey,
+        sku: v.sku,
+        price: v.price,
+        inventoryQuantity: v.inventoryQuantity,
+        images: v.images,
+        image: v.images[0] ?? null,
+        isActive: v.isActive,
+        position: v.position,
+      };
+      if (v.id) await tx.productVariant.update({ where: { id: v.id }, data });
+      else await tx.productVariant.create({ data: { ...data, productId } });
+    }
+
+    if (sync && plan.variants.length > 0) await syncProductFromVariants(tx, productId);
   }
 
   async remove(id: string) {
@@ -211,7 +425,7 @@ export class ProductsService {
     return this.prisma.product.update({
       where: { id },
       data,
-      include: { category: true, categories: { select: { id: true, name: true, handle: true } }, tierPrices: true },
+      include: this.writeInclude,
     });
   }
 

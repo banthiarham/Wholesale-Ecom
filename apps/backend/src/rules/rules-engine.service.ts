@@ -6,6 +6,32 @@ export interface CartItemContext {
   categoryId?: string;
   quantity: number;
   unitPrice: number;
+  /**
+   * The shopper's pick among this product's offers: a rule id, or 'none' to opt out of every
+   * offer. Unset = apply the best offer whose condition is met. Only one offer per product
+   * is ever applied.
+   */
+  offerChoice?: string;
+  /** Variant of this cart line (products with variants have one line per variant). */
+  variantId?: string;
+}
+
+export interface ProductOffer {
+  ruleId: string;
+  name: string;
+  type: string;
+  /** Admin-written description, falling back to a generated summary of the rule. */
+  description: string;
+  /** Short human text of what the offer gives, e.g. "Rs 200 off per unit". */
+  summary: string;
+  /** What must be true for it to apply, e.g. "Buy 9+ units"; null when it has no condition. */
+  condition: string | null;
+  /** Units still needed for the condition to be met (0 when met / no condition). */
+  unitsNeeded: number;
+  eligible: boolean;
+  /** Estimated saving at the current quantity (used to pick the best offer automatically). */
+  savings: number;
+  validUntil: string | null;
 }
 
 export interface RuleContext {
@@ -51,9 +77,41 @@ export interface RuleEvaluationResult {
 export class RulesEngineService {
   constructor(private prisma: PrismaService) {}
 
-  async evaluateRules(context: RuleContext): Promise<RuleEvaluationResult> {
+  /**
+   * Active TAX_RULEs in a storefront-safe shape. Region-specific rules are left out: the
+   * delivery state isn't known while browsing, so only rules that apply everywhere can be
+   * folded into a displayed price.
+   */
+  async getPublicTaxRates(): Promise<{ taxRate: number; productIds: string[]; categoryIds: string[] }[]> {
     const now = new Date();
     const rules = await this.prisma.dynamicRule.findMany({
+      where: {
+        type: 'TAX_RULE',
+        isActive: true,
+        AND: [
+          { OR: [{ startDate: null }, { startDate: { lte: now } }] },
+          { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+        ],
+      },
+      orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
+    });
+    return rules
+      .map((r) => ({ c: (r.conditions || {}) as Record<string, any>, a: (r.actions || {}) as Record<string, any> }))
+      .filter(({ c, a }) => !c.region && Number(a.taxRate) > 0)
+      .map(({ c, a }) => ({
+        taxRate: Number(a.taxRate),
+        productIds: Array.isArray(c.productIds) ? c.productIds : [],
+        categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds : [],
+      }));
+  }
+
+  private static readonly OFFER_TYPES = new Set([
+    'PRODUCT_DISCOUNT', 'QUANTITY_BASED_DISCOUNT', 'BOGO', 'BUY_X_AND_Y_FREE',
+  ]);
+
+  private loadActiveRules() {
+    const now = new Date();
+    return this.prisma.dynamicRule.findMany({
       where: {
         isActive: true,
         OR: [
@@ -65,6 +123,129 @@ export class RulesEngineService {
       },
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     });
+  }
+
+  private offerAppliesToProduct(rule: { type: string; conditions: any }, item: CartItemContext): boolean {
+    const c = (rule.conditions || {}) as Record<string, any>;
+    if (rule.type === 'BOGO' || rule.type === 'BUY_X_AND_Y_FREE') return !!c.buyProductId && c.buyProductId === item.productId;
+    const productIds: string[] = c.productIds || [];
+    const categoryIds: string[] = c.categoryIds || [];
+    if (productIds.length === 0 && categoryIds.length === 0) return true;
+    return productIds.includes(item.productId) || (!!item.categoryId && categoryIds.includes(item.categoryId));
+  }
+
+  private describeOffer(
+    rule: { id: string; name: string; type: string; description: string | null; conditions: any; actions: any; endDate: Date | null },
+    item: CartItemContext,
+  ): ProductOffer {
+    const c = (rule.conditions || {}) as Record<string, any>;
+    const a = (rule.actions || {}) as Record<string, any>;
+    const qty = item.quantity;
+    const price = item.unitPrice;
+    const perUnit = (type: string, value: number) => (type === 'PERCENTAGE' ? (price * value) / 100 : value);
+    const label = (type: string, value: number) => (type === 'PERCENTAGE' ? `${Number(value)}% off` : `₹${Number(value)} off per unit`);
+
+    let summary = rule.name;
+    let condition: string | null = null;
+    let need = 0;
+    let eligible = true;
+    let savings = 0;
+
+    if (rule.type === 'PRODUCT_DISCOUNT') {
+      const min = Number(c.minQty) || 0;
+      summary = label(a.discountType, a.discountValue);
+      if (min > 0) { condition = `Buy ${min}+ units`; need = Math.max(0, min - qty); eligible = qty >= min; }
+      savings = eligible ? Math.min(price, perUnit(a.discountType, a.discountValue)) * qty : 0;
+    } else if (rule.type === 'QUANTITY_BASED_DISCOUNT') {
+      const tiers: any[] = [...(a.tiers || [])].sort((x, y) => x.minQty - y.minQty);
+      const first = tiers[0];
+      const best = [...tiers].reverse().find((t) => qty >= t.minQty);
+      const top = tiers[tiers.length - 1];
+      summary = top ? `Up to ${label(top.discountType, top.discountValue)} on bulk orders` : rule.name;
+      if (first) { condition = `Buy ${first.minQty}+ units`; need = Math.max(0, first.minQty - qty); eligible = qty >= first.minQty; }
+      savings = best ? Math.min(price, perUnit(best.discountType, best.discountValue)) * qty : 0;
+    } else {
+      // BOGO / BUY_X_AND_Y_FREE
+      const buy = Number(c.buyQuantity) || 1;
+      const free = Number(a.freeQuantity) || 1;
+      summary = `Buy ${buy}, get ${free} free`;
+      condition = `Buy ${buy} units`;
+      need = Math.max(0, buy - qty);
+      eligible = qty >= buy;
+      savings = eligible ? Math.floor(qty / buy) * free * price : 0;
+    }
+
+    return {
+      ruleId: rule.id,
+      name: rule.name,
+      type: rule.type,
+      description: (rule.description || '').trim() || summary,
+      summary,
+      condition,
+      unitsNeeded: need,
+      eligible,
+      savings,
+      validUntil: rule.endDate ? rule.endDate.toISOString() : null,
+    };
+  }
+
+  /** Offers for one product and the single offer that ends up applied (null = none). */
+  private resolveOffers(rules: any[], item: CartItemContext): { offers: ProductOffer[]; appliedId: string | null } {
+    const offers = rules
+      .filter((r) => RulesEngineService.OFFER_TYPES.has(r.type) && this.offerAppliesToProduct(r, item))
+      .map((r) => this.describeOffer(r, item));
+    const choice = item.offerChoice;
+    let appliedId: string | null = null;
+    if (choice === 'none') {
+      appliedId = null;
+    } else if (choice && offers.some((o) => o.ruleId === choice && o.eligible)) {
+      // The shopper's own pick, as long as its condition is currently met.
+      appliedId = choice;
+    } else {
+      // No pick, or the picked offer's condition is no longer met: it must not stay applied.
+      // Fall back to the best offer whose condition is met right now (if any).
+      const best = offers.filter((o) => o.eligible).sort((x, y) => y.savings - x.savings)[0];
+      appliedId = best ? best.ruleId : null;
+    }
+    return { offers, appliedId };
+  }
+
+  /** Public: the offers shown on a product page and which one is currently applied. */
+  async getProductOffers(params: { productId: string; quantity?: number; offerChoice?: string; inCart?: number }) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: params.productId },
+      select: { id: true, categoryId: true, unitPrice: true, moq: true },
+    });
+    if (!product) return { offers: [] as ProductOffer[], appliedId: null as string | null };
+    const rules = await this.loadActiveRules();
+    const item: CartItemContext = {
+      productId: product.id,
+      categoryId: product.categoryId || undefined,
+      // Units of this product already in the cart (e.g. other variants) count towards the offer.
+      quantity: Math.max(1, params.quantity || product.moq || 1) + Math.max(0, params.inCart || 0),
+      unitPrice: Number(product.unitPrice),
+      offerChoice: params.offerChoice,
+    };
+    return this.resolveOffers(rules, item);
+  }
+
+  async evaluateRules(input: RuleContext): Promise<RuleEvaluationResult> {
+    let context = input;
+    const rules = await this.loadActiveRules();
+
+    // One offer per product: decide each product's winning offer, then evaluate every offer
+    // rule only against the products it won.
+    const winners = new Map<string, string | null>();
+    for (const item of input.cartItems || []) {
+      if (winners.has(item.productId)) continue;
+      const same = (input.cartItems || []).filter((i) => i.productId === item.productId);
+      const paid = same.find((i) => i.unitPrice > 0) || same[0];
+      const choice = same.find((i) => i.offerChoice)?.offerChoice;
+      // A product with variants has one cart line per variant; an offer's quantity condition is
+      // about the product, so it is judged on the total across all of its lines.
+      const total = same.reduce((sum, i) => sum + i.quantity, 0);
+      winners.set(item.productId, this.resolveOffers(rules, { ...paid, quantity: total, offerChoice: choice }).appliedId);
+    }
 
     const result: RuleEvaluationResult = {
       productDiscounts: [],
@@ -86,6 +267,7 @@ export class RulesEngineService {
     };
 
     for (const rule of rules) {
+      context = input;
       const c = rule.conditions as Record<string, any>;
       const a = rule.actions as Record<string, any>;
 
@@ -100,6 +282,12 @@ export class RulesEngineService {
             ruleName: rule.name,
           });
         }
+      }
+
+      if (RulesEngineService.OFFER_TYPES.has(rule.type)) {
+        context = { ...input, cartItems: (input.cartItems || []).filter((i) => winners.get(i.productId) === rule.id) };
+      } else {
+        context = input;
       }
 
       switch (rule.type) {
@@ -298,21 +486,32 @@ export class RulesEngineService {
     });
   }
 
+  /**
+   * Buy X get Y: qualifies when the buy product's units in the cart — summed over all of its lines,
+   * so 1 Black + 1 Blue + 1 Red counts as 3 — reach the buy quantity.
+   */
+  private pushBuyXGetY(name: string, c: Record<string, any>, a: Record<string, any>, context: RuleContext, result: RuleEvaluationResult) {
+    if (!context.cartItems || !c.buyProductId || !a.freeProductId) return;
+    const buyQuantity = Number(c.buyQuantity) || 0;
+    if (buyQuantity <= 0) return;
+    const total = context.cartItems
+      .filter((item) => item.productId === c.buyProductId)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    if (total < buyQuantity) return;
+    result.bogo.push({
+      buyProductId: c.buyProductId,
+      buyQuantity,
+      freeProductId: a.freeProductId,
+      freeQuantity: Number(a.freeQuantity) || 1,
+      ruleName: name,
+    });
+  }
+
   private evaluateBogo(
     _id: string, name: string, c: Record<string, any>, a: Record<string, any>,
     context: RuleContext, result: RuleEvaluationResult,
   ) {
-    if (!context.cartItems) return;
-    const matching = context.cartItems.find((item) => item.productId === c.buyProductId && item.quantity >= c.buyQuantity);
-    if (matching) {
-      result.bogo.push({
-        buyProductId: c.buyProductId,
-        buyQuantity: c.buyQuantity,
-        freeProductId: a.freeProductId,
-        freeQuantity: a.freeQuantity || 1,
-        ruleName: name,
-      });
-    }
+    this.pushBuyXGetY(name, c, a, context, result);
   }
 
   private evaluateShippingRule(
@@ -425,17 +624,7 @@ export class RulesEngineService {
     _id: string, name: string, c: Record<string, any>, a: Record<string, any>,
     context: RuleContext, result: RuleEvaluationResult,
   ) {
-    if (!context.cartItems) return;
-    const matching = context.cartItems.find((item) => item.productId === c.buyProductId && item.quantity >= c.buyQuantity);
-    if (matching) {
-      result.bogo.push({
-        buyProductId: c.buyProductId,
-        buyQuantity: c.buyQuantity,
-        freeProductId: a.freeProductId,
-        freeQuantity: a.freeQuantity || 1,
-        ruleName: name,
-      });
-    }
+    this.pushBuyXGetY(name, c, a, context, result);
   }
 
   private evaluateMaxOrderQty(

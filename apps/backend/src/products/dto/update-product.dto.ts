@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsInt, IsEnum, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, IsEnum, IsArray, IsBoolean } from 'class-validator';
 import { ProductStatus } from '@prisma/client';
 
 export class UpdateProductDto {
@@ -80,4 +80,28 @@ export class UpdateProductDto {
   @IsOptional()
   @IsArray()
   tierPrices?: { minQty: number; maxQty?: number | null; price: number }[];
+
+  // Variants (see ProductsService.saveVariants for the full validation).
+  @IsOptional()
+  @IsBoolean()
+  hasVariants?: boolean;
+
+  /** [{ name: "Color", values: ["Black", "Blue"] }] */
+  @IsOptional()
+  @IsArray()
+  variantOptions?: { name: string; values: string[] }[];
+
+  /** [{ id?, options: { Color: "Black" }, sku, price, inventoryQuantity, image?, isActive? }] */
+  @IsOptional()
+  @IsArray()
+  variants?: {
+    id?: string;
+    options: Record<string, string>;
+    sku: string;
+    price: number;
+    inventoryQuantity: number;
+    images?: string[];
+    image?: string | null;
+    isActive?: boolean;
+  }[];
 }

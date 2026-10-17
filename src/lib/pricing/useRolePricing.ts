@@ -68,11 +68,26 @@ export function useRolePricing(
               productId: p.id,
               info: {
                 rolePrice: result.finalPrice,
-                appliedRoleName: result.appliedRoleName,
+                appliedRoleName: result.appliedRule === "contract" ? "Contract" : result.appliedRoleName,
                 savings: result.basePrice - result.finalPrice,
                 savingsPercent: result.discountPercent,
                 finalPrice: result.finalPrice,
-                minQty: result.appliedRule === "role" ? result.roleMinQty ?? null : null,
+                minQty: result.appliedRule === "role" ? result.roleMinQty ?? null : result.appliedRule === "contract" ? result.contractMinQty ?? null : null,
+              } as RolePricingInfo,
+            }
+          }
+          // The buyer has a contract price for this product but is below its minimum quantity:
+          // still show the contract price (with its min quantity) rather than the retail price.
+          if (result.contractDisplayPrice != null && result.contractQtyReached === false) {
+            return {
+              productId: p.id,
+              info: {
+                rolePrice: result.contractDisplayPrice,
+                appliedRoleName: "Contract",
+                savings: result.basePrice - result.contractDisplayPrice,
+                savingsPercent: result.basePrice > 0 ? Math.round(((result.basePrice - result.contractDisplayPrice) / result.basePrice) * 100) : 0,
+                finalPrice: result.contractDisplayPrice,
+                minQty: result.contractMinQty ?? null,
               } as RolePricingInfo,
             }
           }
