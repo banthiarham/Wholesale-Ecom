@@ -54,7 +54,7 @@ export function ProductPriceDisplay({
           <span className={`${priceClass} text-primary-700`}>{g(rolePricing.rolePrice)}</span>
           <span className="text-xs text-gray-400 line-through">{g(unitPrice)}</span>
           {rolePricing.savingsPercent !== undefined && (
-            <span className="badge badge-success">{rolePricing.savingsPercent}% off</span>
+            <span className="badge badge-success">{Number(Number(rolePricing.savingsPercent).toFixed(2))}% off</span>
           )}
         </div>
         {gstNote}

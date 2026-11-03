@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Param, Get, Req, Res, Query, Headers, RawBodyRequest } from '@nestjs/common';
+import { Controller, Put, Post, Body, UseGuards, Param, Get, Req, Res, Query, Headers, RawBodyRequest } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -92,6 +92,16 @@ export class PaymentsController {
     return { payment };
   }
 
+  @Post('upi/:orderId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Record a UPI payment (status PENDING) for an order (owner or admin)' })
+  @ApiParam({ name: 'orderId', description: 'Order UUID' })
+  async createUpi(@Param('orderId') orderId: string, @CurrentUser() user: any) {
+    const payment = await this.paymentsService.createUpiPayment(orderId, user);
+    return { payment };
+  }
+
   @Post('initiate/:orderId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -108,6 +118,17 @@ export class PaymentsController {
   ) {
     const result = await this.paymentsService.initiatePayment(orderId, provider, returnUrl, user);
     return result;
+  }
+
+  @Put(':orderId/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Set the payment status of an order by hand (admin)' })
+  @ApiParam({ name: 'orderId', description: 'Order UUID' })
+  async setStatus(@Param('orderId') orderId: string, @Body() body: { status: PaymentStatus; providerRef?: string }) {
+    const payment = await this.paymentsService.setStatusManually(orderId, body.status, body.providerRef);
+    return { payment };
   }
 
   @Post(':orderId/verify')

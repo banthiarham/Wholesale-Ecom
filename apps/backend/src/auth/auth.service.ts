@@ -91,6 +91,16 @@ export class AuthService {
       }
     }
 
+    // A role picked at signup is only a request: the account starts as a normal buyer (buyer prices, buyer
+    // permissions) until an admin approves the request. The requested role is saved below as a RoleChangeRequest.
+    const requestedRoleId = roleId;
+    const requestedRoleName = resolvedRoleName;
+    if (requestedRoleId && requestedRoleName.toLowerCase() !== UserRole.BUYER.toLowerCase()) {
+      const buyerRole = await this.prisma.role.findFirst({ where: { name: { equals: UserRole.BUYER, mode: 'insensitive' } } }).catch(() => null);
+      roleId = buyerRole?.id ?? null;
+      roleEnum = UserRole.BUYER;
+    }
+
     // Generate referral code
     const referralCode = `${registerDto.firstName?.substring(0, 3).toUpperCase() || 'USR'}${Date.now().toString(36).toUpperCase()}`;
 
@@ -128,12 +138,12 @@ export class AuthService {
     });
 
     // If user selected a non-BUYER role, create a role change request for admin approval
-    if (resolvedRoleName !== UserRole.BUYER && roleId) {
+    if (requestedRoleName.toLowerCase() !== UserRole.BUYER.toLowerCase() && requestedRoleId) {
       try {
         await this.prisma.roleChangeRequest.create({
           data: {
             userId: user.id,
-            roleId: roleId,
+            roleId: requestedRoleId,
             status: 'PENDING',
             reason: 'Requested during registration',
           },

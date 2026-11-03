@@ -37,9 +37,7 @@ export default function InvoicePage() {
   const sellerGstin = useSetting("businessGstin", "")
   const contactEmail = useSetting("contactEmail", "")
   const contactPhone = useSetting("contactPhone", "")
-  const bankName = useSetting("bankName", "")
-  const bankAccount = useSetting("bankAccountNumber", "")
-  const bankIfsc = useSetting("bankIfsc", "")
+  const [invoiceCfg, setInvoiceCfg] = useState<{ terms: string; bank: { bankName: string; accountName: string; accountNumber: string; ifscCode: string; branch: string } | null } | null>(null)
 
   // The A4 sheet is 794px wide; shrink it to fit narrow (phone) screens so the whole invoice is visible.
   const [scale, setScale] = useState(1)
@@ -49,6 +47,7 @@ export default function InvoicePage() {
     return () => window.removeEventListener("resize", fit)
   }, [])
   useEffect(() => { const token = localStorage.getItem("token"); if (!token) { router.push("/login"); return }
+    fetch("/api/settings/invoice", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null).then(setInvoiceCfg).catch(() => {})
     fetch(`/api/orders/${params.id}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).then(data => setOrder(data.order || null)).finally(() => setLoading(false))
   }, [params.id, router])
   if (loading) return <div className="min-h-screen grid place-items-center"><div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-200 border-b-primary-600" /></div>
@@ -57,6 +56,8 @@ export default function InvoicePage() {
   // No invoice is issued for a cancelled order (also covers someone opening the URL directly).
   if (order.status === "CANCELLED") return <div className="min-h-screen grid place-items-center text-center"><div><Package className="mx-auto text-gray-300" size={40}/><p className="mt-3 text-gray-500">This order was cancelled, so no invoice is available.</p><Link href={`/orders/${order.id}`} className="text-primary-600">Back to order</Link></div></div>
 
+  const bank = invoiceCfg?.bank || null
+  const termsLines = (invoiceCfg?.terms ?? "").split(String.fromCharCode(10)).map(t => t.trim()).filter(Boolean)
   const billed = order.billingAddress || order.shippingAddress
   const subtotal = Number(order.subtotal ?? order.items.reduce((s, i) => s + Number(i.totalPrice), 0))
   const tax = Number(order.taxAmount ?? 0), cgst = Number(order.cgstAmount ?? tax / 2), sgst = Number(order.sgstAmount ?? tax / 2), igst = Number(order.igstAmount ?? 0)
@@ -93,8 +94,8 @@ export default function InvoicePage() {
           <tr className="h-[225px]"><td className="border-r border-black"></td><td className="border-r border-black p-1 text-right font-bold italic"><div className="space-y-2">{discount>0&&<p>Discount</p>}{shipping>0&&<p>Shipping</p>}{cgst>0&&<p>CGST</p>}{sgst>0&&<p>SGST</p>}{igst>0&&<p>IGST</p>}{roundOff!==0&&<p>Rounding Amt</p>}</div></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="p-1 text-right font-bold"><div className="space-y-2">{discount>0&&<p>-{money(discount)}</p>}{shipping>0&&<p>{money(shipping)}</p>}{cgst>0&&<p>{money(cgst)}</p>}{sgst>0&&<p>{money(sgst)}</p>}{igst>0&&<p>{money(igst)}</p>}{roundOff!==0&&<p>{roundOff>0?"":"-"}{money(Math.abs(roundOff))}</p>}</div></td></tr>
         </tbody><tfoot><tr className="border-t border-black"><td></td><td className="border-r border-black p-1 text-right">Total</td><td className="border-r border-black"></td><td className="border-r border-black p-1 text-center font-bold">{totalQty} Pcs.</td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="p-1 text-right text-[12px] font-bold">₹ {money(Number(order.totalAmount))}</td></tr></tfoot></table>
       <section className="border-x border-b border-black p-1"><div className="flex justify-between"><span>Amount Chargeable (in words)</span><span className="italic">E. &amp; O.E</span></div><b>{amountInWords(Number(order.totalAmount))}</b></section>
-      <section className="grid min-h-[265px] grid-cols-2 border-x border-b border-black"><div className="flex flex-col justify-between p-1.5"><div><p className="font-bold">Terms &amp; Conditions:</p><ol className="mt-3 list-inside list-decimal space-y-1"><li>Goods once sold will not be taken back.</li><li>Any warranty is provided by the product manufacturer.</li><li>Late payments may attract interest as permitted by law.</li><li>All disputes are subject to the seller&apos;s local jurisdiction.</li></ol></div><p className="text-[8px] uppercase">Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</p></div>
-        <div className="flex flex-col justify-end"><div className="border-b border-black p-1.5"><p className="font-bold">Company&apos;s Bank Details</p>{bankName?<><p>Bank Name: <b>{bankName}</b></p><p>A/c No.: <b>{bankAccount || "—"}</b></p><p>Branch &amp; IFSC: <b>{bankIfsc || "—"}</b></p></>:<p className="text-gray-500">Configure bank details in site settings.</p>}</div><div className="flex min-h-[74px] flex-col justify-between p-1.5 text-right"><b>for {siteName}</b><span>Authorised Signatory</span></div></div>
+      <section className="grid min-h-[265px] grid-cols-2 border-x border-b border-black"><div className="flex flex-col justify-between p-1.5"><div><p className="font-bold">Terms &amp; Conditions:</p><ol className="mt-3 list-inside list-decimal space-y-1">{termsLines.map((t, i) => <li key={i}>{t}</li>)}</ol></div><p className="text-[8px] uppercase">Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</p></div>
+        <div className="flex flex-col justify-end"><div className="border-b border-black p-1.5"><p className="font-bold">Company&apos;s Bank Details</p>{bank?<>{bank.accountName && <p>A/c Name: <b>{bank.accountName}</b></p>}<p>Bank Name: <b>{bank.bankName}</b></p><p>A/c No.: <b>{bank.accountNumber || "—"}</b></p><p>Branch &amp; IFSC: <b>{[bank.branch, bank.ifscCode].filter(Boolean).join(", ") || "—"}</b></p></>:null}</div><div className="flex min-h-[74px] flex-col justify-between p-1.5 text-right"><b>for {siteName}</b><span>Authorised Signatory</span></div></div>
       </section><p className="py-1 text-center text-[9px] uppercase">This is a computer-generated invoice</p>
     </article>
   </main>

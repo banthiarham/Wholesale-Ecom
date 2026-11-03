@@ -15,6 +15,7 @@ import {
   ImageIcon,
   Calculator,
   RotateCcw,
+  FileText,
 } from "lucide-react"
 import { generateShades } from "@/lib/settings/color-utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
@@ -45,6 +46,7 @@ const TABS = [
   { key: "header_footer", label: "Header & Footer", icon: Navigation },
   { key: "commerce", label: "Commerce", icon: Calculator },
   { key: "policies", label: "Policies", icon: RotateCcw },
+  { key: "invoice", label: "Invoice Settings", icon: FileText },
 ] as const
 
 type TabKey = (typeof TABS)[number]["key"]
@@ -71,6 +73,8 @@ interface SettingsState {
   copyrightText: string
   roundOffEnabled: boolean
   returnWindowDays: string
+  invoiceTerms: string
+  invoiceBankGatewayId: string
 }
 
 const DEFAULT_SETTINGS: SettingsState = {
@@ -95,6 +99,8 @@ const DEFAULT_SETTINGS: SettingsState = {
   copyrightText: "Wholesale Center. All rights reserved.",
   roundOffEnabled: false,
   returnWindowDays: "15",
+  invoiceTerms: "",
+  invoiceBankGatewayId: "",
 }
 
 export default function AdminSettingsPage() {
@@ -104,11 +110,20 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState("")
+  const [bankGateways, setBankGateways] = useState<{ id: string; isActive: boolean; settings: any }[]>([])
   const logoInputRef = useRef<HTMLInputElement>(null)
   const faviconInputRef = useRef<HTMLInputElement>(null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+
+  useEffect(() => {
+    fetch("/api/payment-gateways", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => setBankGateways((d.gateways || []).filter((g: any) => g.provider === "BANK_TRANSFER")))
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     fetch("/api/settings")
@@ -142,6 +157,8 @@ export default function AdminSettingsPage() {
             copyrightText: s.copyrightText || DEFAULT_SETTINGS.copyrightText,
             roundOffEnabled: s.roundOffEnabled === "true",
             returnWindowDays: s.returnWindowDays ?? DEFAULT_SETTINGS.returnWindowDays,
+            invoiceTerms: s.invoiceTerms ?? "",
+            invoiceBankGatewayId: s.invoiceBankGatewayId ?? "",
           })
         }
       })
@@ -190,6 +207,8 @@ export default function AdminSettingsPage() {
         copyrightText: settings.copyrightText,
         roundOffEnabled: String(settings.roundOffEnabled),
         returnWindowDays: String(Math.max(0, Math.floor(Number(settings.returnWindowDays) || 0))),
+        invoiceTerms: settings.invoiceTerms,
+        invoiceBankGatewayId: settings.invoiceBankGatewayId,
       }
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -601,6 +620,51 @@ export default function AdminSettingsPage() {
                 />
                 <span className="text-sm text-gray-500 dark:text-gray-400">days after delivery</span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "invoice" && (
+          <div className="space-y-6">
+            <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <label htmlFor="invoiceTerms" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Terms &amp; Conditions
+              </label>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                Printed on every invoice as a numbered list. Write one term per line.
+              </p>
+              <textarea
+                id="invoiceTerms"
+                rows={7}
+                value={settings.invoiceTerms}
+                onChange={(e) => update("invoiceTerms", e.target.value)}
+                className="mt-3 w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm"
+              />
+            </div>
+            <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <label htmlFor="invoiceBank" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Bank account shown on invoices
+              </label>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                Pick one of the Bank Transfer accounts set up under Payment Gateways. Its details are printed on every invoice.
+              </p>
+              <select
+                id="invoiceBank"
+                value={settings.invoiceBankGatewayId}
+                onChange={(e) => update("invoiceBankGatewayId", e.target.value)}
+                className="mt-3 w-full max-w-md px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm"
+              >
+                <option value="">No bank details on invoices</option>
+                {bankGateways.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {[g.settings?.bankName, g.settings?.accountNumber ? `A/c ${g.settings.accountNumber}` : ""].filter(Boolean).join(" — ") || "Bank account"}
+                    {g.isActive ? "" : " (inactive)"}
+                  </option>
+                ))}
+              </select>
+              {bankGateways.length === 0 && (
+                <p className="mt-2 text-xs text-amber-600">No Bank Transfer gateway exists yet. Add one under Payment Gateways first.</p>
+              )}
             </div>
           </div>
         )}

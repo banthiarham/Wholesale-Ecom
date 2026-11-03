@@ -35,6 +35,11 @@ export class RulesEnforcementService {
     return result;
   }
 
+  /** Evaluate rules without enforcing restrictions — for admin-made orders, which may bypass storefront limits. */
+  evaluate(context: RuleContext): Promise<RuleEvaluationResult> {
+    return this.rulesEngine.evaluateRules(context);
+  }
+
   /**
    * Evaluate rules and throw on order-level violations:
    * - CHECKOUT_RESTRICTION: user/role is blocked from checkout

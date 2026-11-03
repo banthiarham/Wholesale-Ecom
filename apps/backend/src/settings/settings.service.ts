@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+const DEFAULT_INVOICE_TERMS_LINES = [
+  'Goods once sold will not be taken back.',
+  'Any warranty is provided by the product manufacturer.',
+  'Late payments may attract interest as permitted by law.',
+  "All disputes are subject to the seller's local jurisdiction.",
+];
+const DEFAULT_INVOICE_TERMS = DEFAULT_INVOICE_TERMS_LINES.join(String.fromCharCode(10));
+
 @Injectable()
 export class SettingsService {
   constructor(private prisma: PrismaService) {}
@@ -53,6 +61,27 @@ export class SettingsService {
     return this.findAll();
   }
 
+  /** What every invoice prints: the terms text and the one Bank Transfer account the admin picked (if any). */
+  async getInvoiceSettings() {
+    const all = await this.findAll();
+    let bank: Record<string, string> | null = null;
+    const gatewayId = all.invoiceBankGatewayId;
+    if (gatewayId) {
+      const gw = await this.prisma.paymentGateway.findFirst({ where: { id: gatewayId, provider: 'BANK_TRANSFER' } });
+      const d = (gw?.settings || {}) as Record<string, any>;
+      if (gw && d.bankName) {
+        bank = {
+          bankName: String(d.bankName || ''),
+          accountName: String(d.accountName || ''),
+          accountNumber: String(d.accountNumber || ''),
+          ifscCode: String(d.ifscCode || ''),
+          branch: String(d.branch || ''),
+        };
+      }
+    }
+    return { terms: all.invoiceTerms, bank };
+  }
+
   private getDefaults(): Record<string, string> {
     return {
       siteName: 'Wholesale Center',
@@ -83,6 +112,8 @@ export class SettingsService {
       roundOffEnabled: 'false',
       businessState: '',
       returnWindowDays: '15',
+      invoiceTerms: DEFAULT_INVOICE_TERMS,
+      invoiceBankGatewayId: '',
     };
   }
 
@@ -116,6 +147,8 @@ export class SettingsService {
       { key: 'roundOffEnabled', value: 'false', label: 'Round Off Order Totals', type: 'boolean', group: 'commerce' },
       { key: 'businessState', value: '', label: 'Business State (for GST)', type: 'text', group: 'commerce' },
       { key: 'returnWindowDays', value: '15', label: 'Return & Replacement Window (days after delivery)', type: 'number', group: 'policy' },
+      { key: 'invoiceTerms', value: DEFAULT_INVOICE_TERMS, label: 'Invoice Terms & Conditions', type: 'text', group: 'invoice' },
+      { key: 'invoiceBankGatewayId', value: '', label: 'Invoice Bank Account', type: 'text', group: 'invoice' },
     ];
   }
 

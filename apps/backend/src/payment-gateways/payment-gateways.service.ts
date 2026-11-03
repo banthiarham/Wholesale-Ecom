@@ -7,7 +7,10 @@ import * as CryptoJS from 'crypto-js';
 /** Built-in "offline" payment methods: they have no API credentials and never go through a gateway redirect. */
 export const COD_PROVIDER = 'COD';
 export const BANK_TRANSFER_PROVIDER = 'BANK_TRANSFER';
-const OFFLINE_PROVIDERS = [COD_PROVIDER, BANK_TRANSFER_PROVIDER];
+export const UPI_PROVIDER = 'UPI';
+const OFFLINE_PROVIDERS = [COD_PROVIDER, BANK_TRANSFER_PROVIDER, UPI_PROVIDER];
+/** UPI gateways are always named this, whatever the admin types. */
+export const UPI_LABEL = 'UPI';
 /** Bank Transfer gateways are always named this, whatever the admin types. */
 export const BANK_TRANSFER_LABEL = 'Bank Transfer';
 /** Bank details the admin fills in for Bank Transfer (stored in the gateway's `settings`, shown to customers at checkout). */
@@ -57,6 +60,21 @@ export class PaymentGatewaysService {
     return out;
   }
 
+  /** UPI details the admin fills in (stored in the gateway's `settings`, shown to customers in a pop-up at checkout). */
+  private cleanUpiDetails(settings?: Record<string, any>): Record<string, string> {
+    const upiId = String(settings?.upiId ?? '').trim();
+    if (!upiId) throw new BadRequestException('UPI ID is required for UPI');
+    if (!/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,64}$/.test(upiId)) {
+      throw new BadRequestException('Enter a valid UPI ID, e.g. name@bank');
+    }
+    const qrImage = String(settings?.qrImage ?? '').trim();
+    if (!qrImage) throw new BadRequestException('A UPI QR code image is required for UPI');
+    const out: Record<string, string> = { upiId, qrImage };
+    const payeeName = String(settings?.payeeName ?? '').trim();
+    if (payeeName) out.payeeName = payeeName;
+    return out;
+  }
+
   async create(data: {
     provider: string;
     label: string;
@@ -87,6 +105,24 @@ export class PaymentGatewaysService {
           isDefault: false,
           testMode: false,
           settings: this.cleanBankDetails(data.settings),
+        },
+      });
+    }
+
+    if (providerName === UPI_PROVIDER) {
+      const existingUpi = await this.prisma.paymentGateway.findFirst({ where: { provider: UPI_PROVIDER } });
+      if (existingUpi) {
+        throw new BadRequestException('UPI is already configured. Edit the existing gateway instead of adding another.');
+      }
+      return this.prisma.paymentGateway.create({
+        data: {
+          provider: providerName,
+          label: UPI_LABEL,
+          description: data.description,
+          isActive: data.isActive,
+          isDefault: false,
+          testMode: false,
+          settings: this.cleanUpiDetails(data.settings),
         },
       });
     }
@@ -151,6 +187,12 @@ export class PaymentGatewaysService {
       if (data.isActive !== undefined) offline.isActive = data.isActive;
       if (gateway.provider === BANK_TRANSFER_PROVIDER && data.settings !== undefined) {
         offline.settings = this.cleanBankDetails(data.settings);
+      }
+      if (gateway.provider === UPI_PROVIDER) {
+        delete offline.label;
+        if (data.settings !== undefined) offline.settings = this.cleanUpiDetails(data.settings);
+        // Switching UPI on needs its details to be complete.
+        if (offline.isActive === true && offline.settings === undefined) this.cleanUpiDetails(gateway.settings as any);
       }
       return this.prisma.paymentGateway.update({ where: { id }, data: offline });
     }

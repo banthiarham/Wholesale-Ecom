@@ -37,6 +37,14 @@ export class SettingsController {
     return { settings };
   }
 
+  @Get('invoice')
+  @ApiOperation({ summary: 'Invoice terms and the bank account printed on invoices (signed-in users)' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  getInvoiceSettings() {
+    return this.settingsService.getInvoiceSettings();
+  }
+
   @Get('grouped')
   @ApiOperation({ summary: 'Get all site settings grouped (admin)' })
   @UseGuards(JwtAuthGuard, RolesGuard)

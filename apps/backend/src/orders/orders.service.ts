@@ -1,7 +1,10 @@
+import { syncPaymentWithOrderStatus } from './payment-sync';
+import { PricingService } from '../pricing/pricing.service';
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { variantLabel } from '../products/variant-sync';
+import { variantLabel, LIVE_VARIANTS_WHERE } from '../products/variant-sync';
+import { AdminCreateOrderDto, AdminUpdateOrderDto, AdminOrderItemDto } from './dto/admin-order.dto';
 import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
@@ -39,6 +42,7 @@ export class OrdersService {
     private loyaltyEarningService: LoyaltyEarningService,
     private rulesEnforcement: RulesEnforcementService,
     private settingsService: SettingsService,
+    private pricingService: PricingService,
   ) {}
 
   /**
@@ -119,6 +123,9 @@ export class OrdersService {
 
   async createFromCart(userId: string, cartId: string, data: { shippingAddress: any; billingAddress?: any; notes?: string; couponCode?: string; bankOfferId?: string; paymentMethod?: string }) {
     // Offline payment methods can be switched off by the admin (Payment Gateways); refuse orders that still try to use one.
+    if (data.paymentMethod === 'UPI' && !(await this.prisma.paymentGateway.findFirst({ where: { provider: 'UPI', isActive: true } }))) {
+      throw new BadRequestException('UPI is currently unavailable. Please choose another payment method.');
+    }
     if (data.paymentMethod === 'COD' || data.paymentMethod === 'BANK_TRANSFER') {
       // COD is on unless an admin turned it off; Bank Transfer needs at least one active bank account.
       const unavailable = data.paymentMethod === 'COD'
@@ -497,7 +504,347 @@ export class OrdersService {
     return this.withVariantDetails(order);
   }
 
+  // ─── Admin: create / edit orders ───
+
+  /** Product picker for the admin order forms: matches name or SKU, with each product's live variants. */
+  async adminSearchProducts(q?: string) {
+    const term = (q || '').trim();
+    const products = await this.prisma.product.findMany({
+      where: {
+        status: { in: ['PUBLISHED', 'DRAFT'] as any },
+        ...(term
+          ? {
+              OR: [
+                { title: { contains: term, mode: 'insensitive' } },
+                { sku: { contains: term, mode: 'insensitive' } },
+                { variants: { some: { sku: { contains: term, mode: 'insensitive' } } } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        sku: true,
+        thumbnail: true,
+        unitPrice: true,
+        hasVariants: true,
+        variantOptions: true,
+        inventoryQuantity: true,
+        reservedQuantity: true,
+        variants: {
+          where: { ...LIVE_VARIANTS_WHERE, isActive: true },
+          orderBy: { position: 'asc' },
+          select: { id: true, sku: true, options: true, price: true, inventoryQuantity: true, reservedQuantity: true },
+        },
+      },
+      orderBy: { title: 'asc' },
+      take: 20,
+    });
+    return products.map((p: any) => ({
+      id: p.id,
+      title: p.title,
+      sku: p.sku,
+      thumbnail: p.thumbnail,
+      unitPrice: Number(p.unitPrice),
+      hasVariants: p.hasVariants,
+      available: p.inventoryQuantity - p.reservedQuantity,
+      variants: p.variants.map((v: any) => ({
+        id: v.id,
+        sku: v.sku,
+        label: variantLabel(v.options as any, p.variantOptions as any),
+        price: Number(v.price),
+        available: v.inventoryQuantity - v.reservedQuantity,
+      })),
+    }));
+  }
+
+  /**
+   * Refuses lines that ask for more than is in stock (per product, or per variant). `alreadyHeld` is what the
+   * order being edited has reserved already, which is free to keep. Products that allow backorders or do not
+   * manage inventory are exempt.
+   */
+  private async assertStockAvailable(rows: { productId: string; variantId: string | null; quantity: number }[], alreadyHeld: Map<string, number> = new Map()) {
+    const wanted = new Map<string, { productId: string; variantId: string | null; quantity: number }>();
+    for (const r of rows) {
+      const k = `${r.productId}|${r.variantId || ''}`;
+      const cur = wanted.get(k);
+      if (cur) cur.quantity += r.quantity;
+      else wanted.set(k, { ...r });
+    }
+    for (const [k, w] of wanted) {
+      const product = await this.prisma.product.findUnique({ where: { id: w.productId } });
+      if (!product || product.allowBackorder || !product.manageInventory) continue;
+      let name = product.title;
+      let available: number;
+      if (w.variantId) {
+        const v = await this.prisma.productVariant.findUnique({ where: { id: w.variantId } });
+        if (!v) continue;
+        available = v.inventoryQuantity - v.reservedQuantity;
+        name = `${product.title} (${v.sku})`;
+      } else {
+        available = product.inventoryQuantity - product.reservedQuantity;
+      }
+      available += alreadyHeld.get(k) || 0;
+      if (w.quantity > Math.max(0, available)) {
+        throw new BadRequestException(
+          available <= 0 ? `"${name}" is out of stock` : `Only ${available} of "${name}" in stock, but ${w.quantity} requested`,
+        );
+      }
+    }
+  }
+
+  /** Validates the admin's lines against the catalogue and builds the rows to store (with variant snapshot in metadata). */
+  private async buildAdminItemRows(items: AdminOrderItemDto[], existingMeta: Map<string, any> = new Map()) {
+    const rows: any[] = [];
+    for (const item of items) {
+      const product = await this.prisma.product.findUnique({ where: { id: item.productId } });
+      if (!product) throw new BadRequestException(`Product ${item.productId} not found`);
+
+      let metadata: any = item.id ? existingMeta.get(item.id) ?? undefined : undefined;
+      let variantId: string | null = null;
+      if ((product as any).hasVariants) {
+        if (!item.variantId) throw new BadRequestException(`Choose a variant for "${product.title}"`);
+      }
+      if (item.variantId) {
+        const variant = await this.prisma.productVariant.findFirst({ where: { id: item.variantId, productId: product.id } });
+        if (!variant) throw new BadRequestException(`Variant not found for "${product.title}"`);
+        variantId = variant.id;
+        metadata = {
+          ...(metadata || {}),
+          variant: {
+            id: variant.id,
+            sku: variant.sku,
+            options: variant.options,
+            label: variantLabel(variant.options as any, (product as any).variantOptions as any),
+          },
+        };
+      } else if (metadata?.variant) {
+        metadata = { ...metadata };
+        delete metadata.variant;
+      }
+
+      const unitPrice = Math.round(item.unitPrice * 100) / 100;
+      rows.push({
+        id: item.id,
+        productId: product.id,
+        variantId,
+        quantity: item.quantity,
+        unitPrice,
+        totalPrice: Math.round(unitPrice * item.quantity * 100) / 100,
+        metadata,
+      });
+    }
+    return rows;
+  }
+
+  /**
+   * Amount breakdown for an admin-edited / admin-made order. GST follows `taxRates` (percent of the
+   * subtotal, split CGST / SGST / IGST). If the admin typed a grand total, the gap to the calculated
+   * total is stored as round off so the invoice still balances.
+   */
+  private async computeAdminAmounts(
+    subtotal: number,
+    discountAmount: number,
+    shippingAmount: number,
+    taxRates: { cgst: number; sgst: number; igst: number },
+    totalOverride?: number,
+  ) {
+    const cgstAmount = Math.round(subtotal * taxRates.cgst) / 100;
+    const sgstAmount = Math.round(subtotal * taxRates.sgst) / 100;
+    const igstAmount = Math.round(subtotal * taxRates.igst) / 100;
+    const taxAmount = cgstAmount + sgstAmount + igstAmount;
+    const rawTotal = Math.max(0, subtotal - discountAmount) + taxAmount + shippingAmount;
+
+    let totalAmount: number;
+    if (totalOverride !== undefined && totalOverride !== null) {
+      totalAmount = totalOverride;
+    } else {
+      const settings = await this.settingsService.findAll();
+      totalAmount = settings.roundOffEnabled === 'true' ? Math.round(rawTotal) : rawTotal;
+    }
+    totalAmount = Math.round(totalAmount * 100) / 100;
+    const roundOffAmount = Math.round((totalAmount - rawTotal) * 100) / 100;
+    return { subtotal, taxAmount, cgstAmount, sgstAmount, igstAmount, shippingAmount, discountAmount, roundOffAmount, totalAmount };
+  }
+
+  /** The price each line would cost this customer for its quantity: their role price, contract price, tier or base price. */
+  async adminQuotePrices(userId: string, items: { productId: string; variantId?: string | null; quantity: number }[]) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Customer not found');
+    const prices: { productId: string; variantId: string | null; unitPrice: number; appliedRule: string; roleName: string | null }[] = [];
+    for (const it of items) {
+      try {
+        const p = await this.pricingService.calculateEffectivePrice(it.productId, Math.max(1, Math.floor(it.quantity || 1)), userId, it.variantId || undefined);
+        prices.push({ productId: it.productId, variantId: it.variantId || null, unitPrice: Math.round(p.finalPrice * 100) / 100, appliedRule: p.appliedRule, roleName: p.appliedRoleName });
+      } catch {
+        // Unknown product / variant: the editor keeps whatever price the line already has.
+        prices.push({ productId: it.productId, variantId: it.variantId || null, unitPrice: null as any, appliedRule: 'base', roleName: null });
+      }
+    }
+    return { prices };
+  }
+
+  /** GST rates (% of subtotal) and the default shipping charge the rules give an admin-made order for this customer / state. */
+  async adminPricingRules(userId: string, state: string | undefined, items: { productId: string; quantity: number; unitPrice: number }[]) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Customer not found');
+    const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+    const ruleResult = await this.rulesEnforcement.evaluate({
+      userId: user.id,
+      userRole: (user as any)?.effectiveRole || user?.role || undefined,
+      cartItems: items.map((r) => ({ productId: r.productId, quantity: r.quantity, unitPrice: r.unitPrice })),
+      subtotal,
+      shippingRegion: state || undefined,
+      sellerState: await this.getSellerState(),
+    });
+    const pct = (key: 'cgstRate' | 'sgstRate' | 'igstRate') => ruleResult.taxes.reduce((sum, t: any) => sum + (t[key] || 0), 0);
+    return {
+      rates: { cgst: pct('cgstRate'), sgst: pct('sgstRate'), igst: pct('igstRate') },
+      shipping: ruleResult.shipping?.cost ?? 0,
+    };
+  }
+
+  async adminCreateOrder(adminId: string, dto: AdminCreateOrderDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundException('Customer not found');
+
+    const rows = await this.buildAdminItemRows(dto.items);
+    await this.assertStockAvailable(rows);
+    const subtotal = rows.reduce((sum, r) => sum + r.totalPrice, 0);
+
+    // Tax (and a default shipping charge) come from the same rules the storefront uses, but nothing is
+    // enforced — an admin can order below a minimum quantity, etc.
+    const pricing = await this.adminPricingRules(user.id, dto.shippingAddress?.state, rows);
+    const amounts = await this.computeAdminAmounts(
+      subtotal,
+      dto.discountAmount ?? 0,
+      dto.shippingAmount ?? pricing.shipping,
+      pricing.rates,
+      dto.totalAmount,
+    );
+
+    const order = await this.prisma.order.create({
+      data: {
+        userId: user.id,
+        ...amounts,
+        currency: 'INR',
+        shippingAddress: dto.shippingAddress as any,
+        billingAddress: dto.billingAddress as any,
+        notes: dto.notes || null,
+        items: { create: rows.map(({ id: _id, ...r }) => r) },
+        // Every order carries a payment record so its status can be tracked and changed; admin-made orders start as Cash on Delivery.
+        payment: { create: { provider: 'COD', amount: amounts.totalAmount, status: PaymentStatus.PENDING } },
+      },
+    });
+
+    for (const item of rows) {
+      try {
+        await this.inventoryService.reserveStock(item.productId, item.quantity, order.id, adminId, item.variantId);
+      } catch (err) {
+        console.error(`Failed to reserve stock for product ${item.productId}:`, err.message);
+      }
+    }
+
+    return this.findById(order.id);
+  }
+
+  async adminUpdateOrder(adminId: string, id: string, dto: AdminUpdateOrderDto) {
+    const order = await this.prisma.order.findUnique({ where: { id }, include: { items: true, payment: true } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status === OrderStatus.CANCELLED) throw new BadRequestException('A cancelled order cannot be edited');
+
+    const existing = new Map(order.items.map((i) => [i.id, i]));
+    for (const item of dto.items) {
+      if (item.id && !existing.has(item.id)) throw new BadRequestException('An order line does not belong to this order');
+    }
+    const rows = await this.buildAdminItemRows(dto.items, new Map(order.items.map((i) => [i.id, i.metadata])));
+    // Reservations only exist until the goods ship; after that stock has already been taken off.
+    const reservationHeld = (['PENDING', 'CONFIRMED', 'PROCESSING'] as string[]).includes(order.status);
+    if (reservationHeld) {
+      const held = new Map<string, number>();
+      for (const i of order.items) held.set(`${i.productId}|${i.variantId || ''}`, (held.get(`${i.productId}|${i.variantId || ''}`) || 0) + i.quantity);
+      await this.assertStockAvailable(rows, held);
+    }
+    const subtotal = rows.reduce((sum, r) => sum + r.totalPrice, 0);
+
+    // Keep the order's own GST rates (as % of subtotal) so the new quantities / prices are taxed the same way.
+    const oldSubtotal = Number(order.subtotal ?? 0);
+    const rate = (amount: any) => (oldSubtotal > 0 ? (Number(amount ?? 0) / oldSubtotal) * 100 : 0);
+    const amounts = await this.computeAdminAmounts(
+      subtotal,
+      dto.discountAmount ?? Number(order.discountAmount ?? 0),
+      dto.shippingAmount ?? Number(order.shippingAmount ?? 0),
+      { cgst: rate(order.cgstAmount), sgst: rate(order.sgstAmount), igst: rate(order.igstAmount) },
+      dto.totalAmount,
+    );
+
+    const key = (productId: string, variantId?: string | null) => `${productId}|${variantId || ''}`;
+    const oldQty = new Map<string, number>();
+    for (const i of order.items) oldQty.set(key(i.productId, i.variantId), (oldQty.get(key(i.productId, i.variantId)) || 0) + i.quantity);
+    const newQty = new Map<string, number>();
+    for (const r of rows) newQty.set(key(r.productId, r.variantId), (newQty.get(key(r.productId, r.variantId)) || 0) + r.quantity);
+
+    await this.prisma.$transaction(async (tx) => {
+      const keepIds = rows.filter((r) => r.id).map((r) => r.id as string);
+      await tx.orderItem.deleteMany({ where: { orderId: id, id: { notIn: keepIds } } });
+      for (const r of rows) {
+        const { id: lineId, ...data } = r;
+        if (lineId) {
+          await tx.orderItem.update({ where: { id: lineId }, data: { ...data, metadata: data.metadata ?? undefined } });
+        } else {
+          await tx.orderItem.create({ data: { ...data, orderId: id } });
+        }
+      }
+      await tx.order.update({
+        where: { id },
+        data: {
+          ...amounts,
+          shippingAddress: dto.shippingAddress as any,
+          billingAddress: dto.billingAddress as any,
+          ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
+        },
+      });
+      // A payment that has not been captured yet should ask for the new amount.
+      if (order.payment && order.payment.status !== PaymentStatus.CAPTURED && order.payment.status !== PaymentStatus.REFUNDED) {
+        await tx.payment.update({ where: { id: order.payment.id }, data: { amount: amounts.totalAmount } });
+      }
+    });
+
+    if (reservationHeld) {
+      const keys = new Set([...oldQty.keys(), ...newQty.keys()]);
+      for (const k of keys) {
+        const delta = (newQty.get(k) || 0) - (oldQty.get(k) || 0);
+        if (delta === 0) continue;
+        const [productId, variantId] = k.split('|');
+        try {
+          if (delta > 0) await this.inventoryService.reserveStock(productId, delta, id, adminId, variantId || null);
+          else await this.inventoryService.releaseStock(productId, -delta, id, adminId, variantId || null);
+        } catch (err) {
+          console.error(`Failed to adjust stock for product ${productId}:`, err.message);
+        }
+      }
+    }
+
+    if (!reservationHeld && (order.status === 'SHIPPED' || order.status === 'DELIVERED')) {
+      const keys = new Set([...oldQty.keys(), ...newQty.keys()]);
+      for (const k of keys) {
+        const delta = (newQty.get(k) || 0) - (oldQty.get(k) || 0);
+        const [productId, variantId] = k.split('|');
+        try {
+          await this.inventoryService.adjustShippedQuantity(productId, variantId || null, delta, id, adminId);
+        } catch (err) {
+          console.error(`Failed to adjust stock for product ${productId}:`, err.message);
+        }
+      }
+    }
+
+    return this.findById(id);
+  }
+
   async updateStatus(id: string, status: OrderStatus) {
+    const before = await this.prisma.order.findUnique({ where: { id }, select: { status: true } });
+    if (!before) throw new NotFoundException('Order not found');
     const order = await this.prisma.order.update({
       where: { id },
       data: { status, ...(status === 'DELIVERED' ? { deliveredAt: new Date() } : {}) },
@@ -507,6 +854,19 @@ export class OrdersService {
         user: { select: { id: true, role: true, referredBy: true } },
       },
     });
+
+    // Shipping/delivering takes the units out of inventory; cancelling frees them.
+    try {
+      await this.inventoryService.applyOrderStatusChange(id, before.status, status);
+    } catch (err) {
+      this.logger.error(`Failed to update stock for order ${id}: ${err.message}`);
+    }
+
+    try {
+      await syncPaymentWithOrderStatus(this.prisma, id, status);
+    } catch (err) {
+      this.logger.error(`Failed to sync payment for order ${id}: ${err.message}`);
+    }
 
     await this.notifyOrderStatus(order.userId, order.id, order.orderNumber, status);
 
@@ -597,13 +957,11 @@ export class OrdersService {
 
     await this.notifyOrderStatus(updated.userId, updated.id, updated.orderNumber, OrderStatus.CANCELLED);
 
-    // Release reserved inventory
-    for (const item of updated.items) {
-      try {
-        await this.inventoryService.releaseStock(item.productId, item.quantity, updated.id, userId, (item as any).variantId);
-      } catch (err) {
-        console.error(`Failed to release stock for product ${item.productId}:`, err.message);
-      }
+    // Release reserved inventory (or put shipped units back)
+    try {
+      await this.inventoryService.applyOrderStatusChange(updated.id, order.status, OrderStatus.CANCELLED, userId);
+    } catch (err) {
+      console.error(`Failed to release stock for order ${updated.id}:`, err.message);
     }
 
     // A paid order that gets cancelled owes the buyer money back. Track that as a

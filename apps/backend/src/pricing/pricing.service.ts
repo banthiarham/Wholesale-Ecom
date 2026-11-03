@@ -46,9 +46,10 @@ export class PricingService {
 
     if (!product) throw new Error('Product not found');
 
-    // A variant is priced from its own price. Tier, role and contract prices are fixed per-product
-    // amounts set for the single product, so they are not applied to variants (a contract price
-    // for the 128 GB model must not be charged for the 256 GB one); seasonal discounts still apply.
+    // A variant is priced from its own price. Tier and contract prices are fixed per-product amounts, so they are
+    // not applied to variants (a contract price for the 128 GB model must not be charged for the 256 GB one).
+    // Role prices are set against the product's base price (its lowest variant price) and are scaled to each
+    // variant in proportion; seasonal discounts still apply.
     let variant: { price: any } | null = null;
     if (variantId) {
       variant = await this.prisma.productVariant.findFirst({ where: { id: variantId, productId } });
@@ -56,12 +57,15 @@ export class PricingService {
     }
 
     const basePrice = Number(variant ? variant.price : product.unitPrice);
+    const roleScale = variant && Number(product.unitPrice) > 0 ? basePrice / Number(product.unitPrice) : 1;
+    const scaled = (n: number) => Math.round(n * roleScale * 100) / 100;
 
     // Product Tier Pricing (priority 3) — computed regardless of what wins, so the
     // UI can still show "bulk pricing available" even when a higher-priority rule applies.
-    const tier = (variant ? [] : product.tierPrices).find(
-      (tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty),
-    );
+    // The best applicable slab: of the tiers the quantity qualifies for, the one with the highest minimum quantity.
+    const tier = [...(variant ? [] : product.tierPrices)]
+      .filter((tp) => quantity >= tp.minQty && (!tp.maxQty || quantity <= tp.maxQty))
+      .sort((a, b) => b.minQty - a.minQty)[0];
     const tierPrice = tier ? Number(tier.price) : basePrice;
 
     // Role Custom Price (priority 1, after contract) — Admin → Role-Based Pricing.
@@ -76,7 +80,7 @@ export class PricingService {
     let roleMinQty: number | null = null;
     let roleQtyReached = false;
     let loggedInRole: string | null = null;
-    if (userId && !variant) {
+    if (userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         include: { roleRel: true },
@@ -87,12 +91,12 @@ export class PricingService {
           where: { productId, roleId: user.roleId, isActive: true },
           orderBy: { minQty: 'asc' },
         });
-        roleTiers = roleTierRecords.map((rt) => ({ minQty: rt.minQty, price: Number(rt.price) }));
+        roleTiers = roleTierRecords.map((rt) => ({ minQty: rt.minQty, price: scaled(Number(rt.price)) }));
         const applicableRoleTier = [...roleTierRecords]
           .sort((a, b) => b.minQty - a.minQty)
           .find((rt) => quantity >= rt.minQty);
         if (applicableRoleTier) {
-          rolePrice = Number(applicableRoleTier.price);
+          rolePrice = scaled(Number(applicableRoleTier.price));
           appliedRoleName = user.roleRel?.label || user.roleRel?.name || null;
         }
         // Display only: below the first tier the buyer still sees their wholesale price and its
@@ -100,7 +104,7 @@ export class PricingService {
         // charged price is unchanged — below the min quantity it stays the retail price.
         const displayTier = applicableRoleTier ?? roleTierRecords[0];
         if (displayTier) {
-          roleDisplayPrice = Number(displayTier.price);
+          roleDisplayPrice = scaled(Number(displayTier.price));
           roleMinQty = displayTier.minQty;
           roleQtyReached = !!applicableRoleTier;
           appliedRoleName = appliedRoleName ?? loggedInRole;
