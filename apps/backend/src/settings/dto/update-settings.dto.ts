@@ -142,4 +142,14 @@ export class UpdateSettingsDto {
   @IsOptional()
   @Matches(/^\d{1,3}$/, { message: 'Return window must be a whole number of days (0-999)' })
   returnWindowDays?: string;
+
+  @ApiProperty({ required: false, description: 'Terms & conditions printed on every invoice (one per line)' })
+  @IsString()
+  @IsOptional()
+  invoiceTerms?: string;
+
+  @ApiProperty({ required: false, description: 'ID of the Bank Transfer payment gateway whose details are printed on invoices ("" = none)' })
+  @IsString()
+  @IsOptional()
+  invoiceBankGatewayId?: string;
 }

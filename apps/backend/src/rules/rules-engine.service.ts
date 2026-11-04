@@ -84,13 +84,15 @@ export class RulesEngineService {
    */
   async getPublicTaxRates(): Promise<{ taxRate: number; productIds: string[]; categoryIds: string[] }[]> {
     const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
     const rules = await this.prisma.dynamicRule.findMany({
       where: {
         type: 'TAX_RULE',
         isActive: true,
         AND: [
           { OR: [{ startDate: null }, { startDate: { lte: now } }] },
-          { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+          { OR: [{ endDate: null }, { endDate: { gte: startOfToday } }] },
         ],
       },
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
@@ -111,14 +113,17 @@ export class RulesEngineService {
 
   private loadActiveRules() {
     const now = new Date();
+    // The end date is a calendar date: a rule still applies through the whole of that day.
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
     return this.prisma.dynamicRule.findMany({
       where: {
         isActive: true,
         OR: [
           { startDate: null, endDate: null },
-          { startDate: { lte: now }, endDate: { gte: now } },
+          { startDate: { lte: now }, endDate: { gte: startOfToday } },
           { startDate: { lte: now }, endDate: null },
-          { startDate: null, endDate: { gte: now } },
+          { startDate: null, endDate: { gte: startOfToday } },
         ],
       },
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],

@@ -8,6 +8,7 @@ import {
   BadRequestException,
   Param,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
   UploadedFiles,
@@ -17,6 +18,7 @@ import {
 import { FilesInterceptor, FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiParam, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
+import { ProductsBulkService } from './products-bulk.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -32,7 +34,20 @@ import sharp from 'sharp';
 @ApiTags('Products')
 @Controller('products')
 export class ProductsController {
-  constructor(private productsService: ProductsService) {}
+  constructor(private productsService: ProductsService, private bulkService: ProductsBulkService) {}
+
+  @Get('export')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Export all products (or one category) as CSV with role prices, ready for bulk edit (Admin only)' })
+  @ApiQuery({ name: 'category', required: false, description: 'Category ID — export only that category' })
+  async exportCsv(@Query('category') categoryId: string | undefined, @Res() res: any) {
+    const csv = await this.bulkService.exportCsv(categoryId || undefined);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="products-export.csv"');
+    res.send(csv);
+  }
 
   @Get()
   @ApiOperation({ summary: 'List all published products with optional filters' })
@@ -202,7 +217,7 @@ export class ProductsController {
     if (!file || !file.buffer) {
       throw new BadRequestException('File is required');
     }
-    return this.productsService.bulkUpdateFromExcel(file.buffer);
+    return this.bulkService.importCsv(file.buffer);
   }
 
   // ── Parameterized routes ──

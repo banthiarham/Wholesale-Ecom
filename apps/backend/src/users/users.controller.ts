@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  Res,
   UseGuards,
   ParseEnumPipe,
   UploadedFile,
@@ -17,6 +18,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiConsumes } from '@ne
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserRole, UserStatus } from '@prisma/client';
 import { UsersService } from './users.service';
+import { UsersBulkService } from './users-bulk.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
@@ -29,7 +31,31 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService, private readonly bulkService: UsersBulkService) {}
+
+  @Get('export')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Export users as CSV, ready for bulk edit (Admin only)' })
+  async exportCsv(@Query('role') role: string | undefined, @Query('roleId') roleId: string | undefined, @Query('status') status: string | undefined, @Res() res: any) {
+    const csv = await this.bulkService.exportCsv({ role, roleId, status });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="users-export.csv"');
+    res.send(csv);
+  }
+
+  @Post('bulk-update')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Bulk update users from an edited export CSV (Admin only)' })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  bulkUpdate(@UploadedFile() file?: Express.Multer.File) {
+    if (!file?.buffer) throw new BadRequestException('CSV file is required');
+    return this.bulkService.importCsv(file.buffer);
+  }
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)

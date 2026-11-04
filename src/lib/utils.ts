@@ -35,6 +35,11 @@ export function formatPrice(amount: number | string, currency = "INR") {
   }).format(Number(amount))
 }
 
+/** Discount percentage for display, to at most 2 decimals: 16.6666 -> 16.67, 20 -> 20. */
+export function formatPercent(value: number | string) {
+  return String(Number(Number(value).toFixed(2)))
+}
+
 export interface AddressData {
   fullName?: string
   phone?: string

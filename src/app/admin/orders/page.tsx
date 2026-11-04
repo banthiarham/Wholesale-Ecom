@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Search, ChevronDown, ChevronUp, Eye } from "lucide-react"
+import { Search, ChevronDown, ChevronUp, Eye, Pencil, Plus } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
@@ -128,7 +128,8 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="relative max-w-xs">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="relative max-w-xs w-full">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={16} />
         <input
           type="text"
@@ -137,6 +138,8 @@ export default function AdminOrdersPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm w-full"
         />
+      </div>
+      <Link href="/admin/orders/new" className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition"><Plus size={16} /> New Order</Link>
       </div>
       <ListFilterBar fields={ORDER_FILTER_FIELDS} values={ofilters} onValues={setOfilters} resultCount={filtered.length} totalCount={orders.length} noun="orders" />
 
@@ -186,6 +189,7 @@ export default function AdminOrdersPage() {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Link href={`/admin/orders/${o.id}`} className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 rounded hover:bg-primary-50 dark:hover:bg-primary-900/30" title="View"><Eye size={16} /></Link>
+                        {o.status !== "CANCELLED" && <Link href={`/admin/orders/${o.id}/edit`} className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 rounded hover:bg-primary-50 dark:hover:bg-primary-900/30" title="Edit order"><Pencil size={16} /></Link>}
                       </div>
                     </td>
                   </tr>

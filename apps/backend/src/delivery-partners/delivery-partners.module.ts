@@ -6,7 +6,10 @@ import { ShiprocketProviderService } from './providers/shiprocket.service';
 import { ShipmozoProviderService } from './providers/shipmozo.service';
 import { CustomPartnerProviderService } from './providers/custom-partner.service';
 
+import { InventoryModule } from '../inventory/inventory.module';
+
 @Module({
+  imports: [InventoryModule],
   controllers: [DeliveryPartnersController],
   providers: [
     DeliveryPartnersService,

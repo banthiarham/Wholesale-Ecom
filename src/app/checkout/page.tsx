@@ -49,10 +49,11 @@ const PROVIDER_LABELS: Record<string, string> = {
   PAYU: "PayU",
   COD: "Cash on Delivery",
   BANK_TRANSFER: "Bank Transfer",
+  UPI: "UPI",
 }
 
 // Offline methods are shown as their own options, not in the online-gateway list.
-const OFFLINE_PROVIDERS = ["COD", "BANK_TRANSFER"]
+const OFFLINE_PROVIDERS = ["COD", "BANK_TRANSFER", "UPI"]
 
 const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   CCAVENUE: "Credit/Debit card, UPI, NetBanking, Wallets",
@@ -61,7 +62,7 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   PAYU: "Cards, UPI, NetBanking",
 }
 
-type PaymentMethod = "COD" | "ONLINE" | "WALLET" | "BANK_TRANSFER"
+type PaymentMethod = "COD" | "ONLINE" | "WALLET" | "BANK_TRANSFER" | "UPI"
 
 interface SavedAddress {
   id: string
@@ -128,6 +129,8 @@ export default function CheckoutPage() {
   const [selectedProvider, setSelectedProvider] = useState<string>("")
   const [gateways, setGateways] = useState<EnabledGateway[]>([])
   const [showBankDialog, setShowBankDialog] = useState(false)
+  const [showUpiDialog, setShowUpiDialog] = useState(false)
+  const [upiCopied, setUpiCopied] = useState(false)
   const [redirectData, setRedirectData] = useState<{ url: string; method: string; params: Record<string, string> } | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [loyalty, setLoyalty] = useState<LoyaltyData | null>(null)
@@ -156,7 +159,7 @@ export default function CheckoutPage() {
     checkoutRestrictions, quantityDiscounts, extraCharges,
     availablePaymentMethods,
   } = useStorefrontRules(cartItemsForRules, undefined, {
-    paymentMethod: paymentMethod === "COD" ? "COD" : paymentMethod === "BANK_TRANSFER" ? "BANK_TRANSFER" : selectedProvider || undefined,
+    paymentMethod: paymentMethod === "COD" ? "COD" : paymentMethod === "BANK_TRANSFER" ? "BANK_TRANSFER" : paymentMethod === "UPI" ? "UPI" : selectedProvider || undefined,
     shippingRegion: address.state || undefined,
   })
 
@@ -205,6 +208,7 @@ export default function CheckoutPage() {
         // Cash on Delivery can be switched off by the admin: start on the first method that is still offered.
         if (!list.some((g) => g.provider === "COD")) {
           if (list.some((g) => g.provider === "BANK_TRANSFER")) setPaymentMethod("BANK_TRANSFER")
+          else if (list.some((g) => g.provider === "UPI")) setPaymentMethod("UPI")
           else if (online.length > 0) setPaymentMethod("ONLINE")
         }
       })
@@ -380,14 +384,15 @@ export default function CheckoutPage() {
 
   // Bank transfer: show the bank details first; the order is only placed once the customer continues.
   const handleCheckoutClick = () => {
-    if (paymentMethod !== "BANK_TRANSFER") { placeOrder(); return }
+    if (paymentMethod !== "BANK_TRANSFER" && paymentMethod !== "UPI") { placeOrder(); return }
     const shippingErrors = validateAddress(address)
     if (Object.keys(shippingErrors).length > 0) { setErrors(shippingErrors); return }
     if (!billingSameAsShipping) {
       const bErrors = validateAddress(billingAddress)
       if (Object.keys(bErrors).length > 0) { setBillingErrors(bErrors); return }
     }
-    setShowBankDialog(true)
+    if (paymentMethod === "UPI") setShowUpiDialog(true)
+    else setShowBankDialog(true)
   }
 
   const placeOrder = async () => {
@@ -423,7 +428,7 @@ export default function CheckoutPage() {
           billingAddress: billingSameAsShipping ? undefined : billingAddress,
           couponCode: couponCode || undefined,
           bankOfferId: selectedBankOfferEntry?.eligible ? selectedBankOfferId : undefined,
-          paymentMethod: paymentMethod === "COD" || paymentMethod === "BANK_TRANSFER" ? paymentMethod : undefined,
+          paymentMethod: paymentMethod === "COD" || paymentMethod === "BANK_TRANSFER" || paymentMethod === "UPI" ? paymentMethod : undefined,
         }),
       })
       const data = await parseApiResponse(res)
@@ -474,6 +479,18 @@ export default function CheckoutPage() {
           console.error("Failed to record bank transfer payment:", err)
         }
         showToast("success", "Order placed! Please complete the bank transfer to confirm payment.")
+        router.push(`/orders/${orderId}`)
+        return
+      }
+
+      if (paymentMethod === "UPI") {
+        // Record the payment as UPI / Pending so the order shows how the customer chose to pay.
+        try {
+          await fetch(`/api/payments/upi/${orderId}`, { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+        } catch (err) {
+          console.error("Failed to record UPI payment:", err)
+        }
+        showToast("success", "Order placed! Please complete the UPI payment to confirm it.")
         router.push(`/orders/${orderId}`)
         return
       }
@@ -600,6 +617,8 @@ export default function CheckoutPage() {
   const onlineGateways = gateways.filter((g) => !OFFLINE_PROVIDERS.includes(g.provider) && (isPaymentAllowed(g.provider) || isPaymentAllowed("ONLINE")))
   const codAvailable = !!codGateway && isPaymentAllowed("COD")
   const bankAvailable = !!bankGateway && isPaymentAllowed("BANK_TRANSFER")
+  const upiGateway = gateways.find((g) => g.provider === "UPI" && g.settings?.upiId && g.settings?.qrImage)
+  const upiAvailable = !!upiGateway && isPaymentAllowed("UPI")
 
   // Checkout restriction enforcement
   const hasCheckoutRestriction = checkoutRestrictions.some(cr => cr.restricted)
@@ -944,6 +963,24 @@ export default function CheckoutPage() {
                   </label>
                 )}
 
+                {upiAvailable && (
+                  <label
+                    onClick={() => setPaymentMethod("UPI")}
+                    className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === "UPI" ? "border-primary-600 bg-primary-50 shadow-sm" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <input type="radio" name="payment" checked={paymentMethod === "UPI"} onChange={() => setPaymentMethod("UPI")} className="accent-primary-600 w-4 h-4" />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${paymentMethod === "UPI" ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                        <Smartphone size={18} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">UPI</p>
+                        <p className="text-xs text-gray-500">{upiGateway?.description || "Scan the QR code or pay to our UPI ID"}</p>
+                      </div>
+                    </div>
+                  </label>
+                )}
+
                 {onlineGateways.map((gw) => (
                   <label
                     key={gw.id}
@@ -1233,6 +1270,53 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
+
+      {showUpiDialog && upiGateway && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="UPI payment details">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !placing && setShowUpiDialog(false)} />
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center"><Smartphone size={20} /></span>
+              <div>
+                <h3 className="font-bold text-gray-900">Pay with UPI</h3>
+                <p className="text-xs text-gray-500">Scan the QR code or pay to the UPI ID below</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="rounded-xl bg-primary-50 px-4 py-3 flex items-center justify-between">
+                <span className="text-sm text-gray-600">Amount to pay</span>
+                <span className="text-lg font-bold text-primary-700">{formatPrice(finalTotal)}</span>
+              </div>
+              <div className="flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={upiGateway.settings!.qrImage} alt="UPI QR code" className="w-56 h-56 object-contain rounded-xl border border-gray-100 bg-white" />
+              </div>
+              <div className="rounded-xl border border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500">UPI ID{upiGateway.settings!.payeeName ? ` · ${upiGateway.settings!.payeeName}` : ""}</p>
+                  <p className="font-mono font-semibold text-gray-900 break-all">{upiGateway.settings!.upiId}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try { await navigator.clipboard.writeText(upiGateway.settings!.upiId); setUpiCopied(true); setTimeout(() => setUpiCopied(false), 1500) } catch { /* clipboard blocked */ }
+                  }}
+                  className="shrink-0 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-primary-700 hover:bg-primary-50 transition"
+                >
+                  {upiCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">Your order will be placed now with payment status <strong>Pending</strong>. We will confirm it once your payment is received.</p>
+            </div>
+            <div className="p-5 pt-0 flex gap-3">
+              <button type="button" onClick={() => setShowUpiDialog(false)} disabled={placing} className="btn-outline flex-1 justify-center disabled:opacity-50">Back</button>
+              <button type="button" onClick={() => { placeOrder().finally(() => setShowUpiDialog(false)) }} disabled={placing} className="btn-primary flex-[2] justify-center disabled:opacity-50">
+                {placing ? "Placing Order..." : "I've Paid, Place Order"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showBankDialog && bankGateway && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Bank transfer details">

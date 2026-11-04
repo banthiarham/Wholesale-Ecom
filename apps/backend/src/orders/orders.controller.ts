@@ -16,6 +16,7 @@ import { OrdersService } from './orders.service';
 import { CsvOrderParserService } from './csv-order-parser.service';
 import { ExcelOrderParserService } from './excel-order-parser.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { AdminCreateOrderDto, AdminUpdateOrderDto } from './dto/admin-order.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -79,6 +80,55 @@ export class OrdersController {
       status,
     );
     return { orders };
+  }
+
+  @Get('admin/product-search')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Search products (with variants) for the admin order forms' })
+  @ApiQuery({ name: 'q', required: false })
+  async searchProducts(@Query('q') q?: string) {
+    return { products: await this.ordersService.adminSearchProducts(q) };
+  }
+
+  @Post('admin/quote')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Product prices for a customer's role, contract and quantities (Admin)" })
+  async adminQuote(@Body() body: { userId: string; items: { productId: string; variantId?: string; quantity: number }[] }) {
+    return this.ordersService.adminQuotePrices(body.userId, Array.isArray(body.items) ? body.items : []);
+  }
+
+  @Post('admin/pricing')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'GST rates and default shipping the rules give a new admin-made order (Admin)' })
+  async adminPricing(@Body() body: { userId: string; state?: string; items: { productId: string; quantity: number; unitPrice: number }[] }) {
+    return this.ordersService.adminPricingRules(body.userId, body.state, Array.isArray(body.items) ? body.items : []);
+  }
+
+  @Post('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create an order on behalf of a customer (Admin)' })
+  async adminCreate(@Body() body: AdminCreateOrderDto, @CurrentUser() user: any) {
+    const order = await this.ordersService.adminCreateOrder(user.id, body);
+    return { order };
+  }
+
+  @Put(':id/edit')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Edit an order: items, prices, shipping/discount/total and addresses (Admin)' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  async adminUpdate(@Param('id') id: string, @Body() body: AdminUpdateOrderDto, @CurrentUser() user: any) {
+    const order = await this.ordersService.adminUpdateOrder(user.id, id, body);
+    return { order };
   }
 
   @Get(':id')

@@ -300,7 +300,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           flex flex-col transition-all duration-300 z-50
           fixed inset-y-0 left-0
           ${mobileOpen ? "translate-x-0 w-64" : "-translate-x-full w-64"}
-          lg:relative lg:translate-x-0
+          lg:sticky lg:top-0 lg:h-screen lg:self-start lg:translate-x-0
           ${collapsed ? "lg:w-16" : "lg:w-64"}
         `}
       >

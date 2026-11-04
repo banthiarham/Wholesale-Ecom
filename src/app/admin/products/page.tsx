@@ -12,6 +12,7 @@ import { saveAs } from "file-saver"
 import { formatPrice } from "@/lib/utils"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import RolePriceTable from "@/components/admin/RolePriceTable"
+import BulkDataModal from "@/components/admin/BulkDataModal"
 import ProductVariantsEditor, { VariantEditorState, emptyVariantState, validateVariantState, variantStateFromProduct } from "@/components/admin/ProductVariantsEditor"
 import { ProductFilterBar, ProductFilterState, SortKey, applyProductFilters, defaultFilters, uniqueCompanies } from "@/components/admin/ProductFilters"
 
@@ -73,8 +74,7 @@ function AdminProductsContent() {
 
   // Bulk edit state (CSV download/upload)
   const [showBulkEdit, setShowBulkEdit] = useState(false)
-  const [bulkUploading, setBulkUploading] = useState(false)
-  const [bulkResult, setBulkResult] = useState<{ updated: number; errors: string[] } | null>(null)
+  const [showExport, setShowExport] = useState(false)
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
 
@@ -421,91 +421,6 @@ function AdminProductsContent() {
     })
   }
 
-  // Bulk edit handlers (CSV download/upload)
-  const handleDownloadCSV = () => {
-    const data = products.map((p) => ({
-      id: p.id,
-      sku: p.sku || "",
-      title: p.title,
-      unitPrice: p.unitPrice,
-      compareAtPrice: p.compareAtPrice ?? "",
-      moq: p.moq,
-      inventoryQuantity: p.inventoryQuantity,
-      status: p.status,
-    }))
-
-    const ws = XLSX.utils.json_to_sheet(data)
-    ws["!cols"] = [
-      { wch: 36 }, // id
-      { wch: 16 }, // sku
-      { wch: 30 }, // title
-      { wch: 12 }, // unitPrice
-      { wch: 14 }, // compareAtPrice
-      { wch: 6 },  // moq
-      { wch: 10 }, // inventoryQuantity
-      { wch: 12 }, // status
-    ]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Products")
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" })
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
-    saveAs(blob, "products_pricing_edit.xlsx")
-  }
-
-  // Export every product (all statuses) to an Excel sheet, using the same fields as the product form (minus Size).
-  const handleExportProducts = () => {
-    const data = products.map((p) => ({
-      "Product Title": p.title,
-      "URL Handle": p.handle,
-      SKU: p.sku || "",
-      Categories: (p.categories?.length ? p.categories.map((c) => c.name) : p.category?.name ? [p.category.name] : []).join(", "),
-      "Company Name": p.companyName || "",
-      "Unit Price (Rs.)": p.unitPrice,
-      "Compare At Price (Rs.)": p.compareAtPrice ?? "",
-      "MOQ (Minimum Order Quantity)": p.moq,
-      "Inventory Quantity": p.inventoryQuantity,
-      Status: p.status,
-      Description: p.description || "",
-    }))
-    const ws = XLSX.utils.json_to_sheet(data)
-    ws["!cols"] = [{ wch: 34 }, { wch: 28 }, { wch: 16 }, { wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 60 }]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Products")
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" })
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
-    saveAs(blob, `products_export_${new Date().toISOString().slice(0, 10)}.xlsx`)
-  }
-
-  const handleUploadCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : ""
-    if (!token) {
-      setBulkResult({ updated: 0, errors: ["Please log in to upload files"] })
-      return
-    }
-    setBulkUploading(true)
-    setBulkResult(null)
-    try {
-      const formData = new FormData()
-      formData.append("file", file)
-      const res = await fetch("/api/products/bulk-update", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message || "Upload failed")
-      setBulkResult(data)
-      if ((data as { updated: number; errors: string[] }).updated > 0) loadProducts()
-    } catch (err: unknown) {
-      setBulkResult({ updated: 0, errors: [err instanceof Error ? err.message : "Upload failed"] })
-    } finally {
-      setBulkUploading(false)
-      e.target.value = ""
-    }
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -527,12 +442,11 @@ function AdminProductsContent() {
             onClick={() => setShowBulkEdit(true)}
             className="flex items-center gap-2 px-4 py-2 border border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-400 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition text-sm"
           >
-            <Download size={16} /> Bulk Edit
+            <Upload size={16} /> Bulk Edit
           </button>
           <button
-            onClick={handleExportProducts}
-            disabled={products.length === 0}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm disabled:opacity-50"
+            onClick={() => setShowExport(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm"
           >
             <Download size={16} /> Export
           </button>
@@ -673,9 +587,14 @@ function AdminProductsContent() {
             </div>}
 
             {/* Role Pricing (edit only — shares data with the Role Pricing page) */}
-            {editingProduct && !hasVariants && (
+            {editingProduct && (
               <div className="sm:col-span-2 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role Pricing</label>
+                {hasVariants && (
+                  <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                    The base price here is the lowest variant price. A role price is applied to every variant in proportion, so a variant that costs twice the base price gets twice the role price.
+                  </p>
+                )}
                 <RolePriceTable
                   product={{ id: editingProduct.id, title: editingProduct.title, sku: editingProduct.sku || undefined, unitPrice: Number(editingProduct.unitPrice) }}
                 />
@@ -807,71 +726,17 @@ function AdminProductsContent() {
         </div>
       )}
 
-      {/* Bulk Edit Panel — CSV Download/Upload */}
-      {showBulkEdit && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-lg">Bulk Edit Products</h3>
-              <button onClick={() => { setShowBulkEdit(false); setBulkResult(null) }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
-            </div>
-
-            <div className="space-y-5">
-              {/* Instructions */}
-              <div className="bg-primary-50 dark:bg-primary-900/20 text-primary-800 dark:text-primary-300 text-sm rounded-xl px-4 py-3">
-                <p className="font-medium mb-1">How it works:</p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Download the current product spreadsheet</li>
-                  <li>Edit pricing, MOQ, stock, or status in the file</li>
-                  <li>Upload the edited file to apply changes</li>
-                </ol>
-              </div>
-
-              {/* Download button */}
-              <button
-                onClick={handleDownloadCSV}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition text-sm font-medium"
-              >
-                <Download size={18} /> Download Products Spreadsheet
-              </button>
-
-              {/* Upload area */}
-              <label className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-400 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/20 transition text-sm font-medium cursor-pointer">
-                <Upload size={18} />
-                {bulkUploading ? "Uploading..." : "Upload Edited Spreadsheet"}
-                <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleUploadCSV}
-                  disabled={bulkUploading}
-                  className="hidden"
-                />
-              </label>
-
-              {/* Results */}
-              {bulkResult && (
-                <div className="space-y-2">
-                  {bulkResult.updated > 0 && (
-                    <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm rounded-lg px-4 py-3">
-                      Successfully updated {bulkResult.updated} product{bulkResult.updated !== 1 ? "s" : ""}.
-                    </div>
-                  )}
-                  {bulkResult.errors.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-sm text-red-700 dark:text-red-400 font-medium">{bulkResult.errors.length} error{bulkResult.errors.length !== 1 ? "s" : ""}:</p>
-                      <div className="max-h-32 overflow-y-auto space-y-1">
-                        {bulkResult.errors.map((err, i) => (
-                          <div key={i} className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">{err}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {showExport && (
+        <BulkDataModal
+          mode="export"
+          entity="products"
+          filterLabel="Category"
+          filterParam="category"
+          filterOptions={[{ value: "", label: "All categories" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+          onClose={() => setShowExport(false)}
+        />
       )}
+      {showBulkEdit && <BulkDataModal mode="import" entity="products" onClose={() => setShowBulkEdit(false)} onApplied={loadProducts} />}
     </div>
   )
 }

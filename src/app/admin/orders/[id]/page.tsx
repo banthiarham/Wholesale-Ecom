@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import {
   ArrowLeft, Navigation, ClipboardCheck, CreditCard, CheckCircle, PackageCheck, Truck, Home, XCircle,
-  MapPin, ReceiptText, User, Layers, ExternalLink, Plug, FileText, Package,
+  MapPin, ReceiptText, User, Layers, ExternalLink, Plug, FileText, Package, Pencil,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { AdminStatusBadge, type AdminBadgeVariant } from "@/lib/adminStatusBadge"
@@ -271,6 +271,13 @@ export default function AdminOrderDetailPage() {
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Placed on {new Date(order.createdAt).toLocaleString()}</p>
         </div>
+        <div className="flex items-center gap-2">
+        {order.status !== "CANCELLED" && <Link
+          href={`/admin/orders/${order.id}/edit`}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm"
+        >
+          <Pencil size={16} /> Edit Order
+        </Link>}
         <Link
           href={`/orders/${order.id}/invoice`}
           target="_blank"
@@ -278,6 +285,7 @@ export default function AdminOrderDetailPage() {
         >
           <FileText size={16} /> View Invoice
         </Link>
+        </div>
       </div>
 
       {/* Tracking timeline */}
@@ -467,7 +475,16 @@ export default function AdminOrderDetailPage() {
             <div className="flex items-center gap-2 mb-4"><CreditCard size={18} className="text-primary-600 dark:text-primary-400" /><h2 className="font-semibold text-gray-900 dark:text-gray-100">Payment</h2></div>
             <div className="text-sm space-y-2">
               <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Method</span><span className="text-gray-900 dark:text-gray-100">{paymentModeLabel(order.payment?.provider)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Status</span><span className="uppercase font-medium text-gray-900 dark:text-gray-100">{paymentStatus.replace(/_/g, " ")}</span></div>
+              <div className="flex justify-between items-center gap-2"><span className="text-gray-600 dark:text-gray-400">Status</span>
+                  <select
+                    value={paymentStatus}
+                    disabled={busy === "pay"}
+                    onChange={(e) => run("pay", `/api/payments/${id}/status`, { method: "PUT", body: JSON.stringify({ status: e.target.value }) }, "Payment status updated")}
+                    className="px-2 py-1 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-xs font-medium uppercase"
+                  >
+                    {["PENDING", "AUTHORIZED", "CAPTURED", "FAILED", "CANCELLED", "REFUND_PENDING", "REFUNDED"].map((st) => <option key={st} value={st}>{st.replace(/_/g, " ")}</option>)}
+                  </select>
+              </div>
               {order.payment?.providerRef && <div className="flex justify-between gap-2"><span className="text-gray-600 dark:text-gray-400">Reference</span><span className="font-mono text-xs text-gray-900 dark:text-gray-100 truncate">{order.payment.providerRef}</span></div>}
               <div className="flex justify-between border-t border-gray-100 dark:border-gray-800 pt-2 font-bold"><span className="text-gray-900 dark:text-gray-100">Total</span><span className="text-primary-700 dark:text-primary-400">{formatPrice(Number(order.totalAmount))}</span></div>
             </div>

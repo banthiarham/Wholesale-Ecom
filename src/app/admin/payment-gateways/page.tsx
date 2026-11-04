@@ -25,7 +25,7 @@ interface Gateway {
 const BUILTIN_PROVIDERS = ["CCAVENUE", "RAZORPAY", "STRIPE", "PAYU"] as const
 
 /** Offline methods: no API credentials. COD is built in (can only be switched on/off); Bank Transfer shows bank details at checkout. */
-const OFFLINE_PROVIDERS = ["COD", "BANK_TRANSFER"] as const
+const OFFLINE_PROVIDERS = ["COD", "BANK_TRANSFER", "UPI"] as const
 const isOffline = (p: string) => (OFFLINE_PROVIDERS as readonly string[]).includes(p)
 
 const BANK_FIELDS: { key: "bankName" | "accountName" | "accountNumber" | "ifscCode" | "branch"; label: string; placeholder: string }[] = [
@@ -35,6 +35,7 @@ const BANK_FIELDS: { key: "bankName" | "accountName" | "accountNumber" | "ifscCo
   { key: "ifscCode", label: "IFSC Code", placeholder: "e.g. SBIN0001234" },
   { key: "branch", label: "Branch", placeholder: "e.g. Connaught Place, New Delhi" },
 ]
+const emptyUpi = { upiId: "", qrImage: "", payeeName: "" }
 const emptyBank = { bankName: "", accountName: "", accountNumber: "", ifscCode: "", branch: "" }
 
 const CREDENTIAL_FIELDS: Record<string, { key: string; label: string; required: boolean }[]> = {
@@ -67,6 +68,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   PAYU: "PayU",
   COD: "Cash on Delivery",
   BANK_TRANSFER: "Bank Transfer",
+  UPI: "UPI",
 }
 
 interface CustomCredField {
@@ -89,6 +91,7 @@ const defaultForm = {
   gatewayUrl: "",
   webhookUrl: "",
   bank: { ...emptyBank },
+  upi: { ...emptyUpi },
 }
 
 export default function AdminPaymentGatewaysPage() {
@@ -99,6 +102,7 @@ export default function AdminPaymentGatewaysPage() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Gateway | null>(null)
   const [saving, setSaving] = useState(false)
+  const [uploadingQr, setUploadingQr] = useState(false)
   const [form, setForm] = useState({ ...defaultForm })
   const [showCreds, setShowCreds] = useState<Record<string, boolean>>({})
 
@@ -136,7 +140,7 @@ export default function AdminPaymentGatewaysPage() {
   }
 
   const resetForm = () => {
-    setForm({ ...defaultForm, credentials: {}, customCredFields: [], bank: { ...emptyBank } })
+    setForm({ ...defaultForm, credentials: {}, customCredFields: [], bank: { ...emptyBank }, upi: { ...emptyUpi } })
     setEditing(null)
     setShowForm(false)
   }
@@ -165,6 +169,7 @@ export default function AdminPaymentGatewaysPage() {
       gatewayUrl: g.gatewayUrl || "",
       webhookUrl: g.webhookUrl || "",
       bank: { ...emptyBank, ...Object.fromEntries(Object.entries(savedBank).filter(([k]) => k in emptyBank)) },
+      upi: { ...emptyUpi, ...Object.fromEntries(Object.entries(savedBank).filter(([k]) => k in emptyUpi)) },
     })
     setShowForm(true)
   }
@@ -204,6 +209,17 @@ export default function AdminPaymentGatewaysPage() {
 
     if (form.providerType === "builtin" && form.provider === "BANK_TRANSFER") {
       body.settings = Object.fromEntries(Object.entries(form.bank).map(([k, v]) => [k, v.trim()]))
+      body.testMode = false
+      body.isDefault = false
+    }
+    if (form.providerType === "builtin" && form.provider === "UPI") {
+      if (!form.upi.qrImage) {
+        alert("Please upload the UPI QR code image")
+        setSaving(false)
+        return
+      }
+      body.settings = Object.fromEntries(Object.entries(form.upi).map(([k, v]) => [k, v.trim()]))
+      body.label = "UPI"
       body.testMode = false
       body.isDefault = false
     }
@@ -285,7 +301,7 @@ export default function AdminPaymentGatewaysPage() {
       ...prev,
       provider,
       credentials: {},
-      label: provider === "BANK_TRANSFER" ? "Bank Transfer" : (prev.label && prev.label !== "Bank Transfer" ? prev.label : PROVIDER_LABELS[provider] || provider),
+      label: provider === "UPI" ? "UPI" : provider === "BANK_TRANSFER" ? "Bank Transfer" : (prev.label && prev.label !== "Bank Transfer" ? prev.label : PROVIDER_LABELS[provider] || provider),
     }))
   }
 
@@ -342,6 +358,23 @@ export default function AdminPaymentGatewaysPage() {
   const isCustom = form.providerType === "custom"
   const isBank = !isCustom && form.provider === "BANK_TRANSFER"
   const isCod = !isCustom && form.provider === "COD"
+  const isUpi = !isCustom && form.provider === "UPI"
+
+  const uploadQr = async (file: File) => {
+    setUploadingQr(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/payment-gateways/upload-qr", { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, body: fd })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d.message || "Failed to upload QR code")
+      setForm((prev) => ({ ...prev, upi: { ...prev.upi, qrImage: d.url } }))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to upload QR code")
+    } finally {
+      setUploadingQr(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -421,7 +454,7 @@ export default function AdminPaymentGatewaysPage() {
                   disabled={!!editing}
                   className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:text-gray-500 dark:disabled:text-gray-500"
                 >
-                  {[...BUILTIN_PROVIDERS, "BANK_TRANSFER", ...(editing && editing.provider === "COD" ? ["COD"] : [])].map((p) => (
+                  {[...BUILTIN_PROVIDERS, "BANK_TRANSFER", "UPI", ...(editing && editing.provider === "COD" ? ["COD"] : [])].map((p) => (
                     <option key={p} value={p}>
                       {PROVIDER_LABELS[p]}
                     </option>
@@ -444,9 +477,9 @@ export default function AdminPaymentGatewaysPage() {
               <input
                 required
                 placeholder="Label (e.g. Razorpay Test)"
-                value={isBank ? "Bank Transfer" : form.label}
-                readOnly={isBank}
-                title={isBank ? "Bank transfer gateways are always named Bank Transfer" : undefined}
+                value={isBank ? "Bank Transfer" : isUpi ? "UPI" : form.label}
+                readOnly={isBank || isUpi}
+                title={isBank ? "Bank transfer gateways are always named Bank Transfer" : isUpi ? "The UPI gateway is always named UPI" : undefined}
                 onChange={(e) => setForm({ ...form, label: e.target.value })}
                 className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
@@ -552,6 +585,46 @@ export default function AdminPaymentGatewaysPage() {
               </div>
             )}
 
+            {isUpi && (
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-4">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">UPI details</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">When a customer chooses UPI at checkout, a pop-up shows this QR code and UPI ID (with a copy button) before the order is placed. Orders stay payment-pending until you confirm the money arrived.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField label="UPI ID" required>
+                    <input
+                      required
+                      placeholder="e.g. yourshop@okhdfcbank"
+                      value={form.upi.upiId}
+                      onChange={(e) => setForm((prev) => ({ ...prev, upi: { ...prev.upi, upiId: e.target.value } }))}
+                      className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </FormField>
+                  <FormField label="Payee name (optional)">
+                    <input
+                      placeholder="Name shown on the UPI account"
+                      value={form.upi.payeeName}
+                      onChange={(e) => setForm((prev) => ({ ...prev, upi: { ...prev.upi, payeeName: e.target.value } }))}
+                      className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </FormField>
+                  <div className="sm:col-span-2">
+                    <FormField label="UPI QR code" required>
+                      <div className="flex items-center gap-4">
+                        {form.upi.qrImage && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={form.upi.qrImage} alt="UPI QR code" className="w-28 h-28 object-contain rounded-lg border border-gray-200 dark:border-gray-700 bg-white" />
+                        )}
+                        <label className={`px-4 py-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-500 dark:text-gray-400 cursor-pointer hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition ${uploadingQr ? "opacity-50 pointer-events-none" : ""}`}>
+                          {uploadingQr ? "Uploading..." : form.upi.qrImage ? "Replace QR code" : "Upload QR code"}
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadQr(f); e.target.value = "" }} />
+                        </label>
+                      </div>
+                    </FormField>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {isCod && (
               <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
                 Cash on Delivery is a built-in method. Untick <strong>Active</strong> to hide it from customers at checkout.
@@ -594,7 +667,7 @@ export default function AdminPaymentGatewaysPage() {
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Active</span>
               </label>
-              {!isBank && !isCod && <label className="flex items-center gap-2 px-3 py-2">
+              {!isBank && !isCod && !isUpi && <label className="flex items-center gap-2 px-3 py-2">
                 <input
                   type="checkbox"
                   checked={form.isDefault}
@@ -603,7 +676,7 @@ export default function AdminPaymentGatewaysPage() {
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Default Gateway</span>
               </label>}
-              {!isBank && !isCod && <label className="flex items-center gap-2 px-3 py-2">
+              {!isBank && !isCod && !isUpi && <label className="flex items-center gap-2 px-3 py-2">
                 <input
                   type="checkbox"
                   checked={form.testMode}
@@ -712,7 +785,18 @@ export default function AdminPaymentGatewaysPage() {
                       </span>}
                     </td>
                     <td className="px-4 py-3">
-                      {g.provider === "BANK_TRANSFER" && g.settings ? (
+                      {g.provider === "UPI" && g.settings ? (
+                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                          {g.settings.qrImage && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={g.settings.qrImage} alt="UPI QR" className="w-10 h-10 object-contain rounded border border-gray-200 dark:border-gray-700 bg-white" />
+                          )}
+                          <div>
+                            <div className="font-mono font-medium text-gray-600 dark:text-gray-400">{g.settings.upiId}</div>
+                            {g.settings.payeeName && <div>{g.settings.payeeName}</div>}
+                          </div>
+                        </div>
+                      ) : g.provider === "BANK_TRANSFER" && g.settings ? (
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           <div className="font-medium text-gray-600 dark:text-gray-400">{g.settings.bankName} <span className="font-normal text-gray-400">({g.settings.accountName})</span></div>
                           <div className="font-mono">A/C {g.settings.accountNumber}</div>

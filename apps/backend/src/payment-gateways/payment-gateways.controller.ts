@@ -1,4 +1,8 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { mkdirSync } from 'fs';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { PaymentGatewaysService } from './payment-gateways.service';
 import { CreateGatewayDto } from './dto/create-gateway.dto';
@@ -28,6 +32,35 @@ export class PaymentGatewaysController {
   async findAll() {
     const gateways = await this.service.findAll();
     return { gateways };
+  }
+
+  @Post('upload-qr')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Upload a UPI QR code image (admin); returns its URL to save in the UPI gateway settings' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req: any, file: any, cb: any) => {
+        if (/^image\/(jpe?g|png|webp|gif|avif)$/i.test(file.mimetype)) cb(null, true);
+        else cb(new BadRequestException('Only JPG, PNG, WebP, GIF or AVIF images are allowed'), false);
+      },
+      storage: diskStorage({
+        destination: (_req: any, _file: any, cb: any) => {
+          const dir = join(process.cwd(), 'uploads', 'payment-qr');
+          mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req: any, file: any, cb: any) => {
+          cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extname(file.originalname).toLowerCase()}`);
+        },
+      }),
+    }),
+  )
+  uploadQr(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No image file received');
+    return { url: `/uploads/payment-qr/${file.filename}` };
   }
 
   @Get(':id')

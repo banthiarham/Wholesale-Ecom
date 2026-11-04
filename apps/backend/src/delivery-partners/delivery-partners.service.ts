@@ -1,3 +1,5 @@
+import { syncPaymentWithOrderStatus } from '../orders/payment-sync';
+import { InventoryService } from '../inventory/inventory.service';
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +14,7 @@ export class DeliveryPartnersService {
     private prisma: PrismaService,
     private configService: ConfigService,
     private factory: DeliveryPartnerFactory,
+    private inventoryService: InventoryService,
   ) {
     this.encryptionKey = this.configService.get<string>(
       'DELIVERY_PARTNER_CREDENTIALS_KEY',
@@ -360,8 +363,12 @@ export class DeliveryPartnersService {
           where: { id: orderId },
           data: { status: 'DELIVERED', ...(order.status !== 'DELIVERED' ? { deliveredAt: new Date() } : {}) },
         });
+        await this.inventoryService.applyOrderStatusChange(orderId, order.status, 'DELIVERED');
+        await syncPaymentWithOrderStatus(this.prisma, orderId, 'DELIVERED');
       } else if (result.status === 'PICKED_UP' && order.status === 'PROCESSING') {
         await this.prisma.order.update({ where: { id: orderId }, data: { status: 'SHIPPED' } });
+        await this.inventoryService.applyOrderStatusChange(orderId, order.status, 'SHIPPED');
+        await syncPaymentWithOrderStatus(this.prisma, orderId, 'SHIPPED');
       }
 
       await this.prisma.shipmentSyncLog.create({

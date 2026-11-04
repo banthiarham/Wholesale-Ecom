@@ -349,7 +349,7 @@ export default function RolePriceTable({
                           {isPrimary ? (
                             <div className="flex items-center gap-2">
                               {hasMultipleTiers ? (
-                                <button onClick={() => toggleExpanded(role.id)} className="text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 flex-shrink-0">
+                                <button type="button" onClick={() => toggleExpanded(role.id)} className="text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 flex-shrink-0">
                                   {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                 </button>
                               ) : (
@@ -454,7 +454,7 @@ export default function RolePriceTable({
 
                         {/* Active Toggle */}
                         <td className="px-4 py-3">
-                          <button
+                          <button type="button"
                             onClick={() => handleToggleActive(rp.id)}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
                               isActive ? "bg-primary-600" : "bg-gray-200 dark:bg-gray-700"
@@ -472,7 +472,7 @@ export default function RolePriceTable({
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
                             {isPrimary && (
-                              <button
+                              <button type="button"
                                 onClick={() => handleAddTier(role.id)}
                                 className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition"
                                 title="Add Tier"
@@ -480,7 +480,7 @@ export default function RolePriceTable({
                                 <Plus size={14} />
                               </button>
                             )}
-                            <button
+                            <button type="button"
                               onClick={() => handleSaveRow(rp.id, role.id)}
                               disabled={savingId === rp.id}
                               className="p-1.5 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition disabled:opacity-50"
@@ -493,7 +493,7 @@ export default function RolePriceTable({
                               )}
                             </button>
                             {isSaved && (
-                              <button
+                              <button type="button"
                                 onClick={() => handleDelete(rp.id)}
                                 disabled={deletingId === rp.id}
                                 className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition disabled:opacity-50"

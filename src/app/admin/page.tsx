@@ -21,6 +21,7 @@ import {
   Landmark,
   TrendingUp,
   TrendingDown,
+  ShoppingCart,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { DashboardSkeleton } from "@/components/admin/Skeleton"
@@ -204,6 +205,7 @@ export default function AdminDashboardPage() {
             { href: "/admin/products", icon: Plus, label: "Add Product", color: "text-primary-600 dark:text-primary-400", bg: "bg-primary-50 dark:bg-primary-900/20" },
             { href: "/admin/inventory", icon: Boxes, label: "Update Inventory", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20" },
             { href: "/admin/rfqs", icon: FileText, label: "Respond to RFQs", color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20" },
+            { href: "/admin/orders/new", icon: ShoppingCart, label: "Create Order", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20" },
             { href: "/admin/orders", icon: Truck, label: "Manage Orders", color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20" },
             { href: "/admin/users", icon: Users, label: "Manage Users", color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20" },
             { href: "/admin/payment-offers", icon: Landmark, label: "Payment Offers", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/20" },

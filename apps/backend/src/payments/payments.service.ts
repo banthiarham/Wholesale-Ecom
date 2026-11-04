@@ -48,12 +48,21 @@ export class PaymentsService {
    * customer chose to pay and confirm it once the money arrives. Safe to call twice (returns the same payment).
    */
   async createBankTransferPayment(orderId: string, currentUser: any) {
+    return this.createOfflinePayment(orderId, currentUser, 'BANK_TRANSFER');
+  }
+
+  /** UPI checkout: same as Bank Transfer — the payment is recorded as UPI / PENDING until the admin confirms the money arrived. */
+  async createUpiPayment(orderId: string, currentUser: any) {
+    return this.createOfflinePayment(orderId, currentUser, 'UPI');
+  }
+
+  private async createOfflinePayment(orderId: string, currentUser: any, provider: 'BANK_TRANSFER' | 'UPI') {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Order not found');
     this.assertOwnerOrAdmin(currentUser, order.userId);
 
-    const gateway = await this.prisma.paymentGateway.findFirst({ where: { provider: 'BANK_TRANSFER', isActive: true }, orderBy: { createdAt: 'asc' } });
-    if (!gateway) throw new BadRequestException('Bank transfer is not available');
+    const gateway = await this.prisma.paymentGateway.findFirst({ where: { provider, isActive: true }, orderBy: { createdAt: 'asc' } });
+    if (!gateway) throw new BadRequestException(provider === 'UPI' ? 'UPI is not available' : 'Bank transfer is not available');
 
     const existing = await this.prisma.payment.findUnique({ where: { orderId } });
     if (existing) return existing;
@@ -61,7 +70,7 @@ export class PaymentsService {
     return this.prisma.payment.create({
       data: {
         orderId,
-        provider: 'BANK_TRANSFER',
+        provider,
         amount: Number(order.totalAmount),
         status: PaymentStatus.PENDING,
         gatewayId: gateway.id,
@@ -80,6 +89,22 @@ export class PaymentsService {
       where: { orderId },
       data: { providerRef, status },
     });
+  }
+
+  /** Admin sets the payment status by hand. Marking a still-pending order as paid also confirms the order. */
+  async setStatusManually(orderId: string, status: PaymentStatus, providerRef?: string) {
+    if (!Object.values(PaymentStatus).includes(status)) throw new BadRequestException('Invalid payment status');
+    const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { status: true, totalAmount: true } });
+    if (!order) throw new NotFoundException('Order not found');
+    const payment = await this.prisma.payment.findUnique({ where: { orderId } });
+    // An order without a payment record gets one (Cash on Delivery) the first time its status is set.
+    const updated = payment
+      ? await this.prisma.payment.update({ where: { orderId }, data: { status, ...(providerRef ? { providerRef } : {}) } })
+      : await this.prisma.payment.create({ data: { orderId, provider: 'COD', amount: order.totalAmount, status, providerRef } });
+    if (status === PaymentStatus.CAPTURED && order.status === OrderStatus.PENDING) {
+      await this.prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.CONFIRMED } });
+    }
+    return updated;
   }
 
   async findByOrderId(orderId: string, currentUser?: any) {

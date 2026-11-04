@@ -645,26 +645,30 @@ export default function ProductDetailPage() {
                   const targetQty = o.eligible ? quantity : quantity + o.unitsNeeded
                   const canApply = targetQty <= effectiveMaxQty
                   return (
-                    <div key={o.ruleId} className={`rounded-lg border p-3 transition-colors ${applied ? "border-primary-300 bg-primary-50/60" : "border-gray-200 bg-white"}`}>
-                      <div className="flex items-start justify-between gap-3">
+                    <div key={o.ruleId} className={`relative flex overflow-hidden rounded-xl border-2 transition-all ${applied ? "border-green-400 bg-green-50/70 shadow-sm" : "border-orange-200 bg-gradient-to-r from-orange-50 via-white to-white hover:border-orange-300 hover:shadow-md"}`}>
+                      <div className={`flex w-12 shrink-0 items-center justify-center text-white ${applied ? "bg-gradient-to-b from-green-500 to-emerald-600" : "bg-gradient-to-b from-orange-500 to-rose-500"}`}>
+                        {applied ? <Check size={22} strokeWidth={3} /> : <Gift size={22} />}
+                      </div>
+                      <div className="flex flex-1 flex-wrap items-center justify-between gap-3 p-3 min-w-0">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Tag size={14} className={applied ? "text-primary-600" : "text-gray-400"} />
-                            <p className="text-sm font-semibold text-gray-900">{o.name}</p>
-                            {applied && <span className="text-[10px] font-bold uppercase tracking-wide rounded-full bg-green-100 text-green-700 px-2 py-0.5">Applied</span>}
+                            <p className="text-[15px] font-extrabold text-gray-900 tracking-tight">{o.name}</p>
+                            {applied
+                              ? <span className="text-[10px] font-bold uppercase tracking-wide rounded-full bg-green-600 text-white px-2 py-0.5">Applied</span>
+                              : <span className="text-[10px] font-bold uppercase tracking-wide rounded-full bg-rose-500 text-white px-2 py-0.5 animate-pulse">Offer</span>}
                           </div>
                           <p className="text-xs text-gray-600 mt-1 leading-relaxed">{o.description}</p>
-                          <p className="text-[11px] mt-1.5 text-gray-500">
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-medium">
                             {o.condition
                               ? o.eligible
-                                ? <span className="text-green-700">{o.condition} · condition met</span>
-                                : <span className="text-amber-700">{o.condition} · applying sets quantity to {targetQty}</span>
-                              : "No conditions"}
-                            {o.validUntil && <span> · Valid till {new Date(o.validUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>}
-                          </p>
+                                ? <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5"><Check size={11} /> {o.condition} · condition met</span>
+                                : <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">{o.condition} · applying sets quantity to {targetQty}</span>
+                              : <span className="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5">No conditions</span>}
+                            {o.validUntil && <span className="rounded-full bg-white border border-gray-200 text-gray-500 px-2 py-0.5">Valid till {new Date(o.validUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                          </div>
                         </div>
                         {applied ? (
-                          <button type="button" onClick={() => setOfferChoice("none")} className="shrink-0 text-xs font-semibold rounded-md border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1.5 transition">
+                          <button type="button" onClick={() => setOfferChoice("none")} className="shrink-0 text-xs font-semibold rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 px-4 py-2 transition">
                             Remove
                           </button>
                         ) : (
@@ -676,7 +680,7 @@ export default function ProductDetailPage() {
                               if (!o.eligible && o.unitsNeeded > 0) { setTyped(targetQty); flush() }
                               setOfferChoice(o.ruleId)
                             }}
-                            className="shrink-0 text-xs font-semibold rounded-md bg-primary-600 text-white hover:bg-primary-700 px-3 py-1.5 transition disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                            className="shrink-0 text-sm font-bold rounded-lg bg-gradient-to-r from-orange-500 to-rose-500 text-white shadow-sm hover:shadow-md hover:brightness-105 px-5 py-2 transition disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:cursor-not-allowed"
                           >
                             {appliedOfferId ? "Switch" : "Apply"}
                           </button>
@@ -755,7 +759,7 @@ export default function ProductDetailPage() {
                 )}
                 {ruleDiscount && !isPriceHidden && savingsPerUnit === 0 && (
                   <div className="bg-green-50 border border-green-100 rounded-lg px-3 py-2">
-                    <span className="text-sm text-green-700 font-medium">{ruleDiscount.ruleName}: {Number(ruleDiscount.discountPercent.toFixed(1))}% off — save {formatPrice(gst(ruleDiscount.discountAmount))}/unit</span>
+                    <span className="text-sm text-green-700 font-medium">{ruleDiscount.ruleName}: {Number(ruleDiscount.discountPercent.toFixed(2))}% off — save {formatPrice(gst(ruleDiscount.discountAmount))}/unit</span>
                   </div>
                 )}
 

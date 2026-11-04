@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Shield, User, Ban, Trash2, X, Plus, Upload } from "lucide-react"
+import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Shield, User, Ban, Trash2, X, Plus, Upload, Download } from "lucide-react"
+import BulkDataModal from "@/components/admin/BulkDataModal"
 import { SkeletonTable } from "@/components/admin/Skeleton"
 import { getContrastTextColor } from "@/lib/utils"
 import { ListFilterBar, type FilterField, type FilterValues } from "@/components/admin/ListFilters"
@@ -43,6 +44,7 @@ export default function AdminUsersPage() {
   const router = useRouter()
   const [users, setUsers] = useState<UserData[]>([])
   const [roles, setRoles] = useState<RoleData[]>([])
+  const [bulkModal, setBulkModal] = useState<null | "export" | "import">(null)
   const [loading, setLoading] = useState(true) // first load only (skeleton)
   const [fetching, setFetching] = useState(false) // any reload (dims the table)
   const [search, setSearch] = useState("")
@@ -344,6 +346,12 @@ export default function AdminUsersPage() {
           <Link href="/admin/users/bulk-upload" className="flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 transition hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-900/20 dark:text-primary-300">
             <Upload size={16} /> Bulk Upload
           </Link>
+          <button onClick={() => setBulkModal("export")} className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm">
+            <Download size={16} /> Export
+          </button>
+          <button onClick={() => setBulkModal("import")} className="flex items-center gap-2 px-4 py-2 border border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-400 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition text-sm">
+            <Upload size={16} /> Bulk Edit
+          </button>
           <button
             onClick={() => { setShowAddModal(true); resetAddForm() }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm"
@@ -685,6 +693,18 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
+
+      {bulkModal === "export" && (
+        <BulkDataModal
+          mode="export"
+          entity="users"
+          filterLabel="Role"
+          filterParam="role"
+          filterOptions={[{ value: "", label: "All roles" }, ...BUILTIN_ROLE_OPTIONS.map((r) => ({ value: r.value.slice(5), label: r.label })), ...roles.filter((r) => !BUILTIN_ROLE_OPTIONS.some((b) => b.value === `enum:${r.name}`)).map((r) => ({ value: r.name, label: r.label }))]}
+          onClose={() => setBulkModal(null)}
+        />
+      )}
+      {bulkModal === "import" && <BulkDataModal mode="import" entity="users" onClose={() => setBulkModal(null)} onApplied={loadUsers} />}
     </div>
   )
 }

@@ -147,7 +147,12 @@ export class ProductsService {
       },
     });
     if (!product) throw new NotFoundException('Product not found');
-    return product;
+    // The storefront shows what can still be bought: stock on hand minus what open orders have already reserved
+    // (variants keep their raw numbers; the variant picker subtracts the reservation itself).
+    return {
+      ...product,
+      inventoryQuantity: Math.max(0, product.inventoryQuantity - product.reservedQuantity),
+    };
   }
 
   async findById(id: string) {
