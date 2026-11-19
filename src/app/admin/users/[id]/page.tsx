@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import {
+import { BookOpen,
   ArrowLeft, Pencil, MoreVertical, Ban, Trash2, X, Mail, Phone, Building2, MapPin, Shield, Eye, Layers, Truck,
 } from "lucide-react"
 import { formatPrice, getContrastTextColor } from "@/lib/utils"
@@ -361,6 +361,12 @@ export default function AdminUserDetailPage() {
           </div>
 
           <div className="flex items-center gap-2 self-end sm:self-auto">
+            <Link
+              href={`/admin/ledger?userId=${user.id}`}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-sm"
+            >
+              <BookOpen size={14} /> Ledger
+            </Link>
             <button
               onClick={openEdit}
               className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm"

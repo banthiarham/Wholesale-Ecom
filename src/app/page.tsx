@@ -63,7 +63,7 @@ export default function Home() {
         <HomeProductsSection
           title="Top Selling Products"
           subtitle="High-demand products trusted by businesses nationwide."
-          query="sort=bestselling&limit=10"
+          query="sort=bestselling&limit=12"
           viewAllHref="/products"
           viewAllLabel="View All Products"
           tone="tint"
@@ -75,7 +75,7 @@ export default function Home() {
             key={cat.id}
             title={cat.name}
             subtitle={`${cat._count?.products ?? 0} products in ${cat.name}`}
-            query={`category=${cat.id}&sort=bestselling&limit=10`}
+            query={`category=${cat.id}&sort=bestselling&limit=12`}
             viewAllHref={`/categories/${cat.handle}`}
             viewAllLabel="View all products"
           />

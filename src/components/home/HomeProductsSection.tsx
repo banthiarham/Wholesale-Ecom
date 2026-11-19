@@ -133,12 +133,12 @@ export default function HomeProductsSection({ title, subtitle, query, viewAllHre
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3">
             {!loaded
-              ? Array.from({ length: 10 }).map((_, i) => (
-                  <div key={i} className="rounded-2xl bg-white border border-gray-100 h-72 animate-pulse" />
+              ? Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl bg-white border border-gray-100 h-64 animate-pulse" />
                 ))
-              : visible.slice(0, 10).map((product) => (
+              : visible.slice(0, 12).map((product) => (
                   <ProductCard
                     key={product.id}
                     product={{ ...product, thumbnail: product.thumbnail || product.images?.[0] || null }}

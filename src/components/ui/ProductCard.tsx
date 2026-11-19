@@ -175,7 +175,7 @@ export function ProductCard({
           type="button"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/products/${product.handle}`) }}
           disabled={isOutOfStock}
-          className={`${variant === "list" ? "w-full sm:w-auto h-10 px-5 text-sm rounded-lg" : "mt-3 w-full py-2.5 text-xs rounded-xl"} bg-primary-600 text-white font-bold hover:bg-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5`}
+          className={`${variant === "list" ? "w-full sm:w-auto h-10 px-5 text-sm rounded-lg" : compact ? "mt-2 w-full h-9 xl:h-8 text-xs rounded-lg" : "mt-3 w-full py-2.5 text-xs rounded-xl"} bg-primary-600 text-white font-bold hover:bg-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5`}
         >
           {isOutOfStock ? outOfStockLabel : "Select Options"}
         </button>
@@ -213,7 +213,7 @@ export function ProductCard({
     if (showQuantity) {
       const stop = (e: React.SyntheticEvent) => { e.preventDefault(); e.stopPropagation() }
       return (
-        <div className="mt-3 flex flex-col xl:flex-row xl:items-center gap-2" onClick={stop}>
+        <div className={`${compact ? "mt-2 gap-1.5" : "mt-3 gap-2"} flex flex-col xl:flex-row xl:items-center`} onClick={stop}>
           <div className="flex items-center justify-between xl:justify-start border border-gray-200 rounded-lg overflow-hidden shrink-0">
             <button type="button" onClick={(e) => { stop(e); setQty((q) => clampQty(q - 1)) }} disabled={disabled || qty <= Math.max(1, product.moq || 1)} className="w-9 xl:w-7 h-9 xl:h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease quantity"><Minus size={12} /></button>
             <input
@@ -324,9 +324,9 @@ export function ProductCard({
 
   return (
     <Link href={`/products/${product.handle}`} className="card-interactive group flex flex-col h-full">
-      <div className="relative bg-white overflow-hidden aspect-square">
+      <div className={`relative bg-white overflow-hidden ${compact ? "h-36 sm:h-32 xl:h-36" : "aspect-square"}`}>
         {product.thumbnail ? (
-          <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-contain p-2" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" />
+          <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-contain p-2" sizes={compact ? "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 17vw" : "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"} />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
             <Package size={40} className="text-gray-200" />
@@ -354,17 +354,17 @@ export function ProductCard({
           </span>
         )}
       </div>
-      <div className="p-2.5 sm:p-3.5 flex-1 flex flex-col">
-        <h3 className="font-semibold text-gray-900 text-sm line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug min-h-[2.5rem]">{product.title}</h3>
-        <div className="flex items-center gap-1.5 mt-1.5">{ratingRow("sm", "text-[11px] text-gray-400")}
-          {product.sku && <span className="text-[11px] text-gray-400">· {product.sku}</span>}
+      <div className={`${compact ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3.5"} flex-1 flex flex-col`}>
+        <h3 className={`font-semibold text-gray-900 line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug ${compact ? "text-xs min-h-[2rem]" : "text-sm min-h-[2.5rem]"}`}>{product.title}</h3>
+        <div className={`flex items-center gap-1.5 min-w-0 ${compact ? "mt-1" : "mt-1.5"}`}>{ratingRow("sm", "text-[11px] text-gray-400")}
+          {product.sku && <span className="text-[11px] text-gray-400 truncate">· {product.sku}</span>}
         </div>
-        <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1 mt-2">
+        <div className={`flex flex-wrap items-end justify-between gap-x-2 gap-y-1 ${compact ? "mt-1" : "mt-2"}`}>
           <div className="min-w-0">{priceDisplay("sm")}</div>
           <span className="shrink-0 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-100 px-1.5 py-1 rounded-md">MOQ {rolePricing?.minQty ?? product.moq}</span>
         </div>
-        <div className="flex flex-wrap gap-1 mt-1.5">{ruleBadge("sm")}</div>
-        <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-semibold">
+        <div className={`flex flex-wrap gap-1 ${compact ? "mt-1" : "mt-1.5"}`}>{ruleBadge("sm")}</div>
+        <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${compact ? "mt-1" : "mt-1.5"}`}>
           <span className="inline-flex items-center gap-1">
             {stockDot(isOutOfStock, lowStock)}
             {isOutOfStock ? (

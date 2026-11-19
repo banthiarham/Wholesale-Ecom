@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ShoppingBag, Package, Clock, CheckCircle2, XCircle, Truck, RefreshCcw, RotateCcw,
-  Search, ArrowUpDown, ChevronRight,
+  Search, ArrowUpDown, ChevronRight, Plus,
 } from "lucide-react"
 import { getCartSessionId } from "@/lib/utils"
 import { useToast } from "@/components/ui/Toast"
@@ -222,9 +222,14 @@ export default function OrdersPage() {
               </p>
             )}
           </div>
-          <Link href="/products" className="inline-flex items-center gap-1 text-sm font-bold text-primary-600 hover:text-primary-700 transition-colors group shrink-0">
-            Continue Shopping <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-          </Link>
+          <div className="flex items-center gap-4 shrink-0">
+            <Link href="/products" className="inline-flex items-center gap-1 text-sm font-bold text-primary-600 hover:text-primary-700 transition-colors group">
+              Continue Shopping <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+            <Link href="/orders/new" className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-primary-600 text-white text-sm font-bold hover:bg-primary-700 transition-colors shadow-sm">
+              <Plus size={16} /> Create order
+            </Link>
+          </div>
         </div>
 
         {/* Stat tiles */}
@@ -315,8 +320,8 @@ export default function OrdersPage() {
           <EmptyState
             icon={ShoppingBag}
             title="No orders yet"
-            description="Start shopping to place your first order — it'll show up here with full tracking and reorder options."
-            action={{ label: "Continue Shopping", href: "/products" }}
+            description="Create an order by searching products and picking quantities, or browse the catalogue. Orders show up here with full tracking and reorder options."
+            action={{ label: "Create order", href: "/orders/new" }}
           />
         ) : visibleOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-16 px-4">

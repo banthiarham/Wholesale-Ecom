@@ -1,4 +1,4 @@
-import { IsString, IsOptional, Matches } from 'class-validator';
+import { IsString, IsOptional, Matches, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateSettingsDto {
@@ -152,4 +152,15 @@ export class UpdateSettingsDto {
   @IsString()
   @IsOptional()
   invoiceBankGatewayId?: string;
+
+  @ApiProperty({ required: false, description: 'Terms of delivery printed in the invoice header' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(500)
+  invoiceDeliveryTerms?: string;
+
+  @ApiProperty({ required: false, description: 'Logo printed at the top left of invoices ("" = use the site logo)' })
+  @IsString()
+  @IsOptional()
+  invoiceLogoUrl?: string;
 }

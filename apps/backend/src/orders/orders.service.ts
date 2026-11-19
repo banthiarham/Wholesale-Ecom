@@ -9,7 +9,7 @@ import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
-import { CartItemContext, RuleEvaluationResult } from '../rules/rules-engine.service';
+import { CartItemContext, RuleEvaluationResult, computeRuleAdjustments } from '../rules/rules-engine.service';
 import { SettingsService } from '../settings/settings.service';
 import { OrderStatus, PaymentStatus, DeliveryStatus, RefundStatus } from '@prisma/client';
 
@@ -53,7 +53,7 @@ export class OrdersService {
    * wallet/loyalty redemption are intentionally NOT folded in here — they stay
    * checkout-preview-only, unchanged from current behavior.
    */
-  private async computeAmountBreakdown(subtotal: number, discountAmount: number, ruleResult: RuleEvaluationResult) {
+  private async computeAmountBreakdown(subtotal: number, discountAmount: number, ruleResult: RuleEvaluationResult, extraCharges = 0) {
     // Split into CGST/SGST/IGST per matched rule (see RulesEngineService.evaluateTaxRule) —
     // cgst+sgst+igst always equals the same total the old flat `taxRate`-based sum produced,
     // GST is never charged twice on top of its own components.
@@ -61,7 +61,8 @@ export class OrdersService {
     const sgstAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.sgstRate) / 100, 0);
     const igstAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.igstRate) / 100, 0);
     const taxAmount = cgstAmount + sgstAmount + igstAmount;
-    const shippingAmount = ruleResult.shipping?.cost ?? 0;
+    // Rule extra charges have no column of their own; they are billed with shipping (and listed in the order notes).
+    const shippingAmount = (ruleResult.shipping?.cost ?? 0) + extraCharges;
 
     const rawTotal = Math.max(0, subtotal - discountAmount) + taxAmount + shippingAmount;
 
@@ -188,9 +189,13 @@ export class OrdersService {
       userRole: (user as any)?.effectiveRole || (user as any)?.roleRel?.name || user?.role || undefined,
       cartItems: cartItemsContext,
       subtotal: totalAmount,
+      paymentMethod: data.paymentMethod || undefined,
       shippingRegion: data.shippingAddress?.state || undefined,
       sellerState: await this.getSellerState(),
     });
+    // Offer, quantity, cart and payment-method discounts (and extra charges) from the dynamic rules —
+    // the same figures the cart, checkout and create-order pages show the shopper.
+    const ruleAdjustments = computeRuleAdjustments(cartItemsContext, ruleResult);
 
     // Free (buy X get Y) lines are only ordered as far as the offer still allows right now: an
     // offer that expired, was switched off, or whose buy quantity is no longer met since the cart
@@ -270,11 +275,22 @@ export class OrdersService {
 
     totalAmount = Math.max(0, totalAmount - bankOfferDiscount);
 
-    const combinedNotes = appliedBankOffer
-      ? [data.notes, `Bank offer applied: ${appliedBankOffer.name} (-₹${bankOfferDiscount.toFixed(2)})`].filter(Boolean).join(' | ')
-      : data.notes;
+    const ruleDiscount = Math.min(ruleAdjustments.totalDiscount, Math.max(0, subtotal - couponDiscount - bankOfferDiscount));
+    const offerNames = [
+      ...new Set([
+        ...ruleAdjustments.lines.flatMap((l) => [l.offerRuleName, l.qtyRuleName]),
+        ruleAdjustments.cartDiscountRuleName,
+        ruleAdjustments.paymentDiscountRuleName,
+      ].filter(Boolean) as string[]),
+    ];
+    const combinedNotes = [
+      data.notes,
+      appliedBankOffer ? `Bank offer applied: ${appliedBankOffer.name} (-₹${bankOfferDiscount.toFixed(2)})` : null,
+      ruleDiscount > 0 ? `Offers applied: ${offerNames.join(', ')} (-₹${ruleDiscount.toFixed(2)})` : null,
+      ruleAdjustments.extraCharges > 0 ? `Extra charges: ${ruleResult.extraCharges.map((e) => `${e.chargeLabel} ₹${e.chargeAmount.toFixed(2)}`).join(', ')} (included in shipping)` : null,
+    ].filter(Boolean).join(' | ') || undefined;
 
-    const breakdown = await this.computeAmountBreakdown(subtotal, couponDiscount + bankOfferDiscount, ruleResult);
+    const breakdown = await this.computeAmountBreakdown(subtotal, couponDiscount + bankOfferDiscount + ruleDiscount, ruleResult, ruleAdjustments.extraCharges);
 
     const order = await this.prisma.order.create({
       data: {
@@ -668,6 +684,17 @@ export class OrdersService {
     return { subtotal, taxAmount, cgstAmount, sgstAmount, igstAmount, shippingAmount, discountAmount, roundOffAmount, totalAmount };
   }
 
+  /** A manual invoice number must not already be on another order. */
+  private async assertInvoiceNumberFree(invoiceNumber: string | undefined, orderId?: string) {
+    const value = invoiceNumber?.trim();
+    if (!value) return;
+    const taken = await this.prisma.order.findFirst({
+      where: { invoiceNumber: value, ...(orderId ? { id: { not: orderId } } : {}) },
+      select: { orderNumber: true },
+    });
+    if (taken) throw new BadRequestException(`Invoice number "${value}" is already used by order #${taken.orderNumber.slice(0, 8).toUpperCase()}`);
+  }
+
   /** The price each line would cost this customer for its quantity: their role price, contract price, tier or base price. */
   async adminQuotePrices(userId: string, items: { productId: string; variantId?: string | null; quantity: number }[]) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -709,6 +736,7 @@ export class OrdersService {
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Customer not found');
 
+    await this.assertInvoiceNumberFree(dto.invoiceNumber);
     const rows = await this.buildAdminItemRows(dto.items);
     await this.assertStockAvailable(rows);
     const subtotal = rows.reduce((sum, r) => sum + r.totalPrice, 0);
@@ -732,6 +760,7 @@ export class OrdersService {
         shippingAddress: dto.shippingAddress as any,
         billingAddress: dto.billingAddress as any,
         notes: dto.notes || null,
+        invoiceNumber: dto.invoiceNumber?.trim() || null,
         items: { create: rows.map(({ id: _id, ...r }) => r) },
         // Every order carries a payment record so its status can be tracked and changed; admin-made orders start as Cash on Delivery.
         payment: { create: { provider: 'COD', amount: amounts.totalAmount, status: PaymentStatus.PENDING } },
@@ -753,6 +782,7 @@ export class OrdersService {
     const order = await this.prisma.order.findUnique({ where: { id }, include: { items: true, payment: true } });
     if (!order) throw new NotFoundException('Order not found');
     if (order.status === OrderStatus.CANCELLED) throw new BadRequestException('A cancelled order cannot be edited');
+    await this.assertInvoiceNumberFree(dto.invoiceNumber, id);
 
     const existing = new Map(order.items.map((i) => [i.id, i]));
     for (const item of dto.items) {
@@ -803,6 +833,7 @@ export class OrdersService {
           shippingAddress: dto.shippingAddress as any,
           billingAddress: dto.billingAddress as any,
           ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
+          ...(dto.invoiceNumber !== undefined ? { invoiceNumber: dto.invoiceNumber.trim() || null } : {}),
         },
       });
       // A payment that has not been captured yet should ask for the new amount.

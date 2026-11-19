@@ -8,7 +8,7 @@ import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 
 interface Address { name?: string; company?: string; street?: string; line1?: string; line2?: string; city?: string; state?: string; zip?: string; postalCode?: string; country?: string; gstin?: string; gstNumber?: string }
 interface InvoiceOrder {
-  id: string; orderNumber: string; status: string; totalAmount: number; subtotal?: number | null; taxAmount?: number | null
+  id: string; orderNumber: string; invoiceNumber?: string | null; status: string; totalAmount: number; subtotal?: number | null; taxAmount?: number | null
   cgstAmount?: number | null; sgstAmount?: number | null; igstAmount?: number | null
   shippingAmount?: number | null; discountAmount?: number | null; roundOffAmount?: number | null
   createdAt: string; shippingAddress: Address | null; billingAddress: Address | null
@@ -37,7 +37,7 @@ export default function InvoicePage() {
   const sellerGstin = useSetting("businessGstin", "")
   const contactEmail = useSetting("contactEmail", "")
   const contactPhone = useSetting("contactPhone", "")
-  const [invoiceCfg, setInvoiceCfg] = useState<{ terms: string; bank: { bankName: string; accountName: string; accountNumber: string; ifscCode: string; branch: string } | null } | null>(null)
+  const [invoiceCfg, setInvoiceCfg] = useState<{ terms: string; deliveryTerms?: string; logoUrl?: string; bank: { bankName: string; accountName: string; accountNumber: string; ifscCode: string; branch: string } | null } | null>(null)
 
   // The A4 sheet is 794px wide; shrink it to fit narrow (phone) screens so the whole invoice is visible.
   const [scale, setScale] = useState(1)
@@ -57,6 +57,8 @@ export default function InvoicePage() {
   if (order.status === "CANCELLED") return <div className="min-h-screen grid place-items-center text-center"><div><Package className="mx-auto text-gray-300" size={40}/><p className="mt-3 text-gray-500">This order was cancelled, so no invoice is available.</p><Link href={`/orders/${order.id}`} className="text-primary-600">Back to order</Link></div></div>
 
   const bank = invoiceCfg?.bank || null
+  const invoiceLogo = invoiceCfg?.logoUrl || logoUrl
+  const invoiceNo = order.invoiceNumber || order.orderNumber.slice(0, 12).toUpperCase()
   const termsLines = (invoiceCfg?.terms ?? "").split(String.fromCharCode(10)).map(t => t.trim()).filter(Boolean)
   const billed = order.billingAddress || order.shippingAddress
   const subtotal = Number(order.subtotal ?? order.items.reduce((s, i) => s + Number(i.totalPrice), 0))
@@ -81,11 +83,11 @@ export default function InvoicePage() {
     <article style={{ zoom: scale }} className="invoice invoice-sheet mx-auto min-h-[1123px] w-[794px] bg-white p-5 shadow-lg">
       <section className="rule grid grid-cols-2 border border-black">
         <div className="cell min-h-[124px] p-1.5">
-          <div className="flex gap-3">{logoUrl ? <img src={logoUrl} alt={`${siteName} logo`} className="h-12 w-24 object-contain"/> : <div className="grid h-12 w-24 place-items-center border text-[9px] font-bold">{siteName}</div>}
+          <div className="flex gap-3">{invoiceLogo ? <img src={invoiceLogo} alt={`${siteName} logo`} className="h-12 w-24 object-contain object-left"/> : <div className="grid h-12 w-24 place-items-center border text-[9px] font-bold">{siteName}</div>}
             <div><h2 className="text-[12px] font-bold">{siteName}</h2><p className="max-w-[250px]">{sellerAddress}</p>{sellerState && <p>State: {sellerState}</p>}{sellerGstin && <p>GSTIN/UIN: <b>{sellerGstin}</b></p>}{contactPhone && <p>Contact: {contactPhone}</p>}{contactEmail && <p>E-Mail: {contactEmail}</p>}</div>
           </div>
         </div>
-        <div className="grid grid-cols-2"><div className="cell p-1"><span>Invoice No.</span><b className="block text-[11px]">{order.orderNumber.slice(0, 12).toUpperCase()}</b></div><div className="cell border-r-0 p-1"><span>Dated</span><b className="block text-[11px]">{new Date(order.createdAt).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"2-digit" }).replace(/ /g,"-")}</b></div><div className="cell p-1">Terms of Delivery</div><div className="cell border-r-0 p-1">Mode/Terms of Payment<b className="block">{order.payment?.provider || "As Agreed"}</b></div></div>
+        <div className="grid grid-cols-2"><div className="cell p-1"><span>Invoice No.</span><b className="block text-[11px] break-all">{invoiceNo}</b></div><div className="cell border-r-0 p-1"><span>Dated</span><b className="block text-[11px]">{new Date(order.createdAt).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"2-digit" }).replace(/ /g,"-")}</b></div><div className="cell p-1">Terms of Delivery{invoiceCfg?.deliveryTerms && <b className="block whitespace-pre-line">{invoiceCfg.deliveryTerms}</b>}</div><div className="cell border-r-0 p-1">Mode/Terms of Payment<b className="block">{order.payment?.provider || "As Agreed"}</b></div></div>
         <div className="cell min-h-[112px] border-b-0 p-1.5"><span>Buyer (Bill to)</span><h3 className="text-[11px] font-bold">{buyerName}</h3>{addressLines(billed).map((l,i)=><p key={i}>{l}</p>)}{(billed?.gstin || billed?.gstNumber || order.user.gstin) && <p>GSTIN/UIN: <b>{billed?.gstin || billed?.gstNumber || order.user.gstin}</b></p>}<p>Contact: {order.user.phone || "—"}</p><p>E-Mail: {order.user.email}</p></div>
         <div className="min-h-[112px] p-1.5"><span>Consignee (Ship to)</span><h3 className="text-[11px] font-bold">{buyerName}</h3>{addressLines(order.shippingAddress).map((l,i)=><p key={i}>{l}</p>)}</div>
       </section>

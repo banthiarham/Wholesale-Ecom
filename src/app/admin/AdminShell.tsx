@@ -113,6 +113,7 @@ const navGroups: NavGroup[] = [
     title: "System",
     items: [
       { label: "Users", href: "/admin/users", icon: Users },
+      { label: "Ledger", href: "/admin/ledger", icon: BookOpen },
       { label: "Roles", href: "/admin/roles", icon: Shield },
       { label: "Role Requests", href: "/admin/role-requests", icon: ClipboardList },
       { label: "Dynamic Rules", href: "/admin/rules", icon: Workflow },

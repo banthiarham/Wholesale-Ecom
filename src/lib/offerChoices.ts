@@ -94,3 +94,21 @@ export async function syncOfferChoices(items: { productId: string; metadata?: an
     }
   }
 }
+
+/**
+ * Pick the offer for a product and wait until the server cart has it (so a refresh shows the new prices).
+ * `null` goes back to automatic: the best offer whose condition is met.
+ */
+export async function chooseOffer(productId: string, choice: string | null) {
+  const all = read()
+  if (choice === null) delete all[productId]
+  else all[productId] = choice
+  try {
+    localStorage.setItem(KEY, JSON.stringify(all))
+  } catch {
+    /* storage unavailable */
+  }
+  window.dispatchEvent(new CustomEvent(EVENT))
+  // "" clears the server-side pick, which means automatic there too.
+  await pushOfferChoice(productId, choice ?? "")
+}

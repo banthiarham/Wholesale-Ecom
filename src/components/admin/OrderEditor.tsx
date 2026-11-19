@@ -34,7 +34,10 @@ interface Line {
   variants: ProductHit["variants"]
   hasVariants: boolean
   quantity: string
+  /** Price per unit excluding GST — what is saved on the order. */
   unitPrice: string
+  /** The GST-inclusive price the admin typed while "Prices include GST" was on; unitPrice is derived from it. */
+  inclPrice?: string
   /** The admin typed this price, so role pricing must not overwrite it. */
   priceTouched?: boolean
   /** Units in stock when the line was added (unknown for lines loaded from an existing order — the server checks those). */
@@ -138,6 +141,9 @@ export default function OrderEditor({ order }: { order?: any }) {
   const [shippingTouched, setShippingTouched] = useState(isEdit)
   const [totalOverride, setTotalOverride] = useState<string | null>(null)
   const [notes, setNotes] = useState<string>(order?.notes || "")
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(order?.invoiceNumber || "")
+  /** Price inputs take GST-inclusive prices; GST is then taken out of the price instead of added on top. */
+  const [inclGst, setInclGst] = useState(false)
   const [rates, setRates] = useState<{ cgst: number; sgst: number; igst: number }>(() => {
     const old = Number(order?.subtotal ?? 0)
     const r = (a: any) => (old > 0 ? (Number(a ?? 0) / old) * 100 : 0)
@@ -146,6 +152,26 @@ export default function OrderEditor({ order }: { order?: any }) {
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+
+  const gstPct = round2(rates.cgst + rates.sgst + rates.igst)
+  const gstFactor = 1 + gstPct / 100
+  /** What the price box shows: the excl.-GST price, or with the toggle on the GST-inclusive one. */
+  const shownPrice = (l: Line) => (inclGst ? l.inclPrice ?? (l.unitPrice === "" ? "" : String(round2(num(l.unitPrice) * gstFactor))) : l.unitPrice)
+
+  // The GST rate can change (other state, other customer): keep the inclusive prices typed and re-derive the excl. price.
+  useEffect(() => {
+    setLines((prev) => prev.map((l) => (l.inclPrice !== undefined ? { ...l, unitPrice: l.inclPrice === "" ? "" : String(num(l.inclPrice) / gstFactor) } : l)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gstPct])
+
+  const toggleInclGst = () => {
+    if (inclGst) {
+      // Back to excl.-GST prices: settle each derived price at 2 decimals, as it will be saved.
+      setLines((prev) => prev.map((l) => (l.inclPrice !== undefined ? { ...l, unitPrice: l.unitPrice === "" ? "" : String(round2(num(l.unitPrice))), inclPrice: undefined } : l)))
+    }
+    setInclGst(!inclGst)
+    setTotalOverride(null)
+  }
 
   // Roles for the "new client" form.
   useEffect(() => {
@@ -220,7 +246,7 @@ export default function OrderEditor({ order }: { order?: any }) {
             if (l.id || l.priceTouched) return l
             const i = todo.findIndex((x) => x.key === l.key)
             const q = i >= 0 ? d.prices[i] : null
-            return q && q.unitPrice !== null && String(q.unitPrice) !== l.unitPrice ? { ...l, unitPrice: String(q.unitPrice) } : l
+            return q && q.unitPrice !== null && String(q.unitPrice) !== l.unitPrice ? { ...l, unitPrice: String(q.unitPrice), inclPrice: undefined } : l
           }))
         })
         .catch(() => {})
@@ -259,14 +285,20 @@ export default function OrderEditor({ order }: { order?: any }) {
   const resetTotal = () => setTotalOverride(null)
 
   const totals = useMemo(() => {
-    const subtotal = round2(lines.reduce((s, l) => s + num(l.quantity) * num(l.unitPrice), 0))
+    // Excl.-GST prices are saved at 2 decimals, so add them up the same way the server does.
+    const subtotal = round2(lines.reduce((s, l) => s + num(l.quantity) * round2(num(l.unitPrice)), 0))
     const cgst = round2((subtotal * rates.cgst) / 100)
     const sgst = round2((subtotal * rates.sgst) / 100)
     const igst = round2((subtotal * rates.igst) / 100)
-    const tax = cgst + sgst + igst
-    const raw = round2(Math.max(0, subtotal - num(discount)) + tax + num(shippingFee))
-    return { subtotal, tax, raw, total: totalOverride !== null ? num(totalOverride) : raw }
-  }, [lines, rates, discount, shippingFee, totalOverride])
+    const tax = round2(cgst + sgst + igst)
+    const calculated = round2(Math.max(0, subtotal - num(discount)) + tax + num(shippingFee))
+    // With GST-inclusive prices the total is what the admin priced the goods at: GST is inside it, never added again.
+    // Splitting a price into price + GST can be off by a few paise; that gap is shown (and saved) as round off.
+    const inclTotal = inclGst ? round2(lines.reduce((s, l) => s + num(l.quantity) * num(shownPrice(l)), 0)) : 0
+    const raw = inclGst ? round2(Math.max(0, inclTotal - num(discount)) + num(shippingFee)) : calculated
+    return { subtotal, tax, calculated, roundOff: round2(raw - calculated), raw, total: totalOverride !== null ? num(totalOverride) : raw }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, rates, discount, shippingFee, totalOverride, inclGst])
 
   const updateLine = (key: string, patch: Partial<Line>) => {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -369,7 +401,9 @@ export default function OrderEditor({ order }: { order?: any }) {
       notes: notes.trim() || undefined,
     }
     if (!isEdit) body.userId = customer!.id
+    if (isEdit || invoiceNumber.trim()) body.invoiceNumber = invoiceNumber.trim()
     if (totalOverride !== null) body.totalAmount = round2(num(totalOverride))
+    else if (inclGst && totals.roundOff !== 0) body.totalAmount = totals.raw
 
     setSaving(true)
     try {
@@ -490,12 +524,36 @@ export default function OrderEditor({ order }: { order?: any }) {
 
       {/* Products */}
       <div className={card}>
-        <h2 className={h2}>Products</h2>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className={h2}>Products</h2>
+          <div className="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-400">
+            <span id="incl-gst-label">Prices include GST{gstPct > 0 ? ` (${gstPct}%)` : ""}</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={inclGst}
+              aria-labelledby="incl-gst-label"
+              onClick={toggleInclGst}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${inclGst ? "bg-primary-600" : "bg-gray-300 dark:bg-gray-600"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${inclGst ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
+        {inclGst && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+            {gstPct > 0
+              ? `Enter prices with GST included. Each price is split into the price before GST plus ${gstPct}% GST, so GST is not added a second time.`
+              : !isEdit && !customer
+                ? "Select a client to work out the GST rate."
+                : "No GST applies to this order, so prices with and without GST are the same."}
+          </p>
+        )}
         {lines.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-gray-500 dark:text-gray-400 text-xs">
-                <tr><th className="pb-2 pr-3 font-medium">Product</th><th className="pb-2 pr-3 font-medium w-24">Qty</th><th className="pb-2 pr-3 font-medium w-32">Price (excl. GST)</th><th className="pb-2 pr-3 font-medium w-28 text-right">Line total</th><th className="pb-2 w-8"></th></tr>
+                <tr><th className="pb-2 pr-3 font-medium">Product</th><th className="pb-2 pr-3 font-medium w-24">Qty</th><th className="pb-2 pr-3 font-medium w-36">{inclGst ? "Price (incl. GST)" : "Price (excl. GST)"}</th><th className="pb-2 pr-3 font-medium w-28 text-right">Line total</th><th className="pb-2 w-8"></th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {lines.map((l) => (
@@ -507,7 +565,7 @@ export default function OrderEditor({ order }: { order?: any }) {
                           value={l.variantId}
                           onChange={(e) => {
                             const v = l.variants.find((x) => x.id === e.target.value)
-                            updateLine(l.key, { variantId: e.target.value, ...(v ? { unitPrice: String(v.price), available: v.available } : {}) })
+                            updateLine(l.key, { variantId: e.target.value, ...(v ? { unitPrice: String(v.price), inclPrice: undefined, available: v.available } : {}) })
                           }}
                           className={`${inputCls} mt-1`}
                         >
@@ -522,8 +580,27 @@ export default function OrderEditor({ order }: { order?: any }) {
                       <input type="number" min={1} step={1} value={l.quantity} onChange={(e) => updateLine(l.key, { quantity: e.target.value })} className={`${inputCls} ${l.available !== undefined && num(l.quantity) > Math.max(0, l.available) ? "!border-red-400" : ""}`} />
                       {l.available !== undefined && num(l.quantity) > Math.max(0, l.available) && <p className="text-xs text-red-500 mt-1">{l.available <= 0 ? "Out of stock" : `Only ${l.available} in stock`}</p>}
                     </td>
-                    <td className="py-2 pr-3"><input type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => updateLine(l.key, { unitPrice: e.target.value, priceTouched: true })} className={inputCls} /></td>
-                    <td className="py-2 pr-3 text-right font-medium text-gray-900 dark:text-gray-100 pt-4">{formatPrice(round2(num(l.quantity) * num(l.unitPrice)))}</td>
+                    <td className="py-2 pr-3">
+                      <input
+                        type="number" min={0} step="0.01"
+                        value={shownPrice(l)}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (inclGst) updateLine(l.key, { inclPrice: v, unitPrice: v === "" ? "" : String(num(v) / gstFactor), priceTouched: true })
+                          else updateLine(l.key, { unitPrice: v, inclPrice: undefined, priceTouched: true })
+                        }}
+                        className={inputCls}
+                      />
+                      {inclGst && gstPct > 0 && l.unitPrice !== "" && (
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 whitespace-nowrap">
+                          {formatPrice(round2(num(l.unitPrice)))} + {formatPrice(round2(num(shownPrice(l)) - round2(num(l.unitPrice))))} GST
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-right font-medium text-gray-900 dark:text-gray-100 pt-4">
+                      {formatPrice(round2(num(l.quantity) * num(shownPrice(l))))}
+                      {inclGst && gstPct > 0 && <span className="block text-[11px] font-normal text-gray-500 dark:text-gray-400">incl. GST</span>}
+                    </td>
                     <td className="py-2 pt-3"><button type="button" onClick={() => { setLines((p) => p.filter((x) => x.key !== l.key)); resetTotal() }} className="p-1.5 text-gray-400 hover:text-red-600" title="Remove"><Trash2 size={16} /></button></td>
                   </tr>
                 ))}
@@ -582,13 +659,20 @@ export default function OrderEditor({ order }: { order?: any }) {
         <h2 className={h2}>Order summary</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-3">
+            <FormField label="Invoice number">
+              <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} maxLength={50} placeholder="Leave empty to use the order number" className={inputCls} />
+              <p className="text-xs text-gray-400">Printed as the Invoice No. on this order&apos;s invoice.</p>
+            </FormField>
             <FormField label="Notes"><textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} /></FormField>
           </div>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Subtotal</span><span>{formatPrice(totals.subtotal)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">{inclGst ? "Subtotal (excl. GST)" : "Subtotal"}</span><span>{formatPrice(totals.subtotal)}</span></div>
             <div className="flex items-center justify-between gap-3"><span className="text-gray-600 dark:text-gray-400">Discount (₹)</span><input type="number" min={0} step="0.01" value={discount} onChange={(e) => { setDiscount(e.target.value); resetTotal() }} className={`${inputCls} !w-32 text-right`} /></div>
             <div className="flex items-center justify-between gap-3"><span className="text-gray-600 dark:text-gray-400">Shipping (₹)</span><input type="number" min={0} step="0.01" value={shippingFee} onChange={(e) => { setShippingFee(e.target.value); setShippingTouched(true); resetTotal() }} className={`${inputCls} !w-32 text-right`} /></div>
-            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">GST / taxes{rates.cgst + rates.sgst + rates.igst > 0 ? ` (${round2(rates.cgst + rates.sgst + rates.igst)}%)` : ""}</span><span>{formatPrice(totals.tax)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">GST / taxes{rates.cgst + rates.sgst + rates.igst > 0 ? ` (${round2(rates.cgst + rates.sgst + rates.igst)}%)` : ""}</span><span>{formatPrice(totals.tax)}{inclGst && totals.tax > 0 ? " (included)" : ""}</span></div>
+            {inclGst && totals.roundOff !== 0 && totalOverride === null && (
+              <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Round off</span><span>{totals.roundOff > 0 ? "+" : "-"}{formatPrice(Math.abs(totals.roundOff))}</span></div>
+            )}
             <div className="flex items-center justify-between gap-3 border-t border-gray-100 dark:border-gray-800 pt-2">
               <span className="font-bold text-gray-900 dark:text-gray-100">Total (₹)</span>
               <input

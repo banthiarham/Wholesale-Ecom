@@ -506,6 +506,8 @@ model Order {
   shippingAddress Json?
   billingAddress  Json?
   notes           String?
+  /// Invoice number typed in by the admin; the invoice falls back to the order number when empty.
+  invoiceNumber   String?     @unique
   trackingNumber  String?
   carrier         String?
   shippingEta     DateTime?

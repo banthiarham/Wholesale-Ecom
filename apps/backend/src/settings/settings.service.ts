@@ -79,7 +79,13 @@ export class SettingsService {
         };
       }
     }
-    return { terms: all.invoiceTerms, bank };
+    return {
+      terms: all.invoiceTerms,
+      deliveryTerms: all.invoiceDeliveryTerms || '',
+      // Invoice-only logo; the invoice falls back to the site logo when this is empty.
+      logoUrl: all.invoiceLogoUrl || '',
+      bank,
+    };
   }
 
   private getDefaults(): Record<string, string> {
@@ -114,6 +120,8 @@ export class SettingsService {
       returnWindowDays: '15',
       invoiceTerms: DEFAULT_INVOICE_TERMS,
       invoiceBankGatewayId: '',
+      invoiceDeliveryTerms: '',
+      invoiceLogoUrl: '',
     };
   }
 
@@ -149,6 +157,8 @@ export class SettingsService {
       { key: 'returnWindowDays', value: '15', label: 'Return & Replacement Window (days after delivery)', type: 'number', group: 'policy' },
       { key: 'invoiceTerms', value: DEFAULT_INVOICE_TERMS, label: 'Invoice Terms & Conditions', type: 'text', group: 'invoice' },
       { key: 'invoiceBankGatewayId', value: '', label: 'Invoice Bank Account', type: 'text', group: 'invoice' },
+      { key: 'invoiceDeliveryTerms', value: '', label: 'Invoice Terms of Delivery', type: 'text', group: 'invoice' },
+      { key: 'invoiceLogoUrl', value: '', label: 'Invoice Logo', type: 'image', group: 'invoice' },
     ];
   }
 

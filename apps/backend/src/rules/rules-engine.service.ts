@@ -73,6 +73,75 @@ export interface RuleEvaluationResult {
   customBadges: { productId: string; badgeLabel: string; badgeColor: string | null; ruleName: string }[];
 }
 
+export interface RuleAdjustmentLine {
+  productId: string;
+  quantity: number;
+  /** The price this buyer pays per unit before offers (role / contract / tier / base price). */
+  unitPrice: number;
+}
+
+export interface RuleAdjustments {
+  lines: {
+    offerDiscount: number;
+    offerRuleName: string | null;
+    qtyDiscount: number;
+    qtyRuleName: string | null;
+  }[];
+  productSavings: number;
+  qtySavings: number;
+  cartDiscount: number;
+  cartDiscountRuleName: string | null;
+  paymentDiscount: number;
+  paymentDiscountRuleName: string | null;
+  extraCharges: number;
+  /** productSavings + qtySavings + cartDiscount + paymentDiscount */
+  totalDiscount: number;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Money the dynamic rules take off (or add to) an order, worked out from the actual cart lines.
+ * Used both for what the shopper is shown and for what the order is saved at, so the two agree.
+ * `lines` must be the paid lines (free buy-X-get-Y lines left out) in the order they were evaluated.
+ */
+export function computeRuleAdjustments(lines: RuleAdjustmentLine[], result: RuleEvaluationResult): RuleAdjustments {
+  // The engine emits one product discount per matching line, in line order.
+  const pending = new Map<string, RuleEvaluationResult['productDiscounts']>();
+  for (const d of result.productDiscounts || []) pending.set(d.productId, [...(pending.get(d.productId) || []), d]);
+
+  const perLine = lines.map((l) => {
+    const gross = l.unitPrice * l.quantity;
+    const d = pending.get(l.productId)?.shift();
+    let offerDiscount = d ? Math.min(l.unitPrice, Math.max(0, d.discountAmount)) * l.quantity : 0;
+    let qtyDiscount = 0;
+    const qd = (result.quantityDiscounts || []).find((q) => q.productId === l.productId);
+    const tier = qd ? [...qd.tiers].sort((a, b) => b.minQty - a.minQty).find((t) => l.quantity >= t.minQty) : undefined;
+    if (tier) qtyDiscount = tier.discountType === 'PERCENTAGE' ? (gross * tier.discountValue) / 100 : tier.discountValue * l.quantity;
+    // Never take more off a line than it costs.
+    offerDiscount = round2(Math.min(offerDiscount, gross));
+    qtyDiscount = round2(Math.max(0, Math.min(qtyDiscount, gross - offerDiscount)));
+    return { offerDiscount, offerRuleName: d ? d.ruleName : null, qtyDiscount, qtyRuleName: tier && qd ? qd.ruleName : null };
+  });
+
+  const productSavings = round2(perLine.reduce((s, l) => s + l.offerDiscount, 0));
+  const qtySavings = round2(perLine.reduce((s, l) => s + l.qtyDiscount, 0));
+  const cartDiscount = round2(Math.max(0, result.cartDiscount?.discountAmount || 0));
+  const paymentDiscount = round2(Math.max(0, result.paymentMethodDiscount?.discountAmount || 0));
+  const extraCharges = round2((result.extraCharges || []).reduce((s, e) => s + Math.max(0, e.chargeAmount || 0), 0));
+  return {
+    lines: perLine,
+    productSavings,
+    qtySavings,
+    cartDiscount,
+    cartDiscountRuleName: result.cartDiscount?.ruleName || null,
+    paymentDiscount,
+    paymentDiscountRuleName: result.paymentMethodDiscount?.ruleName || null,
+    extraCharges,
+    totalDiscount: round2(productSavings + qtySavings + cartDiscount + paymentDiscount),
+  };
+}
+
 @Injectable()
 export class RulesEngineService {
   constructor(private prisma: PrismaService) {}

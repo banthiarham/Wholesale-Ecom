@@ -25,6 +25,7 @@ interface OrderItem {
 interface OrderDetail {
   id: string
   orderNumber: string
+  invoiceNumber?: string | null
   status: string
   totalAmount: number
   subtotal?: number | null
@@ -269,7 +270,7 @@ export default function AdminOrderDetailPage() {
             <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Order #{order.orderNumber}</h1>
             <AdminStatusBadge status={order.status} {...orderStatusBadgeProps(order.status)} />
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Placed on {new Date(order.createdAt).toLocaleString()}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Placed on {new Date(order.createdAt).toLocaleString()}{order.invoiceNumber ? <> · Invoice No. <span className="font-medium text-gray-700 dark:text-gray-300">{order.invoiceNumber}</span></> : null}</p>
         </div>
         <div className="flex items-center gap-2">
         {order.status !== "CANCELLED" && <Link
