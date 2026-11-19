@@ -154,6 +154,22 @@ export function ProductCard({
     </span>
   ) : null
 
+  // Every badge for this product, in priority order (shown beside the image, never on top of it).
+  const badgeList = [
+    dynamicRuleBadge ? <span key="rule" className="contents">{dynamicRuleBadge}</span> : null,
+    discountPct !== null ? <span key="pct" className="chip-sale">{discountPct}% OFF</span> : null,
+    seasonalDiscount ? <span key="season" className="chip-sale">{discountBadge(seasonalDiscount)}</span> : null,
+    product.tierPrices && product.tierPrices.length > 0 ? <span key="bulk" className="chip-bulk">Bulk</span> : null,
+    product.tags?.includes("best-seller") ? <span key="best" className="chip-bestseller">Best Seller</span> : null,
+    matchedPaymentOffer ? (
+      <span key="pay" className={`${matchedPaymentOffer.offerType === "BANK" ? "bg-blue-600" : "bg-purple-600"} text-white text-[10px] font-bold px-2 py-0.5 rounded-full`}>
+        {getPaymentOfferBadge(matchedPaymentOffer)}
+      </span>
+    ) : null,
+  ].filter(Boolean)
+  const badges = <>{badgeList}</>
+  const hasBadges = badgeList.length > 0
+
   const priceDisplay = (size: "sm" | "md") => (
     <ProductPriceDisplay
       isPriceHidden={isPriceHidden}
@@ -277,20 +293,15 @@ export function ProductCard({
       <Link href={`/products/${product.handle}`} className="card-interactive flex gap-4 p-3 sm:p-4 group h-full">
         <div className="relative w-28 sm:w-40 lg:w-44 shrink-0 self-start aspect-square rounded-xl bg-white border border-gray-100 overflow-hidden">
           {product.thumbnail ? (
-            <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-contain p-1" sizes="176px" />
+            <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="object-contain p-1" sizes="176px" />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
               <Package size={32} className="text-gray-200" />
             </div>
           )}
-          <div className="absolute top-2 left-2 flex flex-col items-start gap-1 max-w-[calc(100%-1rem)]">
-            {dynamicRuleBadge}
-            {discountPct !== null && <span className="chip-sale">{discountPct}% OFF</span>}
-            {seasonalDiscount && <span className="chip-sale">{discountBadge(seasonalDiscount)}</span>}
-            {product.tierPrices && product.tierPrices.length > 0 && <span className="chip-bulk">Bulk</span>}
-          </div>
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
+          {hasBadges && <div className="flex flex-wrap items-center gap-1 mb-1.5">{badges}</div>}
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-bold text-gray-900 tracking-tight group-hover:text-primary-600 transition-colors line-clamp-2">{product.title}</h3>
             {wishlistButton && <div className="shrink-0 -mt-1 -mr-1">{wishlistButton}</div>}
@@ -324,47 +335,31 @@ export function ProductCard({
 
   return (
     <Link href={`/products/${product.handle}`} className="card-interactive group flex flex-col h-full">
-      <div className={`relative bg-white overflow-hidden ${compact ? "h-36 sm:h-32 xl:h-36" : "aspect-square"}`}>
+      <div className={`relative bg-white overflow-hidden ${compact ? "h-36 sm:h-32" : "aspect-square"}`}>
         {product.thumbnail ? (
-          <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="img-zoom object-contain p-2" sizes={compact ? "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 17vw" : "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"} />
+          <Image src={product.thumbnail} alt={product.title} fill unoptimized={isExternalImageUrl(product.thumbnail)} className="object-contain p-2 transition-opacity duration-200 group-hover:opacity-90" sizes={compact ? "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 17vw" : "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"} />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
             <Package size={40} className="text-gray-200" />
           </div>
         )}
-        {/* Subtle top scrim keeps badges legible over busy photography */}
-        <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/[0.08] to-transparent pointer-events-none" />
-        <div className="absolute top-2.5 left-2.5 flex flex-col items-start gap-1 max-w-[calc(100%-1.25rem)]">
-          {dynamicRuleBadge}
-          {seasonalDiscount && <span className="chip-sale">{discountBadge(seasonalDiscount)}</span>}
-          {product.tierPrices && product.tierPrices.length > 0 && <span className="chip-bulk">Bulk</span>}
-          {product.tags?.includes("best-seller") && <span className="chip-bestseller">Best Seller</span>}
-        </div>
-        {discountPct !== null && (
-          <span className="absolute bottom-2.5 left-2.5 chip-sale">{discountPct}% OFF</span>
-        )}
-        {onToggleWishlist && (
-          <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            {wishlistButton}
-          </div>
-        )}
-        {matchedPaymentOffer && (
-          <span className={`absolute bottom-2.5 right-2.5 ${matchedPaymentOffer.offerType === "BANK" ? "bg-blue-600" : "bg-purple-600"} text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm`}>
-            {getPaymentOfferBadge(matchedPaymentOffer)}
-          </span>
-        )}
       </div>
-      <div className={`${compact ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3.5"} flex-1 flex flex-col`}>
+      {/* Badges sit in their own row under the picture, so the product image is never covered. */}
+      {/* One line: badges that don't fit wrap onto a hidden second line rather than growing the card. */}
+      <div className={`flex items-center justify-between gap-1 border-t border-gray-50 ${compact ? "px-2 sm:px-2.5 pt-1.5" : "px-2.5 sm:px-3.5 pt-2"}`}>
+        <div className="flex flex-wrap items-center gap-1 min-w-0 h-[18px] overflow-hidden [&>span]:!py-0.5 [&>span]:!px-1.5 [&>span]:!text-[9px] [&>span]:!shadow-none [&>.contents>span]:!py-0.5 [&>.contents>span]:!text-[9px]">{badges}</div>
+        {wishlistButton && <div className="shrink-0 h-[18px] flex items-center -mr-1.5 [&>button]:scale-75">{wishlistButton}</div>}
+      </div>
+      <div className={`${compact ? "px-2 pb-2 pt-1 sm:px-2.5 sm:pb-2.5" : "px-2.5 pb-2.5 pt-1.5 sm:px-3.5 sm:pb-3.5"} flex-1 flex flex-col`}>
         <h3 className={`font-semibold text-gray-900 line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug ${compact ? "text-xs min-h-[2rem]" : "text-sm min-h-[2.5rem]"}`}>{product.title}</h3>
         <div className={`flex items-center gap-1.5 min-w-0 ${compact ? "mt-1" : "mt-1.5"}`}>{ratingRow("sm", "text-[11px] text-gray-400")}
           {product.sku && <span className="text-[11px] text-gray-400 truncate">· {product.sku}</span>}
         </div>
         <div className={`flex flex-wrap items-end justify-between gap-x-2 gap-y-1 ${compact ? "mt-1" : "mt-2"}`}>
           <div className="min-w-0">{priceDisplay("sm")}</div>
-          <span className="shrink-0 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-100 px-1.5 py-1 rounded-md">MOQ {rolePricing?.minQty ?? product.moq}</span>
         </div>
         <div className={`flex flex-wrap gap-1 ${compact ? "mt-1" : "mt-1.5"}`}>{ruleBadge("sm")}</div>
-        <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${compact ? "mt-1" : "mt-1.5"}`}>
+        <div className={`flex items-center justify-between gap-1.5 text-[11px] font-semibold ${compact ? "mt-1" : "mt-1.5"}`}>
           <span className="inline-flex items-center gap-1">
             {stockDot(isOutOfStock, lowStock)}
             {isOutOfStock ? (
@@ -375,6 +370,7 @@ export function ProductCard({
               <span className="text-green-600">In stock</span>
             )}
           </span>
+          <span className="shrink-0 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-100 px-1.5 py-0.5 rounded-md">MOQ {rolePricing?.minQty ?? product.moq}</span>
         </div>
         <div className="mt-auto">{addToCartButton("grid")}</div>
       </div>
