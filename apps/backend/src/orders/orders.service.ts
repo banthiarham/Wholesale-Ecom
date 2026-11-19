@@ -11,6 +11,7 @@ import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
 import { CartItemContext, RuleEvaluationResult, RulesEngineService, computeRuleAdjustments } from '../rules/rules-engine.service';
 import { SettingsService } from '../settings/settings.service';
+import { PaymentReceiptsService } from './payment-receipts.service';
 import { OrderStatus, PaymentStatus, DeliveryStatus, RefundStatus } from '@prisma/client';
 
 const ORDER_STATUS_MESSAGES: Partial<Record<OrderStatus, { title: string; message: (orderNumber: string) => string }>> = {
@@ -44,6 +45,7 @@ export class OrdersService {
     private settingsService: SettingsService,
     private pricingService: PricingService,
     private rulesEngine: RulesEngineService,
+    private paymentReceipts: PaymentReceiptsService,
   ) {}
 
   /**
@@ -508,7 +510,7 @@ export class OrdersService {
       where: { id },
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true, sku: true } } } },
-        payment: { include: { refunds: { orderBy: { createdAt: 'desc' } } } },
+        payment: { include: { refunds: { orderBy: { createdAt: 'desc' } }, receipts: { orderBy: [{ receivedAt: 'desc' }, { createdAt: 'desc' }] } } },
         user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, companyName: true, gstin: true } },
         deliveryPartner: true,
         deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
@@ -518,6 +520,8 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     if (userId && order.userId !== userId) throw new NotFoundException('Order not found');
 
+    // Paid so far / balance due, from part-payment receipts (or the payment status when there are none).
+    (order as any).paymentSummary = PaymentReceiptsService.summarize(Number(order.totalAmount), order.payment as any);
     return this.withVariantDetails(order);
   }
 
@@ -931,11 +935,14 @@ export class OrdersService {
           ...(dto.invoiceNumber !== undefined ? { invoiceNumber: dto.invoiceNumber.trim() || null } : {}),
         },
       });
-      // A payment that has not been captured yet should ask for the new amount.
-      if (order.payment && order.payment.status !== PaymentStatus.CAPTURED && order.payment.status !== PaymentStatus.REFUNDED) {
+      // A payment that has not been captured yet should ask for the new amount — as should one that only counts as
+      // paid because its part-payment receipts covered the old total.
+      const paidByReceipts = !!((order.payment?.metadata as any) || {}).paidByReceipts;
+      if (order.payment && order.payment.status !== PaymentStatus.REFUNDED && (order.payment.status !== PaymentStatus.CAPTURED || paidByReceipts)) {
         await tx.payment.update({ where: { id: order.payment.id }, data: { amount: amounts.totalAmount } });
       }
     });
+    if (order.payment) await this.paymentReceipts.recompute(order.payment.id);
 
     if (reservationHeld) {
       const keys = new Set([...oldQty.keys(), ...newQty.keys()]);

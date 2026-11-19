@@ -1,4 +1,5 @@
 "use client"
+import PaymentReceipts from "@/components/orders/PaymentReceipts"
 import { returnWindow, parseWindowDays } from "@/lib/returnWindow"
 import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 import { paymentModeLabel } from "@/lib/paymentMode"
@@ -763,6 +764,10 @@ export default function OrderDetailPage() {
                     <div className="flex justify-between"><span>Verified At</span><span className="font-medium text-xs">{new Date(order.payment.metadata.verifiedAt).toLocaleString()}</span></div>
                   )}
                   <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100"><span>Total</span><span className="text-primary-700">{formatPrice(Number(order.totalAmount))}</span></div>
+
+                  <div className="pt-3 border-t border-gray-100">
+                    <PaymentReceipts orderId={order.id} mode="customer" orderStatus={order.status} onChange={() => loadOrder(true)} />
+                  </div>
 
                   {order.payment?.refunds && order.payment.refunds.length > 0 && (() => {
                     const refund = order.payment!.refunds![0]

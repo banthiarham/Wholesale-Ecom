@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
+import { PaymentReceiptsController } from './payment-receipts.controller';
+import { PaymentReceiptsService } from './payment-receipts.service';
 import { CsvOrderParserService } from './csv-order-parser.service';
 import { ExcelOrderParserService } from './excel-order-parser.service';
 import { InventoryModule } from '../inventory/inventory.module';
@@ -13,8 +15,8 @@ import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [InventoryModule, PricingModule, NotificationsModule, DeliveryPartnersModule, LoyaltyModule, RulesModule, SettingsModule],
-  controllers: [OrdersController],
-  providers: [OrdersService, CsvOrderParserService, ExcelOrderParserService],
-  exports: [OrdersService],
+  controllers: [OrdersController, PaymentReceiptsController],
+  providers: [OrdersService, PaymentReceiptsService, CsvOrderParserService, ExcelOrderParserService],
+  exports: [OrdersService, PaymentReceiptsService],
 })
 export class OrdersModule {}

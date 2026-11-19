@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
-  BookOpen, ArrowLeft, ShoppingBag, CreditCard, RotateCcw, RefreshCcw, Wallet, Filter,
+  BookOpen, ArrowLeft, ShoppingBag, CreditCard, RotateCcw, RefreshCcw, Wallet, Filter, Scale,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import { EmptyState } from "@/components/ui/EmptyState"
 
-type LedgerSource = "ORDER" | "PAYMENT" | "RETURN" | "REFUND" | "WALLET"
+type LedgerSource = "OPENING" | "ORDER" | "PAYMENT" | "RETURN" | "REFUND" | "WALLET"
 
 interface LedgerEntry {
   id: string
@@ -40,6 +40,7 @@ interface LedgerSummary {
 }
 
 const SOURCE_META: Record<LedgerSource, { label: string; icon: any; color: string }> = {
+  OPENING: { label: "Opening", icon: Scale, color: "bg-gray-100 text-gray-700 border-gray-200" },
   ORDER: { label: "Order", icon: ShoppingBag, color: "bg-primary-50 text-primary-700 border-primary-100" },
   PAYMENT: { label: "Payment", icon: CreditCard, color: "bg-green-50 text-green-700 border-green-100" },
   RETURN: { label: "Return", icon: RotateCcw, color: "bg-amber-50 text-amber-700 border-amber-100" },
@@ -47,7 +48,7 @@ const SOURCE_META: Record<LedgerSource, { label: string; icon: any; color: strin
   WALLET: { label: "Wallet", icon: Wallet, color: "bg-purple-50 text-purple-700 border-purple-100" },
 }
 
-const SOURCE_FILTERS: ("All" | LedgerSource)[] = ["All", "ORDER", "PAYMENT", "RETURN", "REFUND", "WALLET"]
+const SOURCE_FILTERS: ("All" | LedgerSource)[] = ["All", "OPENING", "ORDER", "PAYMENT", "RETURN", "REFUND", "WALLET"]
 
 export default function LedgerPage() {
   const router = useRouter()

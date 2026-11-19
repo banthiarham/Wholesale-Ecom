@@ -1,4 +1,4 @@
-import { User as PrismaUser, UserRole, UserStatus, AccountType } from '@prisma/client';
+import { Prisma, User as PrismaUser, UserRole, UserStatus, AccountType } from '@prisma/client';
 
 export class UserEntity implements PrismaUser {
   id: string;
@@ -30,4 +30,9 @@ export class UserEntity implements PrismaUser {
   createdAt: Date;
   updatedAt: Date;
   lastLoginAt: Date | null;
+  openingBalance: Prisma.Decimal;
+  openingBalanceDate: Date | null;
+  openingBalanceNote: string | null;
+  openingBalanceUpdatedBy: string | null;
+  openingBalanceUpdatedAt: Date | null;
 }

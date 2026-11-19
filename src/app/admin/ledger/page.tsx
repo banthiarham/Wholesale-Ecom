@@ -6,11 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation"
 import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
 import {
-  BookOpen, ShoppingBag, CreditCard, RotateCcw, RefreshCcw, Wallet, Search, X, Download, FileSpreadsheet, ExternalLink, Filter,
+  BookOpen, Scale, Pencil, Check, ShoppingBag, CreditCard, RotateCcw, RefreshCcw, Wallet, Search, X, Download, FileSpreadsheet, ExternalLink, Filter,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
-type LedgerSource = "ORDER" | "PAYMENT" | "RETURN" | "REFUND" | "WALLET"
+type LedgerSource = "OPENING" | "ORDER" | "PAYMENT" | "RETURN" | "REFUND" | "WALLET"
 type Direction = "DEBIT" | "CREDIT"
 
 interface LedgerEntry {
@@ -39,12 +39,17 @@ interface LedgerSummary {
   walletBalance: number
   creditLimit: number
   availableCredit: number
+  openingBalance: number
+  openingBalanceDate: string | null
+  openingBalanceNote: string | null
+  totalOutstanding: number
 }
 
 interface Customer { id: string; firstName: string; lastName: string; email: string; phone?: string | null; companyName?: string | null }
 
-const SOURCES: LedgerSource[] = ["ORDER", "PAYMENT", "RETURN", "REFUND", "WALLET"]
+const SOURCES: LedgerSource[] = ["OPENING", "ORDER", "PAYMENT", "RETURN", "REFUND", "WALLET"]
 const SOURCE_META: Record<LedgerSource, { label: string; icon: any; color: string }> = {
+  OPENING: { label: "Opening", icon: Scale, color: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700" },
   ORDER: { label: "Order", icon: ShoppingBag, color: "bg-primary-50 text-primary-700 border-primary-100 dark:bg-primary-900/20 dark:text-primary-300 dark:border-primary-800" },
   PAYMENT: { label: "Payment", icon: CreditCard, color: "bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800" },
   RETURN: { label: "Return", icon: RotateCcw, color: "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800" },
@@ -157,6 +162,50 @@ function AdminLedger() {
   }, [customer, from, to, sources])
 
   useEffect(() => { load() }, [load])
+
+  // ── Opening balance ──
+  const [obOpen, setObOpen] = useState(false)
+  const [ob, setOb] = useState({ side: "DEBIT" as "DEBIT" | "CREDIT", amount: "", asOn: "", note: "" })
+  const [obSaving, setObSaving] = useState(false)
+  const [obError, setObError] = useState("")
+  const [obConfirmClear, setObConfirmClear] = useState(false)
+
+  const openObForm = () => {
+    const v = summary?.openingBalance || 0
+    setOb({
+      side: v < 0 ? "CREDIT" : "DEBIT",
+      amount: v ? String(Math.abs(v)) : "",
+      asOn: summary?.openingBalanceDate ? summary.openingBalanceDate.slice(0, 10) : `${new Date().getFullYear()}-04-01`,
+      note: summary?.openingBalanceNote || "",
+    })
+    setObError("")
+    setObConfirmClear(false)
+    setObOpen(true)
+  }
+
+  const saveOb = async (clear = false) => {
+    if (!customer) return
+    const amount = clear ? 0 : Number(ob.amount)
+    if (!clear && (!Number.isFinite(amount) || amount <= 0)) { setObError("Enter an amount greater than 0 (or use Remove to clear it)"); return }
+    if (!clear && !ob.asOn) { setObError("Choose the date the balance is as on"); return }
+    setObSaving(true)
+    setObError("")
+    try {
+      const res = await fetch(`/api/ledger/${customer.id}/opening-balance`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...auth },
+        body: JSON.stringify({ amount, side: ob.side, asOn: ob.asOn || undefined, note: ob.note.trim() || undefined }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(Array.isArray(d.message) ? d.message.join(", ") : d.message || "Could not save the opening balance")
+      setObOpen(false)
+      load()
+    } catch (e: any) {
+      setObError(e.message)
+    } finally {
+      setObSaving(false)
+    }
+  }
 
   const shown = useMemo(() => {
     const q = text.trim().toLowerCase()
@@ -294,6 +343,78 @@ function AdminLedger() {
       ) : (
         <>
           {summary && (
+            <div className="admin-card-static p-5 space-y-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Opening balance</p>
+                  {summary.openingBalance !== 0 ? (
+                    <>
+                      <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">
+                        {formatPrice(Math.abs(summary.openingBalance))}{" "}
+                        <span className={`text-sm font-semibold ${summary.openingBalance > 0 ? "text-amber-600" : "text-green-600"}`}>{summary.openingBalance > 0 ? "Dr — customer owes us" : "Cr — advance held"}</span>
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {summary.openingBalanceDate ? `As on ${fmtDate(summary.openingBalanceDate)}` : "No date set"}{summary.openingBalanceNote ? ` · ${summary.openingBalanceNote}` : ""}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">None set. Add the amount this customer already owed (or had paid in advance) before their first order here.</p>
+                  )}
+                  {!obOpen && (
+                    <button type="button" onClick={openObForm} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <Pencil size={13} /> {summary.openingBalance !== 0 ? "Change opening balance" : "Set opening balance"}
+                    </button>
+                  )}
+                </div>
+                <div className="sm:text-right">
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total outstanding</p>
+                  <p className={`mt-1 text-xl font-bold ${summary.totalOutstanding > 0 ? "text-amber-600" : "text-gray-900 dark:text-gray-100"}`}>{formatPrice(summary.totalOutstanding)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Opening {formatPrice(summary.openingBalance)} + unpaid orders {formatPrice(summary.pendingAmount)} + credit used {formatPrice(Math.max(0, -summary.walletBalance))}
+                  </p>
+                </div>
+              </div>
+
+              {obOpen && (
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 space-y-3">
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Who owes whom">
+                    {([["DEBIT", "Customer owes us (Dr)"], ["CREDIT", "Customer paid in advance (Cr)"]] as const).map(([v, label]) => (
+                      <button key={v} type="button" aria-pressed={ob.side === v} onClick={() => setOb({ ...ob, side: v })}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${ob.side === v ? "bg-primary-600 text-white border-primary-600" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700"}`}>{label}</button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 space-y-1"><span className="block">Amount (₹)</span>
+                      <input type="number" min={0} step="0.01" value={ob.amount} onChange={(e) => setOb({ ...ob, amount: e.target.value })} className={`${inputCls} w-full`} autoFocus />
+                    </label>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 space-y-1"><span className="block">As on</span>
+                      <input type="date" value={ob.asOn} onChange={(e) => setOb({ ...ob, asOn: e.target.value })} className={`${inputCls} w-full`} />
+                    </label>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 space-y-1"><span className="block">Note (optional)</span>
+                      <input value={ob.note} maxLength={200} onChange={(e) => setOb({ ...ob, note: e.target.value })} placeholder="e.g. Balance brought forward from old books" className={`${inputCls} w-full`} />
+                    </label>
+                  </div>
+                  {obError && <p className="text-xs text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-300 rounded-lg px-3 py-2">{obError}</p>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => saveOb(false)} disabled={obSaving} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"><Check size={14} /> {obSaving ? "Saving…" : "Save"}</button>
+                    <button type="button" onClick={() => setObOpen(false)} className="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-2 text-sm hover:bg-white dark:hover:bg-gray-800">Cancel</button>
+                    {summary.openingBalance !== 0 && (
+                      obConfirmClear ? (
+                        <span className="ml-auto flex items-center gap-2 text-sm">
+                          <button type="button" onClick={() => saveOb(true)} disabled={obSaving} className="font-semibold text-red-600 hover:underline">Yes, remove it</button>
+                          <button type="button" onClick={() => setObConfirmClear(false)} className="text-gray-500 hover:underline">Keep</button>
+                        </span>
+                      ) : (
+                        <button type="button" onClick={() => setObConfirmClear(true)} className="ml-auto text-sm text-gray-500 hover:text-red-600">Remove opening balance</button>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {summary && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <Tile label="Orders" value={`${summary.totalOrders} · ${formatPrice(summary.totalOrderValue)}`} />
               <Tile label="Payments received" value={formatPrice(summary.paymentsMade)} />
@@ -369,7 +490,7 @@ function AdminLedger() {
                     {shown.map((e) => {
                       const meta = SOURCE_META[e.source]
                       const Icon = meta.icon
-                      const linksToOrder = e.source !== "WALLET"
+                      const linksToOrder = e.source !== "WALLET" && e.source !== "OPENING"
                       return (
                         <tr key={e.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40">
                           <td className="px-4 py-2.5 whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(e.date)}</td>

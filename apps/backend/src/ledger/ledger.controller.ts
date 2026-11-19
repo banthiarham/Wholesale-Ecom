@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { LedgerService, LedgerSource } from './ledger.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -7,7 +7,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 
-const VALID_SOURCES: LedgerSource[] = ['ORDER', 'PAYMENT', 'RETURN', 'REFUND', 'WALLET'];
+const VALID_SOURCES: LedgerSource[] = ['OPENING', 'ORDER', 'PAYMENT', 'RETURN', 'REFUND', 'WALLET'];
 
 function parseFilters(from?: string, to?: string, sources?: string) {
   return {
@@ -38,6 +38,20 @@ export class LedgerController {
     @Query('sources') sources?: string,
   ) {
     return this.ledgerService.getLedger(user.id, parseFilters(from, to, sources));
+  }
+
+  @Put(':userId/opening-balance')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Set, change or clear a user's ledger opening balance (Admin only)" })
+  @ApiParam({ name: 'userId', description: 'User UUID' })
+  async setOpeningBalance(
+    @Param('userId') userId: string,
+    @Body() body: { amount: number; side?: 'DEBIT' | 'CREDIT'; asOn?: string; note?: string },
+    @CurrentUser() admin: any,
+  ) {
+    return this.ledgerService.setOpeningBalance(userId, admin.id, body || ({} as any));
   }
 
   @Get(':userId')
