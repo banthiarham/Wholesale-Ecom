@@ -251,7 +251,7 @@ export default function OrderEditor({ order }: { order?: any }) {
   const isPriced = (l: Line) => !!l.id || !!l.priceTouched
   const quoteKey = JSON.stringify([customer?.id, lines.filter((l) => !l.free).map((l) => [l.key, l.productId, l.variantId, l.quantity, isPriced(l), l.offerChoice || "", isPriced(l) ? l.unitPrice : null])])
   useEffect(() => {
-    if (!customer) return
+    // Without a client the quote still lists the offers, at the general (base / bulk tier) price.
     const todo = lines.filter((l) => l.productId && !l.free)
     if (todo.length === 0) { setFreeItems([]); setCartOffer(null); return }
     const t = setTimeout(() => {
@@ -259,7 +259,7 @@ export default function OrderEditor({ order }: { order?: any }) {
         method: "POST",
         headers: { "Content-Type": "application/json", ...auth },
         body: JSON.stringify({
-          userId: customer.id,
+          userId: customer?.id,
           items: todo.map((l) => ({
             productId: l.productId,
             variantId: l.variantId || undefined,
@@ -620,7 +620,7 @@ export default function OrderEditor({ order }: { order?: any }) {
                         l.sku && <p className="text-xs text-gray-500">SKU: {l.sku}</p>
                       )}
                       {l.free && <p className="mt-1 inline-flex rounded bg-purple-50 dark:bg-purple-900/20 px-1.5 py-0.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300">FREE — from offer</p>}
-                      {!l.free && l.quote && <LineOffers line={l} onChoose={(choice) => updateLine(l.key, { offerChoice: choice })} onUseOfferPrice={() => updateLine(l.key, { priceTouched: false, inclPrice: undefined })} />}
+                      {!l.free && l.quote && <LineOffers line={l} hasClient={!!customer} onChoose={(choice) => updateLine(l.key, { offerChoice: choice })} onUseOfferPrice={() => updateLine(l.key, { priceTouched: false, inclPrice: undefined })} />}
                     </td>
                     <td className="py-2 pr-3">
                       <input type="number" min={1} step={1} value={l.quantity} onChange={(e) => updateLine(l.key, { quantity: e.target.value })} className={`${inputCls} ${l.available !== undefined && num(l.quantity) > Math.max(0, l.available) ? "!border-red-400" : ""}`} />
@@ -765,7 +765,7 @@ export default function OrderEditor({ order }: { order?: any }) {
 }
 
 /** Under a product line: where the customer's price comes from, cheaper quantity breaks, and the offers on the product. */
-function LineOffers({ line, onChoose, onUseOfferPrice }: { line: Line; onChoose: (choice: string | undefined) => void; onUseOfferPrice: () => void }) {
+function LineOffers({ line, hasClient, onChoose, onUseOfferPrice }: { line: Line; hasClient: boolean; onChoose: (choice: string | undefined) => void; onUseOfferPrice: () => void }) {
   const q = line.quote!
   const offers = q.offers || []
   const source = q.appliedRule && PRICE_SOURCE[q.appliedRule] ? (q.appliedRule === "role" && q.roleName ? `${q.roleName} price` : PRICE_SOURCE[q.appliedRule]) : null
@@ -776,6 +776,7 @@ function LineOffers({ line, onChoose, onUseOfferPrice }: { line: Line; onChoose:
   const totalQty = Math.max(1, num(line.quantity))
   return (
     <div className="mt-1.5 space-y-1 text-xs">
+      {!hasClient && <p className="text-gray-400">General price shown — pick a client to see their own price.</p>}
       {q.unitPrice != null && (
         <p className="text-gray-500">
           {source ? <span className="font-medium text-green-700 dark:text-green-400">{source}</span> : "Base price"}: {formatPrice(q.unitPrice)}

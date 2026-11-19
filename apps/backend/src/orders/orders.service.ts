@@ -698,19 +698,20 @@ export class OrdersService {
 
   /** The price each line would cost this customer for its quantity: their role price, contract price, tier or base price. */
   async adminQuotePrices(
-    userId: string,
+    userId: string | undefined,
     items: { productId: string; variantId?: string | null; quantity: number; offerChoice?: string; unitPrice?: number | null }[],
   ) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { roleRel: true } });
-    if (!user) throw new NotFoundException('Customer not found');
-    const userRole = (user as any).roleRel?.name || user.role || undefined;
+    // No customer picked yet: quote the general price (base / bulk tier) and the offers open to everyone.
+    const user = userId ? await this.prisma.user.findUnique({ where: { id: userId }, include: { roleRel: true } }) : null;
+    if (userId && !user) throw new NotFoundException('Customer not found');
+    const userRole = user ? (user as any).roleRel?.name || user.role || undefined : undefined;
     const round2 = (n: number) => Math.round(n * 100) / 100;
 
     // 1) This customer's own price for each line (contract / role / tier / base) and the quantity breaks after it.
     const lines = await Promise.all(items.map(async (it) => {
       const qty = Math.max(1, Math.floor(it.quantity || 1));
       try {
-        const p = await this.pricingService.calculateEffectivePrice(it.productId, qty, userId, it.variantId || undefined);
+        const p = await this.pricingService.calculateEffectivePrice(it.productId, qty, user ? user.id : undefined, it.variantId || undefined);
         const product = await this.prisma.product.findUnique({
           where: { id: it.productId },
           select: { categoryId: true, title: true, tierPrices: { select: { minQty: true, price: true }, orderBy: { minQty: 'asc' } } },
@@ -743,7 +744,7 @@ export class OrdersService {
     const valid = lines.filter((l) => l.ok);
     const ctx: CartItemContext[] = valid.map((l) => ({ productId: l.productId, categoryId: l.categoryId, quantity: l.quantity, unitPrice: l.basis, offerChoice: l.offerChoice }));
     const subtotal = ctx.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
-    const result = await this.rulesEngine.evaluateRules({ userId, userRole, cartItems: ctx, subtotal, sellerState: await this.getSellerState() });
+    const result = await this.rulesEngine.evaluateRules({ userId: user?.id, userRole, cartItems: ctx, subtotal, sellerState: await this.getSellerState() });
     const adj = computeRuleAdjustments(ctx, result);
 
     const totalQty = new Map<string, number>();
@@ -802,7 +803,7 @@ export class OrdersService {
       prices,
       freeItems,
       cartDiscount: adj.cartDiscount > 0 ? { amount: adj.cartDiscount, ruleName: adj.cartDiscountRuleName } : null,
-      roleName: (user as any).roleRel?.label || null,
+      roleName: user ? (user as any).roleRel?.label || null : null,
     };
   }
 
