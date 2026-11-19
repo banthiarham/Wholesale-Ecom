@@ -9,7 +9,7 @@ import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
-import { CartItemContext, RuleEvaluationResult, computeRuleAdjustments } from '../rules/rules-engine.service';
+import { CartItemContext, RuleEvaluationResult, RulesEngineService, computeRuleAdjustments } from '../rules/rules-engine.service';
 import { SettingsService } from '../settings/settings.service';
 import { OrderStatus, PaymentStatus, DeliveryStatus, RefundStatus } from '@prisma/client';
 
@@ -43,6 +43,7 @@ export class OrdersService {
     private rulesEnforcement: RulesEnforcementService,
     private settingsService: SettingsService,
     private pricingService: PricingService,
+    private rulesEngine: RulesEngineService,
   ) {}
 
   /**
@@ -696,20 +697,113 @@ export class OrdersService {
   }
 
   /** The price each line would cost this customer for its quantity: their role price, contract price, tier or base price. */
-  async adminQuotePrices(userId: string, items: { productId: string; variantId?: string | null; quantity: number }[]) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  async adminQuotePrices(
+    userId: string,
+    items: { productId: string; variantId?: string | null; quantity: number; offerChoice?: string; unitPrice?: number | null }[],
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { roleRel: true } });
     if (!user) throw new NotFoundException('Customer not found');
-    const prices: { productId: string; variantId: string | null; unitPrice: number; appliedRule: string; roleName: string | null }[] = [];
-    for (const it of items) {
+    const userRole = (user as any).roleRel?.name || user.role || undefined;
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    // 1) This customer's own price for each line (contract / role / tier / base) and the quantity breaks after it.
+    const lines = await Promise.all(items.map(async (it) => {
+      const qty = Math.max(1, Math.floor(it.quantity || 1));
       try {
-        const p = await this.pricingService.calculateEffectivePrice(it.productId, Math.max(1, Math.floor(it.quantity || 1)), userId, it.variantId || undefined);
-        prices.push({ productId: it.productId, variantId: it.variantId || null, unitPrice: Math.round(p.finalPrice * 100) / 100, appliedRule: p.appliedRule, roleName: p.appliedRoleName });
+        const p = await this.pricingService.calculateEffectivePrice(it.productId, qty, userId, it.variantId || undefined);
+        const product = await this.prisma.product.findUnique({
+          where: { id: it.productId },
+          select: { categoryId: true, title: true, tierPrices: { select: { minQty: true, price: true }, orderBy: { minQty: 'asc' } } },
+        });
+        const tiers = p.roleTiers?.length
+          ? p.roleTiers.map((t) => ({ minQty: t.minQty, price: Number(t.price) }))
+          : it.variantId ? [] : (product?.tierPrices || []).map((t) => ({ minQty: t.minQty, price: Number(t.price) }));
+        return {
+          productId: it.productId,
+          variantId: it.variantId || null,
+          categoryId: product?.categoryId || undefined,
+          quantity: qty,
+          unitPrice: round2(p.finalPrice),
+          listPrice: round2(p.basePrice),
+          appliedRule: p.appliedRule,
+          roleName: p.appliedRoleName,
+          breaks: tiers.filter((t) => t.minQty > qty && t.price < p.finalPrice).map((t) => ({ minQty: t.minQty, price: round2(t.price) })),
+          // Offers are worked out on the price the line actually has (a price the admin typed wins).
+          basis: it.unitPrice != null && Number.isFinite(Number(it.unitPrice)) ? Number(it.unitPrice) : p.finalPrice,
+          offerChoice: it.offerChoice || undefined,
+          ok: true,
+        };
       } catch {
         // Unknown product / variant: the editor keeps whatever price the line already has.
-        prices.push({ productId: it.productId, variantId: it.variantId || null, unitPrice: null as any, appliedRule: 'base', roleName: null });
+        return { productId: it.productId, variantId: it.variantId || null, quantity: qty, unitPrice: null as any, ok: false } as any;
+      }
+    }));
+
+    // 2) The dynamic rules for this customer and these lines: which offer each product gets and what it saves.
+    const valid = lines.filter((l) => l.ok);
+    const ctx: CartItemContext[] = valid.map((l) => ({ productId: l.productId, categoryId: l.categoryId, quantity: l.quantity, unitPrice: l.basis, offerChoice: l.offerChoice }));
+    const subtotal = ctx.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
+    const result = await this.rulesEngine.evaluateRules({ userId, userRole, cartItems: ctx, subtotal, sellerState: await this.getSellerState() });
+    const adj = computeRuleAdjustments(ctx, result);
+
+    const totalQty = new Map<string, number>();
+    for (const l of valid) totalQty.set(l.productId, (totalQty.get(l.productId) || 0) + l.quantity);
+    const offersByProduct = new Map<string, Awaited<ReturnType<RulesEngineService['getProductOffers']>>>();
+    for (const pid of totalQty.keys()) {
+      const choice = valid.find((l) => l.productId === pid && l.offerChoice)?.offerChoice;
+      offersByProduct.set(pid, await this.rulesEngine.getProductOffers({ productId: pid, quantity: totalQty.get(pid), offerChoice: choice }));
+    }
+
+    let vi = 0;
+    const prices = lines.map((l) => {
+      if (!l.ok) return { productId: l.productId, variantId: l.variantId, unitPrice: null, appliedRule: 'base', roleName: null };
+      const a = adj.lines[vi++];
+      const o = offersByProduct.get(l.productId) || { offers: [], appliedId: null };
+      const offerPerUnit = round2(a.offerDiscount / l.quantity);
+      const qtyPerUnit = round2(a.qtyDiscount / l.quantity);
+      return {
+        productId: l.productId,
+        variantId: l.variantId,
+        unitPrice: l.unitPrice,
+        listPrice: l.listPrice,
+        appliedRule: l.appliedRule,
+        roleName: l.roleName,
+        breaks: l.breaks,
+        offers: o.offers,
+        appliedOfferId: o.appliedId,
+        offerDiscountPerUnit: offerPerUnit,
+        offerRuleName: a.offerRuleName,
+        qtyDiscountPerUnit: qtyPerUnit,
+        qtyRuleName: a.qtyRuleName,
+        /** The customer's price with the applied offer taken off. */
+        netUnitPrice: round2(Math.max(0, l.basis - offerPerUnit - qtyPerUnit)),
+      };
+    });
+
+    // Free items earned (buy X get Y) and an order-level discount, for the admin to add if they want.
+    const freeTitles = new Map<string, string>();
+    for (const b of result.bogo) {
+      if (!freeTitles.has(b.freeProductId)) {
+        const fp = await this.prisma.product.findUnique({ where: { id: b.freeProductId }, select: { title: true } });
+        freeTitles.set(b.freeProductId, fp?.title || 'Free item');
       }
     }
-    return { prices };
+    const freeItems = result.bogo
+      .map((b) => ({
+        ruleName: b.ruleName,
+        buyProductId: b.buyProductId,
+        freeProductId: b.freeProductId,
+        freeTitle: freeTitles.get(b.freeProductId) || 'Free item',
+        quantity: Math.floor((totalQty.get(b.buyProductId) || 0) / Math.max(1, b.buyQuantity)) * Math.max(1, b.freeQuantity || 1),
+      }))
+      .filter((f) => f.quantity > 0);
+
+    return {
+      prices,
+      freeItems,
+      cartDiscount: adj.cartDiscount > 0 ? { amount: adj.cartDiscount, ruleName: adj.cartDiscountRuleName } : null,
+      roleName: (user as any).roleRel?.label || null,
+    };
   }
 
   /** GST rates (% of subtotal) and the default shipping charge the rules give an admin-made order for this customer / state. */
