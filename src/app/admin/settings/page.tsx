@@ -75,6 +75,8 @@ interface SettingsState {
   returnWindowDays: string
   invoiceTerms: string
   invoiceBankGatewayId: string
+  invoiceDeliveryTerms: string
+  invoiceLogoUrl: string
 }
 
 const DEFAULT_SETTINGS: SettingsState = {
@@ -101,6 +103,8 @@ const DEFAULT_SETTINGS: SettingsState = {
   returnWindowDays: "15",
   invoiceTerms: "",
   invoiceBankGatewayId: "",
+  invoiceDeliveryTerms: "",
+  invoiceLogoUrl: "",
 }
 
 export default function AdminSettingsPage() {
@@ -114,6 +118,7 @@ export default function AdminSettingsPage() {
   const logoInputRef = useRef<HTMLInputElement>(null)
   const faviconInputRef = useRef<HTMLInputElement>(null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
+  const invoiceLogoInputRef = useRef<HTMLInputElement>(null)
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
 
@@ -159,6 +164,8 @@ export default function AdminSettingsPage() {
             returnWindowDays: s.returnWindowDays ?? DEFAULT_SETTINGS.returnWindowDays,
             invoiceTerms: s.invoiceTerms ?? "",
             invoiceBankGatewayId: s.invoiceBankGatewayId ?? "",
+            invoiceDeliveryTerms: s.invoiceDeliveryTerms ?? "",
+            invoiceLogoUrl: s.invoiceLogoUrl ?? "",
           })
         }
       })
@@ -166,7 +173,7 @@ export default function AdminSettingsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleUpload = async (file: File, field: "logoUrl" | "faviconUrl" | "heroBannerUrl") => {
+  const handleUpload = async (file: File, field: "logoUrl" | "faviconUrl" | "heroBannerUrl" | "invoiceLogoUrl") => {
     const formData = new FormData()
     formData.append("file", file)
     const res = await fetch("/api/settings/upload", {
@@ -209,6 +216,8 @@ export default function AdminSettingsPage() {
         returnWindowDays: String(Math.max(0, Math.floor(Number(settings.returnWindowDays) || 0))),
         invoiceTerms: settings.invoiceTerms,
         invoiceBankGatewayId: settings.invoiceBankGatewayId,
+        invoiceDeliveryTerms: settings.invoiceDeliveryTerms,
+        invoiceLogoUrl: settings.invoiceLogoUrl,
       }
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -626,6 +635,61 @@ export default function AdminSettingsPage() {
 
         {activeTab === "invoice" && (
           <div className="space-y-6">
+            <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Invoice logo</label>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                Printed at the top left of every invoice. Leave empty to use the site logo from Branding.
+              </p>
+              <div className="mt-3 flex items-center gap-4">
+                {settings.invoiceLogoUrl ? (
+                  <div className="relative">
+                    <img src={settings.invoiceLogoUrl} alt="Invoice logo" className="h-16 w-auto max-w-[12rem] object-contain border border-gray-200 dark:border-gray-700 rounded-lg p-1 bg-white" />
+                    <button
+                      type="button"
+                      onClick={() => update("invoiceLogoUrl", "")}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
+                      aria-label="Remove invoice logo"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-16 w-24 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500">
+                    <ImageIcon size={24} />
+                  </div>
+                )}
+                <input
+                  ref={invoiceLogoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { if (e.target.files?.[0]) handleUpload(e.target.files[0], "invoiceLogoUrl"); e.target.value = "" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => invoiceLogoInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                >
+                  <Upload size={14} /> {settings.invoiceLogoUrl ? "Replace logo" : "Upload logo"}
+                </button>
+              </div>
+            </div>
+            <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <label htmlFor="invoiceDeliveryTerms" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Terms of Delivery
+              </label>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                Printed in the &quot;Terms of Delivery&quot; box at the top of every invoice, e.g. &quot;Door delivery within 7 days&quot;.
+              </p>
+              <textarea
+                id="invoiceDeliveryTerms"
+                rows={3}
+                maxLength={500}
+                value={settings.invoiceDeliveryTerms}
+                onChange={(e) => update("invoiceDeliveryTerms", e.target.value)}
+                className="mt-3 w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm"
+              />
+            </div>
             <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
               <label htmlFor="invoiceTerms" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Terms &amp; Conditions

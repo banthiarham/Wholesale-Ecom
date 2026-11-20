@@ -9,8 +9,9 @@ import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LoyaltyEarningService } from '../loyalty/loyalty-earning.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
-import { CartItemContext, RuleEvaluationResult } from '../rules/rules-engine.service';
+import { CartItemContext, RuleEvaluationResult, RulesEngineService, computeRuleAdjustments } from '../rules/rules-engine.service';
 import { SettingsService } from '../settings/settings.service';
+import { PaymentReceiptsService } from './payment-receipts.service';
 import { OrderStatus, PaymentStatus, DeliveryStatus, RefundStatus } from '@prisma/client';
 
 const ORDER_STATUS_MESSAGES: Partial<Record<OrderStatus, { title: string; message: (orderNumber: string) => string }>> = {
@@ -43,6 +44,8 @@ export class OrdersService {
     private rulesEnforcement: RulesEnforcementService,
     private settingsService: SettingsService,
     private pricingService: PricingService,
+    private rulesEngine: RulesEngineService,
+    private paymentReceipts: PaymentReceiptsService,
   ) {}
 
   /**
@@ -53,7 +56,7 @@ export class OrdersService {
    * wallet/loyalty redemption are intentionally NOT folded in here — they stay
    * checkout-preview-only, unchanged from current behavior.
    */
-  private async computeAmountBreakdown(subtotal: number, discountAmount: number, ruleResult: RuleEvaluationResult) {
+  private async computeAmountBreakdown(subtotal: number, discountAmount: number, ruleResult: RuleEvaluationResult, extraCharges = 0) {
     // Split into CGST/SGST/IGST per matched rule (see RulesEngineService.evaluateTaxRule) —
     // cgst+sgst+igst always equals the same total the old flat `taxRate`-based sum produced,
     // GST is never charged twice on top of its own components.
@@ -61,7 +64,8 @@ export class OrdersService {
     const sgstAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.sgstRate) / 100, 0);
     const igstAmount = ruleResult.taxes.reduce((sum, tax) => sum + (subtotal * tax.igstRate) / 100, 0);
     const taxAmount = cgstAmount + sgstAmount + igstAmount;
-    const shippingAmount = ruleResult.shipping?.cost ?? 0;
+    // Rule extra charges have no column of their own; they are billed with shipping (and listed in the order notes).
+    const shippingAmount = (ruleResult.shipping?.cost ?? 0) + extraCharges;
 
     const rawTotal = Math.max(0, subtotal - discountAmount) + taxAmount + shippingAmount;
 
@@ -188,9 +192,13 @@ export class OrdersService {
       userRole: (user as any)?.effectiveRole || (user as any)?.roleRel?.name || user?.role || undefined,
       cartItems: cartItemsContext,
       subtotal: totalAmount,
+      paymentMethod: data.paymentMethod || undefined,
       shippingRegion: data.shippingAddress?.state || undefined,
       sellerState: await this.getSellerState(),
     });
+    // Offer, quantity, cart and payment-method discounts (and extra charges) from the dynamic rules —
+    // the same figures the cart, checkout and create-order pages show the shopper.
+    const ruleAdjustments = computeRuleAdjustments(cartItemsContext, ruleResult);
 
     // Free (buy X get Y) lines are only ordered as far as the offer still allows right now: an
     // offer that expired, was switched off, or whose buy quantity is no longer met since the cart
@@ -270,11 +278,22 @@ export class OrdersService {
 
     totalAmount = Math.max(0, totalAmount - bankOfferDiscount);
 
-    const combinedNotes = appliedBankOffer
-      ? [data.notes, `Bank offer applied: ${appliedBankOffer.name} (-₹${bankOfferDiscount.toFixed(2)})`].filter(Boolean).join(' | ')
-      : data.notes;
+    const ruleDiscount = Math.min(ruleAdjustments.totalDiscount, Math.max(0, subtotal - couponDiscount - bankOfferDiscount));
+    const offerNames = [
+      ...new Set([
+        ...ruleAdjustments.lines.flatMap((l) => [l.offerRuleName, l.qtyRuleName]),
+        ruleAdjustments.cartDiscountRuleName,
+        ruleAdjustments.paymentDiscountRuleName,
+      ].filter(Boolean) as string[]),
+    ];
+    const combinedNotes = [
+      data.notes,
+      appliedBankOffer ? `Bank offer applied: ${appliedBankOffer.name} (-₹${bankOfferDiscount.toFixed(2)})` : null,
+      ruleDiscount > 0 ? `Offers applied: ${offerNames.join(', ')} (-₹${ruleDiscount.toFixed(2)})` : null,
+      ruleAdjustments.extraCharges > 0 ? `Extra charges: ${ruleResult.extraCharges.map((e) => `${e.chargeLabel} ₹${e.chargeAmount.toFixed(2)}`).join(', ')} (included in shipping)` : null,
+    ].filter(Boolean).join(' | ') || undefined;
 
-    const breakdown = await this.computeAmountBreakdown(subtotal, couponDiscount + bankOfferDiscount, ruleResult);
+    const breakdown = await this.computeAmountBreakdown(subtotal, couponDiscount + bankOfferDiscount + ruleDiscount, ruleResult, ruleAdjustments.extraCharges);
 
     const order = await this.prisma.order.create({
       data: {
@@ -491,7 +510,7 @@ export class OrdersService {
       where: { id },
       include: {
         items: { include: { product: { select: { id: true, title: true, thumbnail: true, sku: true } } } },
-        payment: { include: { refunds: { orderBy: { createdAt: 'desc' } } } },
+        payment: { include: { refunds: { orderBy: { createdAt: 'desc' } }, receipts: { orderBy: [{ receivedAt: 'desc' }, { createdAt: 'desc' }] } } },
         user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, companyName: true, gstin: true } },
         deliveryPartner: true,
         deliveryTracking: { include: { events: { orderBy: { occurredAt: 'desc' } } } },
@@ -501,6 +520,8 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     if (userId && order.userId !== userId) throw new NotFoundException('Order not found');
 
+    // Paid so far / balance due, from part-payment receipts (or the payment status when there are none).
+    (order as any).paymentSummary = PaymentReceiptsService.summarize(Number(order.totalAmount), order.payment as any);
     return this.withVariantDetails(order);
   }
 
@@ -668,21 +689,126 @@ export class OrdersService {
     return { subtotal, taxAmount, cgstAmount, sgstAmount, igstAmount, shippingAmount, discountAmount, roundOffAmount, totalAmount };
   }
 
+  /** A manual invoice number must not already be on another order. */
+  private async assertInvoiceNumberFree(invoiceNumber: string | undefined, orderId?: string) {
+    const value = invoiceNumber?.trim();
+    if (!value) return;
+    const taken = await this.prisma.order.findFirst({
+      where: { invoiceNumber: value, ...(orderId ? { id: { not: orderId } } : {}) },
+      select: { orderNumber: true },
+    });
+    if (taken) throw new BadRequestException(`Invoice number "${value}" is already used by order #${taken.orderNumber.slice(0, 8).toUpperCase()}`);
+  }
+
   /** The price each line would cost this customer for its quantity: their role price, contract price, tier or base price. */
-  async adminQuotePrices(userId: string, items: { productId: string; variantId?: string | null; quantity: number }[]) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('Customer not found');
-    const prices: { productId: string; variantId: string | null; unitPrice: number; appliedRule: string; roleName: string | null }[] = [];
-    for (const it of items) {
+  async adminQuotePrices(
+    userId: string | undefined,
+    items: { productId: string; variantId?: string | null; quantity: number; offerChoice?: string; unitPrice?: number | null }[],
+  ) {
+    // No customer picked yet: quote the general price (base / bulk tier) and the offers open to everyone.
+    const user = userId ? await this.prisma.user.findUnique({ where: { id: userId }, include: { roleRel: true } }) : null;
+    if (userId && !user) throw new NotFoundException('Customer not found');
+    const userRole = user ? (user as any).roleRel?.name || user.role || undefined : undefined;
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    // 1) This customer's own price for each line (contract / role / tier / base) and the quantity breaks after it.
+    const lines = await Promise.all(items.map(async (it) => {
+      const qty = Math.max(1, Math.floor(it.quantity || 1));
       try {
-        const p = await this.pricingService.calculateEffectivePrice(it.productId, Math.max(1, Math.floor(it.quantity || 1)), userId, it.variantId || undefined);
-        prices.push({ productId: it.productId, variantId: it.variantId || null, unitPrice: Math.round(p.finalPrice * 100) / 100, appliedRule: p.appliedRule, roleName: p.appliedRoleName });
+        const p = await this.pricingService.calculateEffectivePrice(it.productId, qty, user ? user.id : undefined, it.variantId || undefined);
+        const product = await this.prisma.product.findUnique({
+          where: { id: it.productId },
+          select: { categoryId: true, title: true, tierPrices: { select: { minQty: true, price: true }, orderBy: { minQty: 'asc' } } },
+        });
+        const tiers = p.roleTiers?.length
+          ? p.roleTiers.map((t) => ({ minQty: t.minQty, price: Number(t.price) }))
+          : it.variantId ? [] : (product?.tierPrices || []).map((t) => ({ minQty: t.minQty, price: Number(t.price) }));
+        return {
+          productId: it.productId,
+          variantId: it.variantId || null,
+          categoryId: product?.categoryId || undefined,
+          quantity: qty,
+          unitPrice: round2(p.finalPrice),
+          listPrice: round2(p.basePrice),
+          appliedRule: p.appliedRule,
+          roleName: p.appliedRoleName,
+          breaks: tiers.filter((t) => t.minQty > qty && t.price < p.finalPrice).map((t) => ({ minQty: t.minQty, price: round2(t.price) })),
+          // Offers are worked out on the price the line actually has (a price the admin typed wins).
+          basis: it.unitPrice != null && Number.isFinite(Number(it.unitPrice)) ? Number(it.unitPrice) : p.finalPrice,
+          offerChoice: it.offerChoice || undefined,
+          ok: true,
+        };
       } catch {
         // Unknown product / variant: the editor keeps whatever price the line already has.
-        prices.push({ productId: it.productId, variantId: it.variantId || null, unitPrice: null as any, appliedRule: 'base', roleName: null });
+        return { productId: it.productId, variantId: it.variantId || null, quantity: qty, unitPrice: null as any, ok: false } as any;
+      }
+    }));
+
+    // 2) The dynamic rules for this customer and these lines: which offer each product gets and what it saves.
+    const valid = lines.filter((l) => l.ok);
+    const ctx: CartItemContext[] = valid.map((l) => ({ productId: l.productId, categoryId: l.categoryId, quantity: l.quantity, unitPrice: l.basis, offerChoice: l.offerChoice }));
+    const subtotal = ctx.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
+    const result = await this.rulesEngine.evaluateRules({ userId: user?.id, userRole, cartItems: ctx, subtotal, sellerState: await this.getSellerState() });
+    const adj = computeRuleAdjustments(ctx, result);
+
+    const totalQty = new Map<string, number>();
+    for (const l of valid) totalQty.set(l.productId, (totalQty.get(l.productId) || 0) + l.quantity);
+    const offersByProduct = new Map<string, Awaited<ReturnType<RulesEngineService['getProductOffers']>>>();
+    for (const pid of totalQty.keys()) {
+      const choice = valid.find((l) => l.productId === pid && l.offerChoice)?.offerChoice;
+      offersByProduct.set(pid, await this.rulesEngine.getProductOffers({ productId: pid, quantity: totalQty.get(pid), offerChoice: choice }));
+    }
+
+    let vi = 0;
+    const prices = lines.map((l) => {
+      if (!l.ok) return { productId: l.productId, variantId: l.variantId, unitPrice: null, appliedRule: 'base', roleName: null };
+      const a = adj.lines[vi++];
+      const o = offersByProduct.get(l.productId) || { offers: [], appliedId: null };
+      const offerPerUnit = round2(a.offerDiscount / l.quantity);
+      const qtyPerUnit = round2(a.qtyDiscount / l.quantity);
+      return {
+        productId: l.productId,
+        variantId: l.variantId,
+        unitPrice: l.unitPrice,
+        listPrice: l.listPrice,
+        appliedRule: l.appliedRule,
+        roleName: l.roleName,
+        breaks: l.breaks,
+        offers: o.offers,
+        appliedOfferId: o.appliedId,
+        offerDiscountPerUnit: offerPerUnit,
+        offerRuleName: a.offerRuleName,
+        qtyDiscountPerUnit: qtyPerUnit,
+        qtyRuleName: a.qtyRuleName,
+        /** The customer's price with the applied offer taken off. */
+        netUnitPrice: round2(Math.max(0, l.basis - offerPerUnit - qtyPerUnit)),
+      };
+    });
+
+    // Free items earned (buy X get Y) and an order-level discount, for the admin to add if they want.
+    const freeTitles = new Map<string, string>();
+    for (const b of result.bogo) {
+      if (!freeTitles.has(b.freeProductId)) {
+        const fp = await this.prisma.product.findUnique({ where: { id: b.freeProductId }, select: { title: true } });
+        freeTitles.set(b.freeProductId, fp?.title || 'Free item');
       }
     }
-    return { prices };
+    const freeItems = result.bogo
+      .map((b) => ({
+        ruleName: b.ruleName,
+        buyProductId: b.buyProductId,
+        freeProductId: b.freeProductId,
+        freeTitle: freeTitles.get(b.freeProductId) || 'Free item',
+        quantity: Math.floor((totalQty.get(b.buyProductId) || 0) / Math.max(1, b.buyQuantity)) * Math.max(1, b.freeQuantity || 1),
+      }))
+      .filter((f) => f.quantity > 0);
+
+    return {
+      prices,
+      freeItems,
+      cartDiscount: adj.cartDiscount > 0 ? { amount: adj.cartDiscount, ruleName: adj.cartDiscountRuleName } : null,
+      roleName: user ? (user as any).roleRel?.label || null : null,
+    };
   }
 
   /** GST rates (% of subtotal) and the default shipping charge the rules give an admin-made order for this customer / state. */
@@ -709,6 +835,7 @@ export class OrdersService {
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Customer not found');
 
+    await this.assertInvoiceNumberFree(dto.invoiceNumber);
     const rows = await this.buildAdminItemRows(dto.items);
     await this.assertStockAvailable(rows);
     const subtotal = rows.reduce((sum, r) => sum + r.totalPrice, 0);
@@ -732,6 +859,7 @@ export class OrdersService {
         shippingAddress: dto.shippingAddress as any,
         billingAddress: dto.billingAddress as any,
         notes: dto.notes || null,
+        invoiceNumber: dto.invoiceNumber?.trim() || null,
         items: { create: rows.map(({ id: _id, ...r }) => r) },
         // Every order carries a payment record so its status can be tracked and changed; admin-made orders start as Cash on Delivery.
         payment: { create: { provider: 'COD', amount: amounts.totalAmount, status: PaymentStatus.PENDING } },
@@ -753,6 +881,7 @@ export class OrdersService {
     const order = await this.prisma.order.findUnique({ where: { id }, include: { items: true, payment: true } });
     if (!order) throw new NotFoundException('Order not found');
     if (order.status === OrderStatus.CANCELLED) throw new BadRequestException('A cancelled order cannot be edited');
+    await this.assertInvoiceNumberFree(dto.invoiceNumber, id);
 
     const existing = new Map(order.items.map((i) => [i.id, i]));
     for (const item of dto.items) {
@@ -803,13 +932,17 @@ export class OrdersService {
           shippingAddress: dto.shippingAddress as any,
           billingAddress: dto.billingAddress as any,
           ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
+          ...(dto.invoiceNumber !== undefined ? { invoiceNumber: dto.invoiceNumber.trim() || null } : {}),
         },
       });
-      // A payment that has not been captured yet should ask for the new amount.
-      if (order.payment && order.payment.status !== PaymentStatus.CAPTURED && order.payment.status !== PaymentStatus.REFUNDED) {
+      // A payment that has not been captured yet should ask for the new amount — as should one that only counts as
+      // paid because its part-payment receipts covered the old total.
+      const paidByReceipts = !!((order.payment?.metadata as any) || {}).paidByReceipts;
+      if (order.payment && order.payment.status !== PaymentStatus.REFUNDED && (order.payment.status !== PaymentStatus.CAPTURED || paidByReceipts)) {
         await tx.payment.update({ where: { id: order.payment.id }, data: { amount: amounts.totalAmount } });
       }
     });
+    if (order.payment) await this.paymentReceipts.recompute(order.payment.id);
 
     if (reservationHeld) {
       const keys = new Set([...oldQty.keys(), ...newQty.keys()]);

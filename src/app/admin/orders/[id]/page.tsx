@@ -1,5 +1,6 @@
 "use client"
 
+import PaymentReceipts from "@/components/orders/PaymentReceipts"
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
@@ -25,6 +26,7 @@ interface OrderItem {
 interface OrderDetail {
   id: string
   orderNumber: string
+  invoiceNumber?: string | null
   status: string
   totalAmount: number
   subtotal?: number | null
@@ -269,7 +271,7 @@ export default function AdminOrderDetailPage() {
             <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Order #{order.orderNumber}</h1>
             <AdminStatusBadge status={order.status} {...orderStatusBadgeProps(order.status)} />
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Placed on {new Date(order.createdAt).toLocaleString()}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Placed on {new Date(order.createdAt).toLocaleString()}{order.invoiceNumber ? <> · Invoice No. <span className="font-medium text-gray-700 dark:text-gray-300">{order.invoiceNumber}</span></> : null}</p>
         </div>
         <div className="flex items-center gap-2">
         {order.status !== "CANCELLED" && <Link
@@ -487,6 +489,10 @@ export default function AdminOrderDetailPage() {
               </div>
               {order.payment?.providerRef && <div className="flex justify-between gap-2"><span className="text-gray-600 dark:text-gray-400">Reference</span><span className="font-mono text-xs text-gray-900 dark:text-gray-100 truncate">{order.payment.providerRef}</span></div>}
               <div className="flex justify-between border-t border-gray-100 dark:border-gray-800 pt-2 font-bold"><span className="text-gray-900 dark:text-gray-100">Total</span><span className="text-primary-700 dark:text-primary-400">{formatPrice(Number(order.totalAmount))}</span></div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <PaymentReceipts orderId={order.id} mode="admin" orderStatus={order.status} onChange={() => loadOrder()} />
             </div>
 
             {refund && (

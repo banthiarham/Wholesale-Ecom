@@ -34,12 +34,33 @@ interface Line {
   variants: ProductHit["variants"]
   hasVariants: boolean
   quantity: string
+  /** Price per unit excluding GST — what is saved on the order. */
   unitPrice: string
+  /** The GST-inclusive price the admin typed while "Prices include GST" was on; unitPrice is derived from it. */
+  inclPrice?: string
   /** The admin typed this price, so role pricing must not overwrite it. */
   priceTouched?: boolean
   /** Units in stock when the line was added (unknown for lines loaded from an existing order — the server checks those). */
   available?: number
+  /** Offer picked for this product: a rule id, "none", or unset = best offer automatically. */
+  offerChoice?: string
+  /** Price details and offers for this customer, from the last quote. */
+  quote?: Quote
+  /** A free (buy X get Y) line added from an offer. */
+  free?: boolean
 }
+
+interface QuoteOffer { ruleId: string; name: string; summary: string; condition: string | null; unitsNeeded: number; eligible: boolean; savings: number; validUntil: string | null }
+interface Quote {
+  unitPrice: number | null; listPrice?: number; appliedRule?: string; roleName?: string | null
+  breaks?: { minQty: number; price: number }[]
+  offers?: QuoteOffer[]; appliedOfferId?: string | null
+  offerDiscountPerUnit?: number; offerRuleName?: string | null; qtyDiscountPerUnit?: number; qtyRuleName?: string | null
+  netUnitPrice?: number
+}
+interface FreeItem { ruleName: string; buyProductId: string; freeProductId: string; freeTitle: string; quantity: number }
+
+const PRICE_SOURCE: Record<string, string> = { contract: "Contract price", role: "Role price", tier: "Bulk tier price", discount: "Sale price" }
 
 const num = (v: string) => (v === "" || isNaN(Number(v)) ? 0 : Number(v))
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -138,6 +159,12 @@ export default function OrderEditor({ order }: { order?: any }) {
   const [shippingTouched, setShippingTouched] = useState(isEdit)
   const [totalOverride, setTotalOverride] = useState<string | null>(null)
   const [notes, setNotes] = useState<string>(order?.notes || "")
+  const [freeItems, setFreeItems] = useState<FreeItem[]>([])
+  const [cartOffer, setCartOffer] = useState<{ amount: number; ruleName: string | null } | null>(null)
+  const [customerRole, setCustomerRole] = useState<string | null>(null)
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(order?.invoiceNumber || "")
+  /** Price inputs take GST-inclusive prices; GST is then taken out of the price instead of added on top. */
+  const [inclGst, setInclGst] = useState(false)
   const [rates, setRates] = useState<{ cgst: number; sgst: number; igst: number }>(() => {
     const old = Number(order?.subtotal ?? 0)
     const r = (a: any) => (old > 0 ? (Number(a ?? 0) / old) * 100 : 0)
@@ -146,6 +173,26 @@ export default function OrderEditor({ order }: { order?: any }) {
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+
+  const gstPct = round2(rates.cgst + rates.sgst + rates.igst)
+  const gstFactor = 1 + gstPct / 100
+  /** What the price box shows: the excl.-GST price, or with the toggle on the GST-inclusive one. */
+  const shownPrice = (l: Line) => (inclGst ? l.inclPrice ?? (l.unitPrice === "" ? "" : String(round2(num(l.unitPrice) * gstFactor))) : l.unitPrice)
+
+  // The GST rate can change (other state, other customer): keep the inclusive prices typed and re-derive the excl. price.
+  useEffect(() => {
+    setLines((prev) => prev.map((l) => (l.inclPrice !== undefined ? { ...l, unitPrice: l.inclPrice === "" ? "" : String(num(l.inclPrice) / gstFactor) } : l)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gstPct])
+
+  const toggleInclGst = () => {
+    if (inclGst) {
+      // Back to excl.-GST prices: settle each derived price at 2 decimals, as it will be saved.
+      setLines((prev) => prev.map((l) => (l.inclPrice !== undefined ? { ...l, unitPrice: l.unitPrice === "" ? "" : String(round2(num(l.unitPrice))), inclPrice: undefined } : l)))
+    }
+    setInclGst(!inclGst)
+    setTotalOverride(null)
+  }
 
   // Roles for the "new client" form.
   useEffect(() => {
@@ -199,28 +246,42 @@ export default function OrderEditor({ order }: { order?: any }) {
 
   // Prices follow the selected customer: their role price (or contract / tier / base price) for each line's quantity.
   // Lines of an existing order keep their saved price, and a price the admin typed is never overwritten.
-  const quoteKey = JSON.stringify([customer?.id, lines.map((l) => [l.key, l.productId, l.variantId, l.quantity, !!l.priceTouched, !!l.id])])
+  // Offers (dynamic rules) are worked out for every line too: the chosen offer is taken off the price of lines the
+  // admin has not priced by hand, and shown on the others.
+  const isPriced = (l: Line) => !!l.id || !!l.priceTouched
+  const quoteKey = JSON.stringify([customer?.id, lines.filter((l) => !l.free).map((l) => [l.key, l.productId, l.variantId, l.quantity, isPriced(l), l.offerChoice || "", isPriced(l) ? l.unitPrice : null])])
   useEffect(() => {
-    if (!customer) return
-    const todo = lines.filter((l) => !l.id && !l.priceTouched && l.productId)
-    if (todo.length === 0) return
+    // Without a client the quote still lists the offers, at the general (base / bulk tier) price.
+    const todo = lines.filter((l) => l.productId && !l.free)
+    if (todo.length === 0) { setFreeItems([]); setCartOffer(null); return }
     const t = setTimeout(() => {
       fetch("/api/orders/admin/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...auth },
         body: JSON.stringify({
-          userId: customer.id,
-          items: todo.map((l) => ({ productId: l.productId, variantId: l.variantId || undefined, quantity: Math.max(1, num(l.quantity)) })),
+          userId: customer?.id,
+          items: todo.map((l) => ({
+            productId: l.productId,
+            variantId: l.variantId || undefined,
+            quantity: Math.max(1, num(l.quantity)),
+            offerChoice: l.offerChoice || undefined,
+            unitPrice: isPriced(l) && l.unitPrice !== "" ? round2(num(l.unitPrice)) : undefined,
+          })),
         }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (!d?.prices) return
+          setFreeItems(d.freeItems || [])
+          setCartOffer(d.cartDiscount || null)
+          setCustomerRole(d.roleName || null)
           setLines((prev) => prev.map((l) => {
-            if (l.id || l.priceTouched) return l
             const i = todo.findIndex((x) => x.key === l.key)
-            const q = i >= 0 ? d.prices[i] : null
-            return q && q.unitPrice !== null && String(q.unitPrice) !== l.unitPrice ? { ...l, unitPrice: String(q.unitPrice) } : l
+            const q: Quote | null = i >= 0 ? d.prices[i] : null
+            if (!q) return l
+            if (isPriced(l) || q.unitPrice === null) return { ...l, quote: q }
+            const price = String(q.netUnitPrice ?? q.unitPrice)
+            return price !== l.unitPrice ? { ...l, quote: q, unitPrice: price, inclPrice: undefined } : { ...l, quote: q }
           }))
         })
         .catch(() => {})
@@ -228,6 +289,14 @@ export default function OrderEditor({ order }: { order?: any }) {
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteKey])
+
+  const addFreeItem = (f: FreeItem) => {
+    setLines((prev) => [
+      ...prev.filter((l) => !(l.free && l.productId === f.freeProductId)),
+      { key: newKey(), productId: f.freeProductId, title: f.freeTitle, sku: null, variantId: "", variants: [], hasVariants: false, quantity: String(f.quantity), unitPrice: "0", priceTouched: true, free: true },
+    ])
+    resetTotal()
+  }
 
   // New order: GST rates + default shipping come from the tax / shipping rules for this customer and state.
   const pricingKey = JSON.stringify([customer?.id, shipping.state, lines.map((l) => [l.productId, l.quantity, l.unitPrice])])
@@ -259,14 +328,20 @@ export default function OrderEditor({ order }: { order?: any }) {
   const resetTotal = () => setTotalOverride(null)
 
   const totals = useMemo(() => {
-    const subtotal = round2(lines.reduce((s, l) => s + num(l.quantity) * num(l.unitPrice), 0))
+    // Excl.-GST prices are saved at 2 decimals, so add them up the same way the server does.
+    const subtotal = round2(lines.reduce((s, l) => s + num(l.quantity) * round2(num(l.unitPrice)), 0))
     const cgst = round2((subtotal * rates.cgst) / 100)
     const sgst = round2((subtotal * rates.sgst) / 100)
     const igst = round2((subtotal * rates.igst) / 100)
-    const tax = cgst + sgst + igst
-    const raw = round2(Math.max(0, subtotal - num(discount)) + tax + num(shippingFee))
-    return { subtotal, tax, raw, total: totalOverride !== null ? num(totalOverride) : raw }
-  }, [lines, rates, discount, shippingFee, totalOverride])
+    const tax = round2(cgst + sgst + igst)
+    const calculated = round2(Math.max(0, subtotal - num(discount)) + tax + num(shippingFee))
+    // With GST-inclusive prices the total is what the admin priced the goods at: GST is inside it, never added again.
+    // Splitting a price into price + GST can be off by a few paise; that gap is shown (and saved) as round off.
+    const inclTotal = inclGst ? round2(lines.reduce((s, l) => s + num(l.quantity) * num(shownPrice(l)), 0)) : 0
+    const raw = inclGst ? round2(Math.max(0, inclTotal - num(discount)) + num(shippingFee)) : calculated
+    return { subtotal, tax, calculated, roundOff: round2(raw - calculated), raw, total: totalOverride !== null ? num(totalOverride) : raw }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, rates, discount, shippingFee, totalOverride, inclGst])
 
   const updateLine = (key: string, patch: Partial<Line>) => {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -369,7 +444,9 @@ export default function OrderEditor({ order }: { order?: any }) {
       notes: notes.trim() || undefined,
     }
     if (!isEdit) body.userId = customer!.id
+    if (isEdit || invoiceNumber.trim()) body.invoiceNumber = invoiceNumber.trim()
     if (totalOverride !== null) body.totalAmount = round2(num(totalOverride))
+    else if (inclGst && totals.roundOff !== 0) body.totalAmount = totals.raw
 
     setSaving(true)
     try {
@@ -429,6 +506,7 @@ export default function OrderEditor({ order }: { order?: any }) {
                 <div className="text-sm">
                   <p className="font-medium text-gray-900 dark:text-gray-100">{customerName(customer)}</p>
                   <p className="text-gray-500">{customer.email}{customer.companyName ? ` · ${customer.companyName}` : ""}</p>
+                  {customerRole && <p className="mt-1 inline-flex rounded-full bg-primary-50 dark:bg-primary-900/20 px-2 py-0.5 text-xs font-medium text-primary-700 dark:text-primary-300">{customerRole} pricing</p>}
                 </div>
                 <button type="button" onClick={() => setCustomer(null)} className="p-1.5 text-gray-400 hover:text-red-600" title="Change client"><X size={16} /></button>
               </div>
@@ -490,12 +568,36 @@ export default function OrderEditor({ order }: { order?: any }) {
 
       {/* Products */}
       <div className={card}>
-        <h2 className={h2}>Products</h2>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className={h2}>Products</h2>
+          <div className="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-400">
+            <span id="incl-gst-label">Prices include GST{gstPct > 0 ? ` (${gstPct}%)` : ""}</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={inclGst}
+              aria-labelledby="incl-gst-label"
+              onClick={toggleInclGst}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${inclGst ? "bg-primary-600" : "bg-gray-300 dark:bg-gray-600"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${inclGst ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
+        {inclGst && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+            {gstPct > 0
+              ? `Enter prices with GST included. Each price is split into the price before GST plus ${gstPct}% GST, so GST is not added a second time.`
+              : !isEdit && !customer
+                ? "Select a client to work out the GST rate."
+                : "No GST applies to this order, so prices with and without GST are the same."}
+          </p>
+        )}
         {lines.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-gray-500 dark:text-gray-400 text-xs">
-                <tr><th className="pb-2 pr-3 font-medium">Product</th><th className="pb-2 pr-3 font-medium w-24">Qty</th><th className="pb-2 pr-3 font-medium w-32">Price (excl. GST)</th><th className="pb-2 pr-3 font-medium w-28 text-right">Line total</th><th className="pb-2 w-8"></th></tr>
+                <tr><th className="pb-2 pr-3 font-medium">Product</th><th className="pb-2 pr-3 font-medium w-24">Qty</th><th className="pb-2 pr-3 font-medium w-36">{inclGst ? "Price (incl. GST)" : "Price (excl. GST)"}</th><th className="pb-2 pr-3 font-medium w-28 text-right">Line total</th><th className="pb-2 w-8"></th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {lines.map((l) => (
@@ -507,7 +609,7 @@ export default function OrderEditor({ order }: { order?: any }) {
                           value={l.variantId}
                           onChange={(e) => {
                             const v = l.variants.find((x) => x.id === e.target.value)
-                            updateLine(l.key, { variantId: e.target.value, ...(v ? { unitPrice: String(v.price), available: v.available } : {}) })
+                            updateLine(l.key, { variantId: e.target.value, ...(v ? { unitPrice: String(v.price), inclPrice: undefined, available: v.available } : {}) })
                           }}
                           className={`${inputCls} mt-1`}
                         >
@@ -517,13 +619,34 @@ export default function OrderEditor({ order }: { order?: any }) {
                       ) : (
                         l.sku && <p className="text-xs text-gray-500">SKU: {l.sku}</p>
                       )}
+                      {l.free && <p className="mt-1 inline-flex rounded bg-purple-50 dark:bg-purple-900/20 px-1.5 py-0.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300">FREE — from offer</p>}
+                      {!l.free && l.quote && <LineOffers line={l} hasClient={!!customer} onChoose={(choice) => updateLine(l.key, { offerChoice: choice })} onUseOfferPrice={() => updateLine(l.key, { priceTouched: false, inclPrice: undefined })} />}
                     </td>
                     <td className="py-2 pr-3">
                       <input type="number" min={1} step={1} value={l.quantity} onChange={(e) => updateLine(l.key, { quantity: e.target.value })} className={`${inputCls} ${l.available !== undefined && num(l.quantity) > Math.max(0, l.available) ? "!border-red-400" : ""}`} />
                       {l.available !== undefined && num(l.quantity) > Math.max(0, l.available) && <p className="text-xs text-red-500 mt-1">{l.available <= 0 ? "Out of stock" : `Only ${l.available} in stock`}</p>}
                     </td>
-                    <td className="py-2 pr-3"><input type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => updateLine(l.key, { unitPrice: e.target.value, priceTouched: true })} className={inputCls} /></td>
-                    <td className="py-2 pr-3 text-right font-medium text-gray-900 dark:text-gray-100 pt-4">{formatPrice(round2(num(l.quantity) * num(l.unitPrice)))}</td>
+                    <td className="py-2 pr-3">
+                      <input
+                        type="number" min={0} step="0.01"
+                        value={shownPrice(l)}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (inclGst) updateLine(l.key, { inclPrice: v, unitPrice: v === "" ? "" : String(num(v) / gstFactor), priceTouched: true })
+                          else updateLine(l.key, { unitPrice: v, inclPrice: undefined, priceTouched: true })
+                        }}
+                        className={inputCls}
+                      />
+                      {inclGst && gstPct > 0 && l.unitPrice !== "" && (
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 whitespace-nowrap">
+                          {formatPrice(round2(num(l.unitPrice)))} + {formatPrice(round2(num(shownPrice(l)) - round2(num(l.unitPrice))))} GST
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-right font-medium text-gray-900 dark:text-gray-100 pt-4">
+                      {formatPrice(round2(num(l.quantity) * num(shownPrice(l))))}
+                      {inclGst && gstPct > 0 && <span className="block text-[11px] font-normal text-gray-500 dark:text-gray-400">incl. GST</span>}
+                    </td>
                     <td className="py-2 pt-3"><button type="button" onClick={() => { setLines((p) => p.filter((x) => x.key !== l.key)); resetTotal() }} className="p-1.5 text-gray-400 hover:text-red-600" title="Remove"><Trash2 size={16} /></button></td>
                   </tr>
                 ))}
@@ -560,6 +683,19 @@ export default function OrderEditor({ order }: { order?: any }) {
         </div>
       </div>
 
+      {freeItems.filter((f) => !lines.some((l) => l.free && l.productId === f.freeProductId && num(l.quantity) === f.quantity)).length > 0 && (
+        <div className="admin-card-static p-4 space-y-2 -mt-3 border border-purple-100 dark:border-purple-900/40">
+          {freeItems.filter((f) => !lines.some((l) => l.free && l.productId === f.freeProductId && num(l.quantity) === f.quantity)).map((f) => (
+            <div key={f.ruleName + f.freeProductId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="text-purple-800 dark:text-purple-300"><b>{f.ruleName}:</b> {f.quantity} × {f.freeTitle} free</span>
+              <button type="button" onClick={() => addFreeItem(f)} className="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700">
+                {lines.some((l) => l.free && l.productId === f.freeProductId) ? "Update free items" : "Add free items"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Addresses */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className={card}>
@@ -582,13 +718,26 @@ export default function OrderEditor({ order }: { order?: any }) {
         <h2 className={h2}>Order summary</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-3">
+            <FormField label="Invoice number">
+              <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} maxLength={50} placeholder="Leave empty to use the order number" className={inputCls} />
+              <p className="text-xs text-gray-400">Printed as the Invoice No. on this order&apos;s invoice.</p>
+            </FormField>
             <FormField label="Notes"><textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} /></FormField>
           </div>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Subtotal</span><span>{formatPrice(totals.subtotal)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">{inclGst ? "Subtotal (excl. GST)" : "Subtotal"}</span><span>{formatPrice(totals.subtotal)}</span></div>
             <div className="flex items-center justify-between gap-3"><span className="text-gray-600 dark:text-gray-400">Discount (₹)</span><input type="number" min={0} step="0.01" value={discount} onChange={(e) => { setDiscount(e.target.value); resetTotal() }} className={`${inputCls} !w-32 text-right`} /></div>
+            {cartOffer && round2(num(discount)) !== round2(cartOffer.amount) && (
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2 text-xs text-green-800 dark:text-green-300">
+                <span>Offer available: <b>{cartOffer.ruleName || "Order discount"}</b> ({formatPrice(cartOffer.amount)})</span>
+                <button type="button" onClick={() => { setDiscount(String(round2(cartOffer.amount))); resetTotal() }} className="shrink-0 font-semibold underline">Apply</button>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3"><span className="text-gray-600 dark:text-gray-400">Shipping (₹)</span><input type="number" min={0} step="0.01" value={shippingFee} onChange={(e) => { setShippingFee(e.target.value); setShippingTouched(true); resetTotal() }} className={`${inputCls} !w-32 text-right`} /></div>
-            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">GST / taxes{rates.cgst + rates.sgst + rates.igst > 0 ? ` (${round2(rates.cgst + rates.sgst + rates.igst)}%)` : ""}</span><span>{formatPrice(totals.tax)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">GST / taxes{rates.cgst + rates.sgst + rates.igst > 0 ? ` (${round2(rates.cgst + rates.sgst + rates.igst)}%)` : ""}</span><span>{formatPrice(totals.tax)}{inclGst && totals.tax > 0 ? " (included)" : ""}</span></div>
+            {inclGst && totals.roundOff !== 0 && totalOverride === null && (
+              <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Round off</span><span>{totals.roundOff > 0 ? "+" : "-"}{formatPrice(Math.abs(totals.roundOff))}</span></div>
+            )}
             <div className="flex items-center justify-between gap-3 border-t border-gray-100 dark:border-gray-800 pt-2">
               <span className="font-bold text-gray-900 dark:text-gray-100">Total (₹)</span>
               <input
@@ -612,5 +761,64 @@ export default function OrderEditor({ order }: { order?: any }) {
         </button>
       </div>
     </form>
+  )
+}
+
+/** Under a product line: where the customer's price comes from, cheaper quantity breaks, and the offers on the product. */
+function LineOffers({ line, hasClient, onChoose, onUseOfferPrice }: { line: Line; hasClient: boolean; onChoose: (choice: string | undefined) => void; onUseOfferPrice: () => void }) {
+  const q = line.quote!
+  const offers = q.offers || []
+  const source = q.appliedRule && PRICE_SOURCE[q.appliedRule] ? (q.appliedRule === "role" && q.roleName ? `${q.roleName} price` : PRICE_SOURCE[q.appliedRule]) : null
+  const perUnit = round2((q.offerDiscountPerUnit || 0) + (q.qtyDiscountPerUnit || 0))
+  const appliedName = q.offerRuleName || q.qtyRuleName
+  // Only a new line priced by hand can switch back to the offer price; lines already on the order keep their saved price.
+  const priced = !line.id && !!line.priceTouched
+  const totalQty = Math.max(1, num(line.quantity))
+  return (
+    <div className="mt-1.5 space-y-1 text-xs">
+      {!hasClient && <p className="text-gray-400">General price shown — pick a client to see their own price.</p>}
+      {q.unitPrice != null && (
+        <p className="text-gray-500">
+          {source ? <span className="font-medium text-green-700 dark:text-green-400">{source}</span> : "Base price"}: {formatPrice(q.unitPrice)}
+          {q.listPrice != null && q.listPrice > q.unitPrice && <span className="ml-1 line-through">{formatPrice(q.listPrice)}</span>}
+          {(q.breaks || []).slice(0, 2).map((b) => <span key={b.minQty} className="ml-2 whitespace-nowrap">· {b.minQty}+ units: {formatPrice(b.price)}</span>)}
+        </p>
+      )}
+      {offers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={line.offerChoice || ""}
+            onChange={(e) => onChoose(e.target.value || undefined)}
+            className="max-w-full rounded-md border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 px-2 py-1 text-xs"
+            aria-label={`Offer for ${line.title}`}
+          >
+            <option value="">Best offer automatically ({offers.length} available)</option>
+            {offers.map((o) => (
+              <option key={o.ruleId} value={o.ruleId}>
+                {o.name} — {o.summary}{!o.eligible && o.unitsNeeded > 0 ? ` (needs ${totalQty + o.unitsNeeded}+ units)` : !o.eligible ? " (not available)" : ""}
+              </option>
+            ))}
+            <option value="none">No offer</option>
+          </select>
+          {appliedName && perUnit > 0 ? (
+            <span className="inline-flex items-center rounded bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 font-semibold text-green-700 dark:text-green-400">
+              {appliedName}: -{formatPrice(perUnit)}/unit
+            </span>
+          ) : q.appliedOfferId ? (
+            <span className="inline-flex items-center rounded bg-purple-50 dark:bg-purple-900/20 px-1.5 py-0.5 font-semibold text-purple-700 dark:text-purple-300">
+              {offers.find((o) => o.ruleId === q.appliedOfferId)?.name || "Offer"}: applied — free items below
+            </span>
+          ) : line.offerChoice && line.offerChoice !== "none" ? (
+            <span className="text-amber-600">Condition not met at this quantity</span>
+          ) : null}
+        </div>
+      )}
+      {priced && appliedName && perUnit > 0 && q.netUnitPrice != null && round2(num(line.unitPrice)) !== q.netUnitPrice && (
+        <p className="text-amber-700 dark:text-amber-400">
+          This line has a price set by hand, so the offer is not in it.{" "}
+          <button type="button" onClick={onUseOfferPrice} className="font-semibold underline">Use offer price ({formatPrice(q.netUnitPrice)})</button>
+        </p>
+      )}
+    </div>
   )
 }

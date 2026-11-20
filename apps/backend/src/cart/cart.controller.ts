@@ -69,6 +69,24 @@ export class CartController {
     return { cart, totals };
   }
 
+  @Get('summary')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Cart with the full price breakdown an order from it would get (offers, discounts, GST, shipping)' })
+  @ApiQuery({ name: 'state', required: false, description: 'Delivery state (decides CGST+SGST vs IGST and regional shipping)' })
+  @ApiQuery({ name: 'paymentMethod', required: false, description: 'Payment method, for payment-method discounts' })
+  @ApiHeader({ name: 'x-session-id', required: false, description: 'Guest cart session identifier' })
+  async getSummary(@Req() req: any, @Query('state') state?: string, @Query('paymentMethod') paymentMethod?: string) {
+    const sessionId = this.getSessionId(req);
+    const userId = this.resolveUserId(req);
+    const userRole = this.resolveUserRole(req);
+    let cart = await this.cartService.getOrCreateCart(userId, sessionId || undefined);
+    if (userId && cart.items.length > 0 && (await this.cartService.syncFreeItems(cart.id, userId, userRole))) {
+      cart = await this.cartService.getOrCreateCart(userId, sessionId || undefined);
+    }
+    const summary = await this.cartService.summarize(cart, userId, userRole, { shippingRegion: state, paymentMethod });
+    return { cart, summary };
+  }
+
   @Post()
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Add a product to the cart (guest or authenticated)' })

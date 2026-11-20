@@ -2,7 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { RulesEnforcementService } from '../rules/rules-enforcement.service';
-import { RulesEngineService, CartItemContext } from '../rules/rules-engine.service';
+import { RulesEngineService, CartItemContext, computeRuleAdjustments } from '../rules/rules-engine.service';
 import { SettingsService } from '../settings/settings.service';
 import { LIVE_VARIANTS_WHERE, variantLabel } from '../products/variant-sync';
 
@@ -806,6 +806,69 @@ export class CartService {
       total,
       taxes: ruleResult.taxes,
       shippingRule: ruleResult.shipping,
+    };
+  }
+
+  /**
+   * Everything an order built from this cart would cost, worked out the way order creation does:
+   * each line at the buyer's own price (contract / role / tier / base), the offer chosen for each
+   * product, quantity / cart / payment-method discounts, GST, shipping and extra charges.
+   */
+  async summarize(cart: any, userId?: string, userRole?: string, opts: { shippingRegion?: string; paymentMethod?: string } = {}) {
+    const paid = cart.items.filter((x: any) => (x.metadata as any)?.bogo !== true);
+    const lines: CartItemContext[] = paid.map((item: any) => ({
+      productId: item.productId,
+      categoryId: item.product?.categoryId || undefined,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      offerChoice: (item.metadata as any)?.offerChoice || undefined,
+    }));
+    const subtotal = cart.items.reduce((sum: number, item: any) => sum + Number(item.unitPrice) * item.quantity, 0);
+    const settings = await this.settingsService.findAll();
+    const ruleResult = await this.rulesEngine.evaluateRules({
+      userId,
+      userRole,
+      cartItems: lines,
+      subtotal,
+      paymentMethod: opts.paymentMethod || undefined,
+      shippingRegion: opts.shippingRegion || undefined,
+      sellerState: settings.businessState || undefined,
+    });
+    const adj = computeRuleAdjustments(lines, ruleResult);
+
+    const pct = (key: 'cgstRate' | 'sgstRate' | 'igstRate') => ruleResult.taxes.reduce((sum, t) => sum + (subtotal * t[key]) / 100, 0);
+    const cgstAmount = pct('cgstRate');
+    const sgstAmount = pct('sgstRate');
+    const igstAmount = pct('igstRate');
+    const tax = cgstAmount + sgstAmount + igstAmount;
+    const shipping = ruleResult.shipping?.cost ?? 0;
+    const discount = Math.min(adj.totalDiscount, subtotal);
+    const rawTotal = Math.max(0, subtotal - discount) + tax + shipping + adj.extraCharges;
+    const total = settings.roundOffEnabled === 'true' ? Math.round(rawTotal) : rawTotal;
+
+    return {
+      lines: paid.map((item: any, i: number) => ({ itemId: item.id, productId: item.productId, ...adj.lines[i] })),
+      subtotal,
+      productSavings: adj.productSavings,
+      qtySavings: adj.qtySavings,
+      cartDiscount: adj.cartDiscount ? { amount: adj.cartDiscount, ruleName: adj.cartDiscountRuleName } : null,
+      paymentDiscount: adj.paymentDiscount ? { amount: adj.paymentDiscount, ruleName: adj.paymentDiscountRuleName } : null,
+      extraCharges: ruleResult.extraCharges,
+      discount,
+      tax,
+      cgstAmount,
+      sgstAmount,
+      igstAmount,
+      taxRate: ruleResult.taxes.reduce((s, t) => s + t.taxRate, 0),
+      shipping,
+      shippingRule: ruleResult.shipping,
+      roundOff: total - rawTotal,
+      total,
+      minimumOrderQuantities: ruleResult.minimumOrderQuantities,
+      maximumOrderQuantities: ruleResult.maximumOrderQuantities,
+      checkoutRestrictions: ruleResult.checkoutRestrictions,
+      nonPurchasable: ruleResult.nonPurchasable,
+      hiddenPrices: ruleResult.hiddenPrices,
     };
   }
 

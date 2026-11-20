@@ -5,7 +5,7 @@ import { PaymentStatus } from '@prisma/client';
  * its payment counts as received. Cash on Delivery is only collected at the door, so it waits for Delivered.
  * Captured and refunded payments are never touched.
  */
-export async function syncPaymentWithOrderStatus(db: { payment: any; order: any }, orderId: string, orderStatus: string) {
+export async function syncPaymentWithOrderStatus(db: { payment: any; order: any; paymentReceipt?: any }, orderId: string, orderStatus: string) {
   if (!['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'].includes(orderStatus)) return;
   let payment = await db.payment.findUnique({ where: { orderId } });
   if (!payment) {
@@ -15,6 +15,8 @@ export async function syncPaymentWithOrderStatus(db: { payment: any; order: any 
     payment = await db.payment.create({ data: { orderId, provider: 'COD', amount: order.totalAmount, status: PaymentStatus.PENDING } });
   }
   if (!([PaymentStatus.PENDING, PaymentStatus.AUTHORIZED, PaymentStatus.FAILED, PaymentStatus.CANCELLED] as string[]).includes(payment.status)) return;
+  // Part payments recorded: the receipts decide when the order is paid, not its delivery progress.
+  if (db.paymentReceipt && (await db.paymentReceipt.count({ where: { paymentId: payment.id, status: { not: 'REJECTED' } } })) > 0) return;
   if (payment.provider === 'COD' && orderStatus !== 'DELIVERED') return;
   await db.payment.update({ where: { orderId }, data: { status: PaymentStatus.CAPTURED } });
 }

@@ -8,12 +8,13 @@ import { useSetting } from "@/lib/settings/SiteSettingsProvider"
 
 interface Address { name?: string; company?: string; street?: string; line1?: string; line2?: string; city?: string; state?: string; zip?: string; postalCode?: string; country?: string; gstin?: string; gstNumber?: string }
 interface InvoiceOrder {
-  id: string; orderNumber: string; status: string; totalAmount: number; subtotal?: number | null; taxAmount?: number | null
+  id: string; orderNumber: string; invoiceNumber?: string | null; status: string; totalAmount: number; subtotal?: number | null; taxAmount?: number | null
   cgstAmount?: number | null; sgstAmount?: number | null; igstAmount?: number | null
   shippingAmount?: number | null; discountAmount?: number | null; roundOffAmount?: number | null
   createdAt: string; shippingAddress: Address | null; billingAddress: Address | null
   items: { id: string; quantity: number; unitPrice: number; totalPrice: number; product: { title: string; sku: string | null; hsnCode?: string | null } }[]
   payment: { provider: string; status: string; providerRef: string | null } | null
+  paymentSummary?: { paid: number; balance: number; hasReceipts: boolean; state: string }
   user: { firstName: string; lastName: string; email: string; phone: string | null; companyName?: string | null; gstin?: string | null }
 }
 
@@ -37,7 +38,7 @@ export default function InvoicePage() {
   const sellerGstin = useSetting("businessGstin", "")
   const contactEmail = useSetting("contactEmail", "")
   const contactPhone = useSetting("contactPhone", "")
-  const [invoiceCfg, setInvoiceCfg] = useState<{ terms: string; bank: { bankName: string; accountName: string; accountNumber: string; ifscCode: string; branch: string } | null } | null>(null)
+  const [invoiceCfg, setInvoiceCfg] = useState<{ terms: string; deliveryTerms?: string; logoUrl?: string; bank: { bankName: string; accountName: string; accountNumber: string; ifscCode: string; branch: string } | null } | null>(null)
 
   // The A4 sheet is 794px wide; shrink it to fit narrow (phone) screens so the whole invoice is visible.
   const [scale, setScale] = useState(1)
@@ -57,6 +58,8 @@ export default function InvoicePage() {
   if (order.status === "CANCELLED") return <div className="min-h-screen grid place-items-center text-center"><div><Package className="mx-auto text-gray-300" size={40}/><p className="mt-3 text-gray-500">This order was cancelled, so no invoice is available.</p><Link href={`/orders/${order.id}`} className="text-primary-600">Back to order</Link></div></div>
 
   const bank = invoiceCfg?.bank || null
+  const invoiceLogo = invoiceCfg?.logoUrl || logoUrl
+  const invoiceNo = order.invoiceNumber || order.orderNumber.slice(0, 12).toUpperCase()
   const termsLines = (invoiceCfg?.terms ?? "").split(String.fromCharCode(10)).map(t => t.trim()).filter(Boolean)
   const billed = order.billingAddress || order.shippingAddress
   const subtotal = Number(order.subtotal ?? order.items.reduce((s, i) => s + Number(i.totalPrice), 0))
@@ -81,11 +84,11 @@ export default function InvoicePage() {
     <article style={{ zoom: scale }} className="invoice invoice-sheet mx-auto min-h-[1123px] w-[794px] bg-white p-5 shadow-lg">
       <section className="rule grid grid-cols-2 border border-black">
         <div className="cell min-h-[124px] p-1.5">
-          <div className="flex gap-3">{logoUrl ? <img src={logoUrl} alt={`${siteName} logo`} className="h-12 w-24 object-contain"/> : <div className="grid h-12 w-24 place-items-center border text-[9px] font-bold">{siteName}</div>}
+          <div className="flex gap-3">{invoiceLogo ? <img src={invoiceLogo} alt={`${siteName} logo`} className="h-12 w-24 object-contain object-left"/> : <div className="grid h-12 w-24 place-items-center border text-[9px] font-bold">{siteName}</div>}
             <div><h2 className="text-[12px] font-bold">{siteName}</h2><p className="max-w-[250px]">{sellerAddress}</p>{sellerState && <p>State: {sellerState}</p>}{sellerGstin && <p>GSTIN/UIN: <b>{sellerGstin}</b></p>}{contactPhone && <p>Contact: {contactPhone}</p>}{contactEmail && <p>E-Mail: {contactEmail}</p>}</div>
           </div>
         </div>
-        <div className="grid grid-cols-2"><div className="cell p-1"><span>Invoice No.</span><b className="block text-[11px]">{order.orderNumber.slice(0, 12).toUpperCase()}</b></div><div className="cell border-r-0 p-1"><span>Dated</span><b className="block text-[11px]">{new Date(order.createdAt).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"2-digit" }).replace(/ /g,"-")}</b></div><div className="cell p-1">Terms of Delivery</div><div className="cell border-r-0 p-1">Mode/Terms of Payment<b className="block">{order.payment?.provider || "As Agreed"}</b></div></div>
+        <div className="grid grid-cols-2"><div className="cell p-1"><span>Invoice No.</span><b className="block text-[11px] break-all">{invoiceNo}</b></div><div className="cell border-r-0 p-1"><span>Dated</span><b className="block text-[11px]">{new Date(order.createdAt).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"2-digit" }).replace(/ /g,"-")}</b></div><div className="cell p-1">Terms of Delivery{invoiceCfg?.deliveryTerms && <b className="block whitespace-pre-line">{invoiceCfg.deliveryTerms}</b>}</div><div className="cell border-r-0 p-1">Mode/Terms of Payment<b className="block">{order.payment?.provider || "As Agreed"}</b></div></div>
         <div className="cell min-h-[112px] border-b-0 p-1.5"><span>Buyer (Bill to)</span><h3 className="text-[11px] font-bold">{buyerName}</h3>{addressLines(billed).map((l,i)=><p key={i}>{l}</p>)}{(billed?.gstin || billed?.gstNumber || order.user.gstin) && <p>GSTIN/UIN: <b>{billed?.gstin || billed?.gstNumber || order.user.gstin}</b></p>}<p>Contact: {order.user.phone || "—"}</p><p>E-Mail: {order.user.email}</p></div>
         <div className="min-h-[112px] p-1.5"><span>Consignee (Ship to)</span><h3 className="text-[11px] font-bold">{buyerName}</h3>{addressLines(order.shippingAddress).map((l,i)=><p key={i}>{l}</p>)}</div>
       </section>
@@ -93,7 +96,7 @@ export default function InvoicePage() {
         <tbody className="border-t border-black align-top">{order.items.map((item,i)=>{ const itemTax = subtotal ? tax * Number(item.totalPrice) / subtotal : 0; const included = Number(item.totalPrice) + itemTax; return <tr key={item.id} className="h-12"><td className="border-r border-black p-1 text-center">{i+1}</td><td className="border-r border-black p-1 font-bold uppercase">{item.product.title}</td><td className="border-r border-black p-1">{item.product.hsnCode || item.product.sku || "—"}</td><td className="border-r border-black p-1 text-center font-bold">{item.quantity} Pcs.</td><td className="border-r border-black p-1 text-right">{money(included/item.quantity)}</td><td className="border-r border-black p-1 text-right">{money(Number(item.unitPrice))}</td><td className="border-r border-black p-1 text-center">Pcs.</td><td className="border-r border-black p-1 text-center">—</td><td className="p-1 text-right font-bold">{money(Number(item.totalPrice))}</td></tr>})}
           <tr className="h-[225px]"><td className="border-r border-black"></td><td className="border-r border-black p-1 text-right font-bold italic"><div className="space-y-2">{discount>0&&<p>Discount</p>}{shipping>0&&<p>Shipping</p>}{cgst>0&&<p>CGST</p>}{sgst>0&&<p>SGST</p>}{igst>0&&<p>IGST</p>}{roundOff!==0&&<p>Rounding Amt</p>}</div></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="p-1 text-right font-bold"><div className="space-y-2">{discount>0&&<p>-{money(discount)}</p>}{shipping>0&&<p>{money(shipping)}</p>}{cgst>0&&<p>{money(cgst)}</p>}{sgst>0&&<p>{money(sgst)}</p>}{igst>0&&<p>{money(igst)}</p>}{roundOff!==0&&<p>{roundOff>0?"":"-"}{money(Math.abs(roundOff))}</p>}</div></td></tr>
         </tbody><tfoot><tr className="border-t border-black"><td></td><td className="border-r border-black p-1 text-right">Total</td><td className="border-r border-black"></td><td className="border-r border-black p-1 text-center font-bold">{totalQty} Pcs.</td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="p-1 text-right text-[12px] font-bold">₹ {money(Number(order.totalAmount))}</td></tr></tfoot></table>
-      <section className="border-x border-b border-black p-1"><div className="flex justify-between"><span>Amount Chargeable (in words)</span><span className="italic">E. &amp; O.E</span></div><b>{amountInWords(Number(order.totalAmount))}</b></section>
+      <section className="border-x border-b border-black p-1"><div className="flex justify-between"><span>Amount Chargeable (in words)</span><span className="italic">E. &amp; O.E</span></div><b>{amountInWords(Number(order.totalAmount))}</b>{order.paymentSummary?.hasReceipts && <div className="mt-1 flex justify-end gap-6 border-t border-black pt-1"><span>Amount Received: <b>₹ {money(order.paymentSummary.paid)}</b></span><span>Balance Due: <b>₹ {money(order.paymentSummary.balance)}</b></span></div>}</section>
       <section className="grid min-h-[265px] grid-cols-2 border-x border-b border-black"><div className="flex flex-col justify-between p-1.5"><div><p className="font-bold">Terms &amp; Conditions:</p><ol className="mt-3 list-inside list-decimal space-y-1">{termsLines.map((t, i) => <li key={i}>{t}</li>)}</ol></div><p className="text-[8px] uppercase">Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</p></div>
         <div className="flex flex-col justify-end"><div className="border-b border-black p-1.5"><p className="font-bold">Company&apos;s Bank Details</p>{bank?<>{bank.accountName && <p>A/c Name: <b>{bank.accountName}</b></p>}<p>Bank Name: <b>{bank.bankName}</b></p><p>A/c No.: <b>{bank.accountNumber || "—"}</b></p><p>Branch &amp; IFSC: <b>{[bank.branch, bank.ifscCode].filter(Boolean).join(", ") || "—"}</b></p></>:null}</div><div className="flex min-h-[74px] flex-col justify-between p-1.5 text-right"><b>for {siteName}</b><span>Authorised Signatory</span></div></div>
       </section><p className="py-1 text-center text-[9px] uppercase">This is a computer-generated invoice</p>

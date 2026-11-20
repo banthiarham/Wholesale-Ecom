@@ -146,10 +146,12 @@ export default function CheckoutPage() {
 
   // Evaluate dynamic rules for checkout
   const cartItemsForRules = useMemo(
-    () => (cart?.cart.items ?? []).map((item) => ({
+    // Real line quantities and the buyer's own prices (free buy-X-get-Y lines left out), the same basis the order is priced on.
+    () => (cart?.cart.items ?? []).filter((item: any) => item.metadata?.bogo !== true).map((item) => ({
       id: item.product.id,
-      categoryId: item.product.category?.id,
-      unitPrice: Number(item.product.unitPrice),
+      categoryId: (item.product as any).categoryId ?? item.product.category?.id,
+      unitPrice: Number(item.unitPrice),
+      quantity: item.quantity,
     })),
     [cart?.cart.items]
   )
@@ -428,7 +430,8 @@ export default function CheckoutPage() {
           billingAddress: billingSameAsShipping ? undefined : billingAddress,
           couponCode: couponCode || undefined,
           bankOfferId: selectedBankOfferEntry?.eligible ? selectedBankOfferId : undefined,
-          paymentMethod: paymentMethod === "COD" || paymentMethod === "BANK_TRANSFER" || paymentMethod === "UPI" ? paymentMethod : undefined,
+          // Same value the payment-method discount rules were shown for, so the server applies the same discount.
+          paymentMethod: paymentMethod === "COD" || paymentMethod === "BANK_TRANSFER" || paymentMethod === "UPI" ? paymentMethod : selectedProvider || undefined,
         }),
       })
       const data = await parseApiResponse(res)
@@ -551,14 +554,14 @@ export default function CheckoutPage() {
 
   // Rule-based calculations
   const totals = cart?.totals ?? { subtotal: 0, itemCount: 0, tax: 0, shipping: 0, total: 0 }
-  const ruleProductSavings = (cart?.cart.items ?? []).reduce((sum, item) => {
+  const ruleProductSavings = (cart?.cart.items ?? []).filter((item: any) => item.metadata?.bogo !== true).reduce((sum, item) => {
     const disc = ruleProductDiscountMap.get(item.product.id)
     if (!disc) return sum
     return sum + disc.discountAmount * item.quantity
   }, 0)
   const ruleCartSavings = cartDiscount?.discountAmount ?? 0
   const paymentSavings = paymentMethodDiscount?.discountAmount ?? 0
-  const qtyDiscountSavings = (cart?.cart.items ?? []).reduce((sum, item) => {
+  const qtyDiscountSavings = (cart?.cart.items ?? []).filter((item: any) => item.metadata?.bogo !== true).reduce((sum, item) => {
     const qd = qtyDiscountMap.get(item.product.id)
     if (!qd) return sum
     const applicableTier = [...qd.tiers].sort((a, b) => b.minQty - a.minQty).find(t => item.quantity >= t.minQty)

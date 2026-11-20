@@ -97,8 +97,8 @@ export class OrdersController {
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Product prices for a customer's role, contract and quantities (Admin)" })
-  async adminQuote(@Body() body: { userId: string; items: { productId: string; variantId?: string; quantity: number }[] }) {
-    return this.ordersService.adminQuotePrices(body.userId, Array.isArray(body.items) ? body.items : []);
+  async adminQuote(@Body() body: { userId?: string; items: { productId: string; variantId?: string; quantity: number; offerChoice?: string; unitPrice?: number | null }[] }) {
+    return this.ordersService.adminQuotePrices(body.userId || undefined, Array.isArray(body.items) ? body.items : []);
   }
 
   @Post('admin/pricing')

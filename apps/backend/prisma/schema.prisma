@@ -168,6 +168,14 @@ model User {
   wallet              Wallet?
   bulkOrders          BulkOrder[]
 
+  /// Ledger opening balance set by an admin: positive = the customer owed us this much at `openingBalanceDate`,
+  /// negative = we held an advance of this much for them.
+  openingBalance          Decimal   @default(0) @db.Decimal(12, 2)
+  openingBalanceDate      DateTime?
+  openingBalanceNote      String?
+  openingBalanceUpdatedBy String?
+  openingBalanceUpdatedAt DateTime?
+
   @@index([email])
   @@index([role])
   @@index([roleId])
@@ -506,6 +514,8 @@ model Order {
   shippingAddress Json?
   billingAddress  Json?
   notes           String?
+  /// Invoice number typed in by the admin; the invoice falls back to the order number when empty.
+  invoiceNumber   String?     @unique
   trackingNumber  String?
   carrier         String?
   shippingEta     DateTime?
@@ -637,11 +647,43 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  refunds Refund[]
+  refunds  Refund[]
+  /// Part payments received against this payment (bank transfers, cheques, cash …), each with optional proof.
+  receipts PaymentReceipt[]
 
   @@index([orderId])
   @@index([status])
   @@index([gatewayId])
+}
+
+/// One part payment received for an order. Admin-recorded receipts count at once; receipts a customer
+/// submits wait for an admin to verify them. Once an order has receipts, they decide whether it is paid.
+model PaymentReceipt {
+  id           String    @id @default(uuid())
+  paymentId    String
+  payment      Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amount       Decimal   @db.Decimal(12, 2)
+  /// BANK_TRANSFER | UPI | CASH | CHEQUE | CARD | OTHER
+  method       String
+  /// UTR / transaction id / cheque number
+  reference    String?
+  receivedAt   DateTime
+  note         String?
+  proofUrl     String?
+  proofName    String?
+  /// PENDING_VERIFICATION | VERIFIED | REJECTED
+  status       String    @default("VERIFIED")
+  submittedBy  String?
+  /// ADMIN | CUSTOMER
+  submittedVia String    @default("ADMIN")
+  verifiedBy   String?
+  verifiedAt   DateTime?
+  rejectReason String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([paymentId])
+  @@index([status])
 }
 
 model Refund {

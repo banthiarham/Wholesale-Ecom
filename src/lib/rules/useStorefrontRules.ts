@@ -32,7 +32,8 @@ export interface UseStorefrontRulesOptions {
  * to avoid infinite re-renders.
  */
 export function useStorefrontRules(
-  products: { id: string; categoryId?: string; unitPrice: number }[],
+  /** `quantity` (per product) overrides the shared quantity, e.g. a cart line's own quantity. */
+  products: { id: string; categoryId?: string; unitPrice: number; quantity?: number }[],
   quantity: number = 1,
   options?: UseStorefrontRulesOptions
 ): StorefrontRulesResult {
@@ -41,7 +42,7 @@ export function useStorefrontRules(
   const [loading, setLoading] = useState(false)
 
   // Create a stable string key from product IDs for the useEffect dependency
-  const productsKey = products.map((p) => p.id).join(",")
+  const productsKey = products.map((p) => `${p.id}:${p.quantity ?? ""}:${p.unitPrice}`).join(",")
   // Re-evaluate when a shopper picks a different offer for any product.
   const choicesVersion = useOfferChoicesVersion()
   const optionsKey = `${options?.paymentMethod ?? ""}|${options?.shippingRegion ?? ""}|${choicesVersion}`
@@ -59,7 +60,7 @@ export function useStorefrontRules(
     const cartItems: CartItemContext[] = products.map((p) => ({
       productId: p.id,
       categoryId: p.categoryId,
-      quantity,
+      quantity: p.quantity ?? quantity,
       unitPrice: p.unitPrice,
       offerChoice: getOfferChoice(p.id),
     }))
